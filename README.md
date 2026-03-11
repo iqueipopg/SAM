@@ -1,242 +1,320 @@
-# SAM - Systematic Agent for Meta-analysis
+<p align="center">
+  <img src="assets/logo_horizontal_light.svg" alt="SAM — Systematic Agent for Meta-analysis" width="420">
+</p>
 
-**SAM** is an automated multi-agent pipeline that conducts systematic reviews and meta-analyses from a natural language research question. It orchestrates 8 specialized AI agents — from protocol design to manuscript generation — using a local LLM (Qwen2.5-7B, 4-bit quantization) and R/metafor for statistical synthesis.
+<p align="center">
+  <strong>Automated systematic reviews and meta-analyses from a research question.</strong><br>
+  8 AI agents &middot; Multi-database search &middot; R/metafor statistics &middot; Manuscript generation
+</p>
 
-This project was developed as part of the **Trabajo de Fin de Grado (TFG)** at **Universidad Pontificia Comillas, ICAI**, within the **Engineering Mathematics (iMAT)** program.
+<p align="center">
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#pipeline-overview">Pipeline</a> &middot;
+  <a href="#server-deployment-rudiger">Server Deployment</a> &middot;
+  <a href="#streamlit-ui">UI</a> &middot;
+  <a href="#experiments">Experiments</a>
+</p>
 
 ---
 
-## Table of Contents
-- [Project Overview](#project-overview)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Technologies Used](#technologies-used)
-- [Pipeline Details](#pipeline-details)
-- [Credits](#credits)
+## What is SAM?
+
+**SAM** (Systematic Agent for Meta-analysis) is a multi-agent pipeline that automates the full systematic review workflow — from protocol design to manuscript generation. Give it a clinical research question and it will search databases, screen papers, retrieve full texts, extract data, assess quality, run meta-analysis, and write a manuscript.
+
+Developed as part of the **Trabajo de Fin de Grado (TFG)** at **Universidad Pontificia Comillas (ICAI)**, Engineering Mathematics (iMAT) program.
+
+### Key Features
+
+- **8 specialized agents** working sequentially (A1→A8)
+- **4 search databases**: PubMed, Europe PMC, Semantic Scholar, Google Scholar
+- **10-source full-text retrieval cascade**: PMC XML → Unpaywall → Europe PMC → Semantic Scholar → OpenAlex → CrossRef → DOAJ → CORE → Google Scholar → Sci-Hub
+- **3 quality assessment tools**: RoB 2.0 (RCTs), ROBINS-I (observational), JBI (qualitative)
+- **R/metafor statistical synthesis** — no LLM for statistics
+- **RAG-based manuscript generation** with FAISS + MiniLM-L6-v2
+- **Model-agnostic**: auto-detects chat templates, works with any HuggingFace model
+- **Light & Dark mode** Streamlit UI with branded SVG logos
 
 ---
 
-## Project Overview
-
-SAM automates the full systematic review workflow through 8 sequential agents:
+## Pipeline Overview
 
 | Agent | Role | Method |
 |-------|------|--------|
-| **A1** | Protocol Design | PICO/SPIDER/PECO/PCC framework detection, inclusion/exclusion criteria, PubMed query generation |
-| **A2** | Literature Search | PubMed search via Entrez API + semantic deduplication |
-| **A3** | Title/Abstract Screening | Ensemble voting (N votes/paper, majority threshold) |
-| **A4** | Full-Text Retrieval & Screening | PMC XML → Unpaywall → Europe PMC → Semantic Scholar → Sci-Hub → abstract fallback + LLM screening |
+| **A1** | Protocol Design | PICO/SPIDER/PECO/PCC framework detection, criteria generation, PubMed query |
+| **A2** | Literature Search | Multi-database search (PubMed, Europe PMC, Semantic Scholar, Google Scholar) + semantic deduplication |
+| **A3** | Title/Abstract Screening | Ensemble voting (N votes/paper, configurable majority threshold) |
+| **A4** | Full-Text Retrieval & Screening | 10-source retrieval cascade + LLM full-text screening |
 | **A5** | Data Extraction | 3 focused prompts per paper (study characteristics, intervention, outcomes) |
-| **A6** | Quality Assessment | RoB 2.0 (RCTs) / NOS (observational), keyword-based design detection with LLM fallback |
-| **A7** | Statistical Synthesis | R/metafor random-effects models, heterogeneity analysis, publication bias, sensitivity analysis, GRADE |
-| **A8** | Manuscript Generation | RAG-based writing with FAISS index, section-specific retrieval, LaTeX/PDF output |
+| **A6** | Quality Assessment | RoB 2.0 / ROBINS-I / JBI Critical Appraisal with weighted scores |
+| **A7** | Statistical Synthesis | R/metafor: random-effects REML, heterogeneity, publication bias, sensitivity, GRADE |
+| **A8** | Manuscript Generation | RAG-based writing, section-specific retrieval, LaTeX/PDF output |
 
-Key design constraints:
-- **Single GPU**: Only one model loaded at a time (RTX 4060, 8GB VRAM), with VRAM freed between agents
-- **Conservative fallback**: Parse errors default to EXCLUDE (A3/A4) or default quality weights (A6)
+### Design Principles
+
+- **Single GPU**: Only one model loaded at a time, VRAM freed between agents
+- **Conservative fallback**: Parse errors → EXCLUDE (A3/A4) or default quality weights (A6)
 - **No LLM for statistics**: A7 uses R/metafor directly via rpy2
+- **Model-agnostic**: Chat template auto-detection + token-level output slicing (works with Qwen, LLaMA, Mistral, GLM, etc.)
 
 ---
 
 ## Installation
 
 ### Prerequisites
-- **Python 3.12+**
-- **CUDA-capable GPU** with 8GB+ VRAM (RTX 4060 or equivalent)
-- **R** with the `metafor` package installed
-- **pdflatex** (for PDF manuscript generation)
+
+- Python 3.12+
+- CUDA-capable GPU with 8 GB+ VRAM (tested on RTX 4060)
+- R with `metafor` package
+- `pdflatex` (for PDF manuscript generation)
 
 ### Setup
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd meta-analisis-automatizado
-   ```
+```bash
+# 1. Clone
+git clone https://github.com/iqueipopg/SAM.git
+cd SAM
 
-2. **Create virtual environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
+# 2. Virtual environment
+python -m venv venv
+source venv/bin/activate
 
-3. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# 3. Python dependencies
+pip install -r requirements.txt
 
-4. **Install R metafor package:**
-   ```r
-   install.packages("metafor", lib = "~/R/library")
-   ```
+# 4. R metafor
+Rscript -e "install.packages('metafor', repos='https://cloud.r-project.org', lib='~/R/library')"
 
-5. **Download the Qwen2.5-7B model** into `models/qwen2.5-7b/`:
-   ```bash
-   huggingface-cli download Qwen/Qwen2.5-7B --local-dir models/qwen2.5-7b
-   ```
+# 5. Download a model (default: Qwen2.5-7B)
+huggingface-cli download Qwen/Qwen2.5-7B-Instruct --local-dir models/qwen2.5-7b
 
-6. **Verify GPU:**
-   ```bash
-   python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, GPU: {torch.cuda.get_device_name(0)}')"
-   ```
+# 6. Environment variables
+cp .env.example .env
+nano .env  # set ENTREZ_EMAIL (required) and optional API keys
+
+# 7. Verify GPU
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, GPU: {torch.cuda.get_device_name(0)}')"
+```
 
 ---
 
 ## Quick Start
 
-### Launch the Streamlit UI
+### Streamlit UI
 
 ```bash
 source venv/bin/activate
 streamlit run app.py --server.headless true
 ```
 
-Enter a research question (e.g., *"Is cognitive behavioral therapy more effective than medication for treating depression in adults?"*) and SAM will run the full A1→A8 pipeline automatically.
+Open http://localhost:8501, enter a research question, and SAM runs the full pipeline.
 
-### Pipeline output
+### Command Line (single query)
 
-Results are saved to `outputs/` as:
-- `pipeline_<timestamp>.json` — Full pipeline data (protocol, screening, extraction, quality, synthesis, manuscript)
-- `manuscript_<timestamp>.pdf` — Generated LaTeX manuscript
-- `outputs/plots/` — Forest plots, funnel plots
+```bash
+./run.sh single "Is cognitive behavioral therapy more effective than medication for treating depression in adults?"
+```
+
+### Batch Mode
+
+```bash
+./run.sh pipeline   # runs 5 predefined queries
+# or
+python batch_run.py  # directly via Python
+```
+
+### Output
+
+Results are saved to `outputs/run_<timestamp>/`:
+- `pipeline_<timestamp>.json` — Full pipeline data
+- `manuscript_<timestamp>.pdf` — Generated manuscript
+- `plots/` — Forest plots, funnel plots, PRISMA flow, RoB plots
+
+---
+
+## Server Deployment (Rudiger)
+
+The `run.sh` script handles everything for deploying on an Ubuntu server (e.g., the Rudiger research server).
+
+### One-command install
+
+```bash
+chmod +x run.sh
+./run.sh install
+```
+
+This installs system dependencies (Python, R, LaTeX, dev libraries), creates the virtual environment, installs all Python packages, sets up R/metafor, and creates the `.env` file.
+
+### Using a different model
+
+SAM is model-agnostic — it auto-detects chat templates and works with any HuggingFace causal LM. To use a different model on a server with more VRAM:
+
+```bash
+# Option 1: use run.sh model command (updates config.yaml automatically)
+./run.sh model ./models/qwen3-30b
+
+# Option 2: edit config.yaml manually
+# Change all model paths under "models:" section
+# Set quantization: "none" for large-VRAM servers, "8bit" or "4bit" for constrained setups
+```
+
+Supported quantization modes: `4bit` (NF4, ~5 GB for 7B), `8bit` (~8 GB for 7B), `none` (full precision).
+
+### Multi-model ensemble (multi-GPU servers)
+
+In `config.yaml`, set the screening agent's model entry to a list for model diversity:
+
+```yaml
+agent3_screening:
+  - "./models/qwen2.5-7b"
+  - "./models/glm4-9b"
+  - "./models/deepseek-r1-1.5b"
+```
+
+Each vote in the ensemble uses a different model (VRAM is freed between swaps).
+
+### Available run.sh commands
+
+| Command | Description |
+|---------|-------------|
+| `./run.sh install` | Full installation (system + Python + R + .env) |
+| `./run.sh pipeline` | Run batch pipeline (5 default queries) |
+| `./run.sh single "question"` | Run a single research question |
+| `./run.sh ui` | Launch Streamlit interface |
+| `./run.sh model <path>` | Switch model (updates config.yaml) |
+| `./run.sh gpu` | Check GPU status |
+| `./run.sh test` | Run test suite |
+
+---
+
+## Streamlit UI
+
+The web interface features:
+
+- **Chat-based interaction** — describe your question, watch the pipeline run
+- **Pipeline progress** — each agent shown as a collapsible status widget
+- **Light & Dark mode** — toggle in the sidebar, with themed SVG logos
+- **Pipeline History** — click previous runs to review results
+- **Compare mode** — side-by-side comparison of two pipeline runs
+- **Resume** — restart from checkpoints if a pipeline was interrupted
+- **Configurable settings** — manuscript language, max papers, ensemble sizes, voting thresholds
+- **Exports** — PDF manuscript, CSV, Excel, RevMan XML, summary tables
 
 ---
 
 ## Project Structure
 
 ```
-meta-analisis-automatizado/
-│
-├── README.md                  # This file
+SAM/
+├── app.py                     # Streamlit UI
+├── config.yaml                # Central configuration
 ├── requirements.txt           # Python dependencies
-├── config.yaml                # Model paths, parameters, retrieval config
-├── .gitignore                 # Excluded files
+├── run.sh                     # Server deployment script
+├── batch_run.py               # Batch pipeline runner
+├── .env.example               # Environment variable template
 │
 ├── agents/                    # Core multi-agent pipeline
-│   ├── base.py                # BaseAgent: load_model(), generate(), _clean_json()
-│   ├── agent1_protocol.py     # A1: Protocol design (PICO/SPIDER/PECO/PCC)
-│   ├── agent2_search.py       # A2: PubMed search + deduplication
+│   ├── base.py                # BaseAgent: model loading, chat template detection
+│   ├── agent1_protocol.py     # A1: Protocol (PICO/SPIDER/PECO/PCC)
+│   ├── agent2_search.py       # A2: Multi-database search + dedup
 │   ├── agent3_screening.py    # A3: Ensemble title/abstract screening
-│   ├── agent4_fulltext.py     # A4: Full-text retrieval + LLM screening
+│   ├── agent4_fulltext.py     # A4: 10-source retrieval + LLM screening
 │   ├── agent5_extraction.py   # A5: Structured data extraction
-│   ├── agent6_quality.py      # A6: RoB 2.0 / NOS quality assessment
+│   ├── agent6_quality.py      # A6: RoB 2.0 / ROBINS-I / JBI
 │   ├── agent7_synthesis.py    # A7: R/metafor statistical synthesis
-│   ├── agent8_manuscript.py   # A8: RAG-based manuscript generation
-│   └── prompts.py             # All LLM prompt templates
+│   ├── agent8_manuscript.py   # A8: RAG manuscript generation
+│   ├── prompts.py             # All LLM prompt templates
+│   ├── effect_converters.py   # Effect size conversion utilities
+│   ├── exporters.py           # CSV, Excel, RevMan XML exporters
+│   ├── prisma_flow.py         # PRISMA flow diagram generator
+│   ├── rob_plots.py           # Risk of bias plot generators
+│   ├── review_report.py       # Review report generator
+│   ├── logger.py              # Logging setup
+│   └── retry.py               # Exponential backoff retry logic
 │
-├── app.py                     # Streamlit UI (SAM interface)
-├── .streamlit/
-│   └── config.toml            # Streamlit theme (light, teal accent)
+├── assets/                    # SVG logos (light + dark variants)
+├── .streamlit/config.toml     # Streamlit theme configuration
 │
 ├── tests/                     # Agent and pipeline tests
-│   ├── test_agent1_complete.py
-│   ├── test_agent4.py
-│   ├── test_a4_sources.py
-│   ├── test_agent5.py
-│   ├── test_agent6.py
-│   ├── test_agent7.py
-│   ├── test_agent8.py
-│   ├── test_a6_a7_pipeline.py
-│   └── test_pipeline_complete.py
+├── experiments/               # Validation and benchmarking scripts
+├── docs/                      # Development documentation
 │
-├── experiments/                # Validation and benchmarking scripts
-│   ├── exp1_framework_selection.py
-│   ├── exp2_screening_gold_standard.py
-│   ├── exp3_ensemble_ablation.py
-│   ├── exp4_model_comparison.py
-│   ├── exp5_end_to_end_benchmark.py
-│   ├── exp6_fulltext_impact.py
-│   └── run_all.py
-│
-├── docs/                      # Documentation
-│   └── DIARIO_DESARROLLO_COMPLETO.txt
-│
-├── models/                    # Local LLM weights (not tracked in git)
-│   └── qwen2.5-7b/
-│
-└── outputs/                   # Generated results (not tracked in git)
-    ├── pipeline_<timestamp>.json
-    ├── manuscript_<timestamp>.pdf
-    └── plots/
+├── models/                    # Local LLM weights (not in git)
+└── outputs/                   # Generated results (not in git)
 ```
 
 ---
 
-## Technologies Used
+## Configuration
 
-### LLM & ML
-- **Qwen2.5-7B** — Local LLM for all AI agents (4-bit quantization via BitsAndBytes)
-- **PyTorch** — Deep learning backend
-- **Hugging Face Transformers** — Model loading and inference
-- **Sentence-Transformers (MiniLM-L6-v2)** — Embeddings for RAG and semantic deduplication
+All pipeline parameters are in `config.yaml`:
 
-### RAG & Retrieval
-- **LangChain + FAISS** — Vector store for manuscript generation
-- **Biopython (Entrez)** — PubMed API access
-- **Unpaywall / Europe PMC / Semantic Scholar / Sci-Hub** — Multi-source full-text retrieval
-
-### Statistical Analysis
-- **R / metafor** (via rpy2) — Random-effects meta-analysis, heterogeneity, publication bias, sensitivity analysis
-- **GRADE assessment** — Evidence quality grading
-
-### UI & Output
-- **Streamlit** — Interactive web interface
-- **LaTeX (pdflatex)** — Manuscript PDF generation
-- **Matplotlib** — Fallback plot generation
-
-### Key Techniques
-- **4-bit NF4 Quantization** — Fits 7B model in 8GB VRAM
-- **Ensemble Voting** — Multiple LLM votes per paper for robust screening
-- **Conservative Fallback** — Parse errors → EXCLUDE to minimize false inclusions
-- **VRAM Management** — Sequential model loading with explicit GPU memory release
+- **Models**: paths per agent, quantization mode (`4bit`/`8bit`/`none`)
+- **Search**: database toggles, rate limits, dedup threshold
+- **Screening**: ensemble size, voting threshold, temperature
+- **Retrieval**: enable/disable each of the 10 full-text sources
+- **Quality**: RoB 2.0 / ROBINS-I / JBI weights, design keywords
+- **Synthesis**: REML method, heterogeneity thresholds, GRADE settings
+- **Manuscript**: language, section temperatures, RAG chunk sizes, word limits
+- **Pipeline**: checkpointing, resume, cleanup settings
 
 ---
 
-## Pipeline Details
+## Experiments
 
-### Screening Strategy
-- A3 and A4 use configurable `ensemble_size` with `voting_threshold` (default 0.60)
-- A4 retrieves full text through a 6-source cascade before LLM screening
-- **Multi-model ensemble**: Both A3 and A4 support using different models per vote. In `config.yaml`, set the agent's model entry to a list instead of a string. Each vote rotates through the model list, with VRAM freed between swaps. On a single GPU (8GB), this adds latency per model swap; on a multi-GPU server it enables true model diversity for more robust screening
+The `experiments/` directory contains validation scripts:
 
-### Quality Assessment
-- **RCTs**: RoB 2.0 (5 domains: randomization, deviations, missing data, measurement, selection)
-- **Observational**: Newcastle-Ottawa Scale (3 domains, 0-9 stars)
-- Quality weights: Low risk/Good → 1.0, Some concerns/Fair → 0.6, High risk/Poor → 0.3
+| Script | Purpose |
+|--------|---------|
+| `exp1_framework_selection.py` | Framework detection accuracy (PICO vs SPIDER vs PECO) |
+| `exp2_screening_gold_standard.py` | Screening against gold-standard Cochrane reviews |
+| `exp3_ensemble_ablation.py` | Ensemble size vs accuracy trade-off |
+| `exp4_model_comparison.py` | Cross-model performance comparison |
+| `exp5_end_to_end_benchmark.py` | Full pipeline benchmark |
+| `exp6_fulltext_impact.py` | Impact of full-text vs abstract-only screening |
 
-### Statistical Synthesis
-- Random-effects REML models grouped by outcome measure (SMD, OR, RR, HR, MD, PROP)
-- Heterogeneity: I², tau², Cochran's Q
-- Publication bias: Egger's test + trim-and-fill
-- Sensitivity: Leave-one-out + exclude-high-risk-of-bias
+Run all experiments:
 
-### Manuscript Generation
-- RAG with variable-k retrieval per section (results=10, discussion=8, intro=6, others=4)
-- Section-specific temperatures (0.3 factual, 0.6 narrative)
-- Anti-hallucination rules in all prompts
-- `[Author, Year]` citation format
+```bash
+python experiments/run_all.py
+```
 
 ---
 
-## Limitations and Future Work
+## Technologies
 
-- **Single-GPU constraint**: Only one LLM fits in VRAM at a time (8GB). The ensemble currently votes N times with the same model via stochastic sampling. Multi-model ensemble is supported in config but adds significant latency due to sequential model swaps. A multi-GPU server would enable true parallel multi-model voting.
-- **Full-text access**: Many PMC articles are publisher-restricted (no `<body>` in XML). The 6-source retrieval cascade mitigates this, but some papers still fall back to abstract-only screening.
-- **Statistical synthesis**: A7 requires papers to report compatible quantitative outcomes (effect sizes, CIs, SDs). When extracted data lacks these, no meta-analysis is produced.
-- **LLM hallucination**: Despite anti-hallucination prompts and conservative fallbacks, a 7B model can still generate incorrect extractions or quality judgments. Human validation of results is recommended.
+| Category | Stack |
+|----------|-------|
+| **LLM** | Qwen2.5-7B (default), any HuggingFace causal LM, 4/8-bit quantization (BitsAndBytes) |
+| **Embeddings** | MiniLM-L6-v2 (sentence-transformers) |
+| **RAG** | LangChain + FAISS |
+| **Statistics** | R / metafor (via rpy2) |
+| **Search APIs** | Biopython (Entrez), Europe PMC, Semantic Scholar, Google Scholar |
+| **Full-text** | PMC, Unpaywall, OpenAlex, CrossRef, DOAJ, CORE, Sci-Hub |
+| **PDF** | PyMuPDF, pdfplumber, pdfminer, pypdfium2 |
+| **UI** | Streamlit |
+| **Output** | LaTeX (pdflatex), CSV, Excel, RevMan XML |
+
+---
+
+## Limitations
+
+- **Single-GPU constraint**: Only one LLM fits in VRAM at a time (8 GB). Ensemble votes are sequential with the same model. Multi-model ensemble supported but adds latency.
+- **Full-text access**: Many articles are publisher-restricted. The 10-source cascade helps, but some papers still fall back to abstract-only.
+- **Statistical synthesis**: Requires papers to report compatible quantitative outcomes. If extracted data lacks effect sizes/CIs, no meta-analysis is produced.
+- **LLM accuracy**: A 7B model can generate incorrect extractions or quality judgments. Human validation is recommended.
+- **Google Scholar**: Aggressive rate limiting and CAPTCHAs may block access after many requests.
 
 ---
 
 ## Credits
 
-This project was developed as part of the **Trabajo de Fin de Grado (TFG)** at **Universidad Pontificia Comillas, ICAI**.
+**Trabajo de Fin de Grado (TFG)** — Universidad Pontificia Comillas, ICAI
 
 ### Author
-- **Ignacio Queipo de Llano Pérez-Gascón** ([iqueipo.pg24@gmail.com](mailto:iqueipo.pg24@gmail.com))
+- **Ignacio Queipo de Llano Perez-Gascon** — [iqueipo.pg24@gmail.com](mailto:iqueipo.pg24@gmail.com)
 
 ### Acknowledgements
-- **Qwen Team (Alibaba)** for the Qwen2.5-7B model
-- **Hugging Face** for the Transformers ecosystem
-- **Wolfgang Viechtbauer** for the R metafor package
-- Open-source communities behind LangChain, FAISS, Streamlit, and Biopython
+- Qwen Team (Alibaba) for Qwen2.5-7B
+- Hugging Face for the Transformers ecosystem
+- Wolfgang Viechtbauer for R/metafor
+- Open-source communities: LangChain, FAISS, Streamlit, Biopython
