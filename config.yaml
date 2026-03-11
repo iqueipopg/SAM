@@ -1,0 +1,248 @@
+# ══════════════════════════════════════════════════════════════════
+# SAM — Systematic Agent for Meta-analysis
+# Central Configuration
+# ══════════════════════════════════════════════════════════════════
+
+project:
+  name: "meta-analisis-automatizado"
+  version: "0.2.0"
+
+# ── Models ────────────────────────────────────────────────────────
+# Local models (laptop 8GB VRAM — single model at a time)
+models:
+  agent1_protocol: "./models/qwen2.5-7b"
+  agent2_search: "./models/qwen2.5-7b"
+  # Ensemble agents: string = same model N times, list = one model per vote
+  agent3_screening: "./models/qwen2.5-7b"
+  # Multi-model example (uncomment for multi-GPU server):
+  # agent3_screening:
+  #   - "./models/qwen2.5-7b"
+  #   - "./models/glm4-9b"
+  #   - "./models/deepseek-r1-1.5b"
+  agent4_validation: "./models/qwen2.5-7b"
+  agent5_extraction: "./models/qwen2.5-7b"
+  agent6_quality: "./models/qwen2.5-7b"
+  agent7_synthesis: "R/metafor"  # R, no LLM
+  agent8_manuscript: "./models/qwen2.5-7b"
+
+device: "cuda"  # "cuda" or "cpu"
+quantization: "4bit"  # "4bit", "8bit", or "none"
+batch_size: 1
+max_tokens: 2048
+
+# ── Paths ─────────────────────────────────────────────────────────
+paths:
+  outputs: "./outputs"
+  plots: "./outputs/plots"
+  checkpoints: "./outputs"  # run dirs with checkpoint files
+
+# ── A1: Protocol Generation ───────────────────────────────────────
+protocol:
+  temperature: 0.3
+  max_tokens_pubmed_query: 40
+  max_tokens_translation: 60
+  max_tokens_metadata: 400
+  max_tokens_criteria: 300
+  generate_protocol_document: true  # generate PRISMA-P protocol document
+
+# ── A2: Multi-database Search ─────────────────────────────────────
+search:
+  databases:
+    pubmed: true
+    europepmc: true
+    semantic_scholar: true
+    google_scholar: true
+  google_scholar_rate_limit_seconds: 3.0  # be polite, GS blocks aggressively
+  max_results_per_database: 500
+  dedup_similarity_threshold: 0.95
+  rate_limit_seconds: 1.0
+  entrez_email: "meta-analysis@example.com"  # required by NCBI
+
+# ── A3: Title/Abstract Screening ──────────────────────────────────
+screening:
+  ensemble_size: 3
+  voting_threshold: 0.60
+  abstract_max_chars: 800
+  temperature: 0.2
+  max_tokens: 150
+  fallback_decision: "EXCLUDE"  # on parse failure
+
+# ── A4: Full-Text Retrieval & Screening ───────────────────────────
+retrieval:
+  europepmc_enabled: true
+  semanticscholar_enabled: true
+  openalex_enabled: true      # FREE, no API key needed
+  crossref_enabled: true      # FREE, no API key needed
+  doaj_enabled: true           # FREE, Directory of Open Access Journals
+  lens_enabled: true           # FREE token from lens.org required
+  core_enabled: true           # FREE API key from core.ac.uk required
+  google_scholar_enabled: true  # search by title → find OA PDF links
+  scihub_enabled: true
+  scihub_domain: "sci-hub.se"
+  # Fallback domains (tried in order):
+  # scihub_domains: ["sci-hub.se", "sci-hub.st", "sci-hub.ru"]
+  rate_limits:
+    ncbi_seconds: 0.4
+    unpaywall_seconds: 1.0
+    semanticscholar_seconds: 1.0
+    openalex_seconds: 0.2      # polite pool allows 10 RPS with mailto
+    crossref_seconds: 0.5      # polite pool with mailto header
+    doaj_seconds: 0.5           # no official limit, be polite
+    lens_seconds: 1.0           # 1 req/s for free tier
+    core_seconds: 0.1           # 10 req/s allowed for free tier
+    google_scholar_seconds: 3.0  # GS blocks aggressively, be polite
+    scihub_seconds: 2.0
+  request_timeout: 30
+  max_chars_for_prompt: 6000
+  unpaywall_email: "meta-analysis@example.com"
+
+fulltext_screening:
+  ensemble_size: 1
+  voting_threshold: 0.60
+  temperature: 0.2
+
+# ── A5: Data Extraction ───────────────────────────────────────────
+extraction:
+  dual_extraction: true
+  concordance_threshold_numeric: 0.15  # 15% relative difference for effect sizes
+  concordance_threshold_sample: 0.10   # 10% relative difference for sample size
+  temperature: 0.1
+  max_tokens:
+    study_characteristics: 300
+    intervention: 250
+    outcomes: 500
+  max_chars:
+    study_characteristics: 4000
+    intervention: 3000
+    outcomes: 4000
+
+# ── A6: Quality Assessment ────────────────────────────────────────
+quality:
+  temperature: 0.2
+  max_tokens:
+    rob2: 600
+    robins_i: 700
+    jbi: 500
+    design_detection: 100
+  design_keywords:
+    rct:
+      - "rct"
+      - "randomized"
+      - "randomised"
+      - "random"
+      - "crossover rct"
+      - "cluster-randomized"
+      - "cluster-randomised"
+    observational:
+      - "cohort"
+      - "case-control"
+      - "case control"
+      - "cross-sectional"
+      - "cross sectional"
+      - "retrospective"
+      - "prospective"
+      - "observational"
+      - "case series"
+      - "ecological"
+    qualitative:
+      - "qualitative"
+      - "phenomenolog"
+      - "grounded theory"
+      - "ethnograph"
+      - "narrative inquiry"
+      - "thematic analysis"
+      - "focus group"
+      - "interviews"
+  quality_weights:
+    # RoB 2 (RCTs)
+    Low: 1.0
+    "Some concerns": 0.6
+    High: 0.3
+    # ROBINS-I (observational)
+    Moderate: 0.7
+    Serious: 0.4
+    Critical: 0.2
+    "No information": 0.3
+    # JBI (qualitative)
+    Include: 1.0
+    "Include with caution": 0.6
+    Exclude: 0.2
+    # Fallback
+    Good: 1.0
+    Fair: 0.6
+    Poor: 0.3
+
+# ── A7: Statistical Synthesis ─────────────────────────────────────
+synthesis:
+  method: "REML"  # random-effects method
+  min_studies_per_analysis: 2
+  min_studies_for_egger: 10
+  min_studies_for_meta_regression: 10
+  min_studies_per_subgroup: 2
+  confidence_level: 0.95
+  heterogeneity_thresholds:
+    low: 25      # I² %
+    moderate: 50
+    substantial: 75
+  subgroup_analyses:
+    by_risk_of_bias: true
+    by_sample_size: true
+    by_study_design: true
+  sample_size_cutoff: 100  # for small vs large subgroup
+  grade:
+    starting_level_weight_threshold: 0.7  # avg weight > this → start "High"
+    ois_continuous: 400  # optimal information size per group (continuous)
+  r_library_path: "~/R/library"
+
+# ── Retry / Exponential Backoff ──────────────────────────────────
+retry:
+  max_retries: 3
+  base_delay: 1.0
+  max_delay: 30.0
+  backoff_factor: 2.0
+
+# ── A8: Manuscript Generation ─────────────────────────────────────
+manuscript:
+  language: "en"  # "en", "es", "pt", "fr", "de"
+  temperature:
+    abstract: 0.3
+    introduction: 0.6
+    methods: 0.3
+    results: 0.3
+    discussion: 0.6
+    conclusion: 0.4
+  max_tokens:
+    abstract: 400
+    introduction: 800
+    methods: 1000
+    results: 1200
+    discussion: 1000
+    conclusion: 500
+  word_limits:
+    abstract: 350
+    introduction: 600
+    methods: 800
+    results: 800
+    discussion: 800
+    conclusion: 500
+  rag:
+    chunk_size: 800
+    chunk_overlap: 100
+    k:
+      abstract: 4
+      introduction: 6
+      methods: 4
+      results: 10
+      discussion: 8
+      conclusion: 4
+    embedding_model: "all-MiniLM-L6-v2"
+  repetition_penalty: 1.3
+  include_prisma_diagram: true
+  include_rob_plots: true
+
+# ── Pipeline Settings ─────────────────────────────────────────────
+pipeline:
+  checkpointing: true     # save intermediate outputs per agent
+  resume_enabled: true     # allow resuming from checkpoints
+  save_final_json: true    # save complete pipeline output
+  cleanup_checkpoints_on_success: false  # keep checkpoints for debugging

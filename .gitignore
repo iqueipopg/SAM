@@ -1,0 +1,59 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual environment ───────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Models (large binaries, 36 GB+) ──────────────────────
+models/
+
+# ── Outputs (generated per run) ───────────────────────────
+outputs/
+
+# ── Experiments results ───────────────────────────────────
+experiments/results/
+experiments/__pycache__/
+
+# ── Environment secrets ───────────────────────────────────
+.env
+
+# ── LaTeX build artifacts ─────────────────────────────────
+*.aux
+*.log
+*.nav
+*.snm
+*.toc
+*.out
+*.vrb
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+presentacion_sam.pdf
+
+# ── IDE / Editor ──────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS files ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── pytest ────────────────────────────────────────────────
+.pytest_cache/
+
+.claude/
+
+# ── Misc ──────────────────────────────────────────────────
+*.bak
+*.tmp
