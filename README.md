@@ -236,7 +236,8 @@ SAM/
 │
 ├── tests/                     # Agent and pipeline tests
 ├── experiments/               # Validation and benchmarking scripts
-├── docs/                      # Development documentation
+├── docs/                      # Documentation & presentation
+│   ├── presentacion_sam.tex   # Beamer presentation (LaTeX)
 │
 ├── models/                    # Local LLM weights (not in git)
 └── outputs/                   # Generated results (not in git)
