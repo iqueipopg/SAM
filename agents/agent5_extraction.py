@@ -23,6 +23,56 @@ from difflib import SequenceMatcher
 from typing import List, Dict, Optional, Tuple
 
 
+def _find_numeric_dense_region(text: str, max_chars: int) -> str:
+    """Find the region of text with the highest density of numbers.
+
+    This catches results sections even when headings aren't detected —
+    results sections have many numbers (effect sizes, p-values, CIs, N=, etc.).
+    """
+
+    if len(text) < 2000:
+        return ""
+
+    window = max_chars
+    step = max_chars // 4  # 25% overlap between windows
+    best_start = 0
+    best_score = 0
+
+    # Score each window by density of numeric patterns
+    num_pattern = re.compile(
+        r'(?:'
+        r'\d+\.\d+'               # decimals: 0.05, 2.34
+        r'|p\s*[<>=]\s*[\d.]+'    # p-values: p < 0.05
+        r'|CI\s*[:=]?\s*[\d.]+'   # confidence intervals
+        r'|[−-]?\d+\.?\d*\s*%'    # percentages
+        r'|[Nn]\s*=\s*\d+'        # sample sizes: N=50
+        r'|OR\s*[:=]\s*[\d.]+'    # odds ratios
+        r'|RR\s*[:=]\s*[\d.]+'    # risk ratios
+        r'|HR\s*[:=]\s*[\d.]+'    # hazard ratios
+        r'|SMD\s*[:=]\s*[−-]?[\d.]+'  # standardized mean diff
+        r'|[Dd]\s*=\s*[−-]?[\d.]+'    # Cohen's d
+        r'|[Gg]\s*=\s*[−-]?[\d.]+'    # Hedges' g
+        r'|SD\s*[:=]\s*[\d.]+'    # standard deviations
+        r'|SE\s*[:=]\s*[\d.]+'    # standard errors
+        r'|\(\s*\d+\.?\d*\s*[,;]\s*\d+\.?\d*\s*\)'  # (lower, upper)
+        r')',
+        re.IGNORECASE,
+    )
+
+    for pos in range(0, len(text) - window, step):
+        chunk = text[pos:pos + window]
+        score = len(num_pattern.findall(chunk))
+        if score > best_score:
+            best_score = score
+            best_start = pos
+
+    # Only return if we found a meaningfully numeric region
+    if best_score < 5:
+        return ""
+
+    return text[best_start:best_start + window]
+
+
 class Agent5Extraction(BaseAgent):
 
     def __init__(self):
@@ -833,19 +883,72 @@ Respond ONLY with valid JSON:
     # ================================================================== #
 
     def _get_section_text(self, paper: Dict, section_name: str, max_chars: int = 4000) -> str:
-        """Get text from a specific section, truncated to max_chars."""
+        """Get text from a specific section, with smart fallback.
+
+        Priority:
+        1. Parsed sections dict (from A4 section parsing)
+        2. Smart search: find the section heading in full_text and extract around it
+        3. Last resort: beginning of full_text (only for methods/introduction)
+        """
         if section_name == "full_text":
             text = paper.get("full_text", "") or ""
             return text[:max_chars] if text else ""
 
+        # 1. Try parsed sections
         sections = paper.get("sections") or {}
         if section_name in sections:
             text = sections[section_name]
             return text[:max_chars] if len(text) > max_chars else text
 
-        # Fallback: use full_text if no sections
+        # 2. Smart fallback: search for section heading in full_text
         full_text = paper.get("full_text", "") or ""
+        if full_text and len(full_text) > 1000:
+            found = self._find_section_in_text(full_text, section_name, max_chars)
+            if found:
+                return found
+
+        # 3. Last resort: beginning of text (better than nothing)
         return full_text[:max_chars] if full_text else ""
+
+    @staticmethod
+    def _find_section_in_text(text: str, section_name: str, max_chars: int) -> str:
+        """Search for a section heading in plain text and extract content after it.
+
+        This handles papers where A4 couldn't parse sections (e.g., messy PDF extraction).
+        Returns the text from the heading to the next heading, up to max_chars.
+        """
+        import re
+
+        # Map section names to heading patterns
+        heading_patterns = {
+            "results": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Results?|Findings)\s*\n',
+            "methods": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Methods?|Materials?\s*(?:and|&)\s*Methods?|Study\s*Design|Procedure)\s*\n',
+            "introduction": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Introduction|Background)\s*\n',
+            "discussion": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Discussion)\s*\n',
+            "conclusion": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Conclusions?|Summary)\s*\n',
+        }
+
+        pattern = heading_patterns.get(section_name)
+        if not pattern:
+            return ""
+
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        if not match:
+            # Try a looser search for results — look for numeric-dense regions
+            if section_name == "results":
+                return _find_numeric_dense_region(text, max_chars)
+            return ""
+
+        start = match.end()
+        # Find the next major heading to delimit the section
+        next_heading = re.search(
+            r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Discussion|Conclusion|Results?|Methods?|References|Bibliography|Acknowledgements?)\s*\n',
+            text[start:], re.IGNORECASE | re.MULTILINE,
+        )
+        end = start + next_heading.start() if next_heading else start + max_chars
+        content = text[start:end].strip()
+        return content[:max_chars] if len(content) > max_chars else content
+
 
     # ================================================================== #
     #  LLM + JSON HELPERS                                                  #

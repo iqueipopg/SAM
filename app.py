@@ -39,7 +39,7 @@ def _themed_logo(basename: str) -> str:
 def _assistant_avatar() -> str:
     """Return the themed SAM icon as avatar for chat messages."""
     uri = _themed_logo("logo_icon")
-    return uri if uri else "\U0001f9ec"
+    return uri if uri else "assets/favicon.png"
 
 # Load .env before any agent imports (so env vars are available)
 try:
@@ -2077,15 +2077,16 @@ def run_pipeline(query, resume_dir=None):
                 a2_result = a2.search(protocol, pubmed_query, max_results=max_results)
                 papers = a2_result["papers"]
                 a2_stats = a2_result["stats"]
-                st.write(
-                    f"PubMed: **{a2_stats['pubmed']}** | "
-                    f"Europe PMC: **{a2_stats['europepmc']}** | "
-                    f"S2: **{a2_stats['semantic_scholar']}** | "
-                    f"After dedup: **{a2_stats['total_after_dedup']}**"
-                )
+                _db_parts = []
+                for _dbk, _dbl in [("pubmed","PubMed"),("europepmc","Europe PMC"),("semantic_scholar","S2"),("google_scholar","GScholar")]:
+                    _dbv = a2_stats.get(_dbk, 0)
+                    if _dbv:
+                        _db_parts.append(f"{_dbl}: **{_dbv}**")
+                st.write(" | ".join(_db_parts) + f" | After dedup: **{a2_stats['total_after_dedup']}**")
                 save_checkpoint(run_dir, "a2_search", {"papers": papers, "stats": a2_stats})
+                _n_dbs = sum(1 for k in ('pubmed','europepmc','semantic_scholar','google_scholar') if a2_stats.get(k, 0))
                 s2.update(
-                    label=f"A2: Search \u2714 ({a2_stats['total_after_dedup']} papers from {sum(1 for k in ('pubmed','europepmc','semantic_scholar') if a2_stats[k])} DBs)",
+                    label=f"A2: Search \u2714 ({a2_stats['total_after_dedup']} papers from {_n_dbs} DBs)",
                     state="complete", expanded=False,
                 )
             except Exception as e:
@@ -2175,6 +2176,7 @@ def run_pipeline(query, resume_dir=None):
                         f"DOAJ={stats4.get('doaj_pdf', 0)}, "
                         f"Lens={stats4.get('lens_fulltext', 0)}, "
                         f"CORE={stats4.get('core_fulltext', 0)}, "
+                        f"GScholar={stats4.get('google_scholar_pdf', 0)}, "
                         f"SciHub={stats4.get('scihub_pdf', 0)}, "
                         f"Abstract={stats4['abstract_only']}"
                     )
@@ -2624,9 +2626,10 @@ def run_pipeline(query, resume_dir=None):
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
+_favicon_path = os.path.join(_ASSETS_DIR, "favicon.png")
 st.set_page_config(
     page_title="SAM \u2014 Systematic Agent for Meta-analysis",
-    page_icon="\U0001f9ec",
+    page_icon=_favicon_path if os.path.exists(_favicon_path) else "\U0001f9ec",
     layout="wide",
 )
 

@@ -191,6 +191,16 @@ class Agent4FullText(BaseAgent):
             except Exception as e:
                 print(f"    [!] Error retrieving {pmid}: {e}")
 
+            # Parse sections from plain text if source didn't provide them
+            if (enriched_paper.get("full_text")
+                    and not enriched_paper.get("sections")
+                    and enriched_paper.get("text_source") != "abstract_only"):
+                sections = self._parse_sections_from_text(enriched_paper["full_text"])
+                if sections:
+                    enriched_paper["sections"] = sections
+                    n_secs = [k for k in sections if k not in ("references",)]
+                    print(f"    [{pmid}] Parsed {len(n_secs)} sections: {', '.join(n_secs)}")
+
             enriched.append(enriched_paper)
 
         print(
@@ -382,6 +392,79 @@ class Agent4FullText(BaseAgent):
             paper["full_text_length"] = len(abstract)
         stats["abstract_only"] += 1
         print(f"  [{pmid}] Using abstract fallback ({len(abstract)} chars)")
+
+    # ------------------------------------------------------------------ #
+    #  Section parsing from plain text                                      #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _parse_sections_from_text(text: str) -> Dict[str, str]:
+        """Parse academic paper sections from plain text (PDF-extracted).
+
+        Detects common section headings (Introduction, Methods, Results, etc.)
+        and splits the text into a dict of {section_name: content}.
+        """
+        if not text or len(text) < 500:
+            return {}
+
+        import re
+
+        # Patterns for section headings (case-insensitive)
+        # Matches: "3. Results", "RESULTS", "Results", "3 Results", "III. Results"
+        # Only match major section headings (not sub-headings like Participants)
+        heading_pattern = re.compile(
+            r'(?:^|\n)'                          # start of line
+            r'[ \t]*'                            # optional leading whitespace
+            r'(?:\d+\.?\s*|[IVX]+\.?\s*)?'       # optional numbering
+            r'(Introduction|Background|'
+            r'Methods?|Materials?\s*(?:and|&)\s*Methods?|'
+            r'Results?|Findings|'
+            r'Discussion|'
+            r'Conclusions?|'
+            r'References|Bibliography|'
+            r'Abstract)'
+            r'[ \t]*\n',
+            re.IGNORECASE | re.MULTILINE,
+        )
+
+        # Map detected headings to canonical section names
+        canonical_map = {
+            "introduction": "introduction", "background": "introduction",
+            "method": "methods", "methods": "methods",
+            "materials and methods": "methods", "materials & methods": "methods",
+            "result": "results", "results": "results", "findings": "results",
+            "discussion": "discussion",
+            "conclusion": "conclusion", "conclusions": "conclusion",
+            "abstract": "abstract",
+            "references": "references", "bibliography": "references",
+        }
+
+        matches = list(heading_pattern.finditer(text))
+        if not matches:
+            return {}
+
+        sections = {}
+        for i, match in enumerate(matches):
+            heading = match.group(1).strip().lower()
+            canonical = canonical_map.get(heading, heading)
+
+            start = match.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            content = text[start:end].strip()
+
+            # If same canonical name appears multiple times, append
+            if canonical in sections:
+                sections[canonical] += "\n\n" + content
+            else:
+                sections[canonical] = content
+
+        # Skip if we only found references or abstract
+        meaningful = {k: v for k, v in sections.items()
+                      if k not in ("references", "abstract", "bibliography")}
+        if not meaningful:
+            return {}
+
+        return sections
 
     # ------------------------------------------------------------------ #
     #  Metadata fetch (DOI + PMCID)                                        #
@@ -1445,6 +1528,9 @@ class Agent4FullText(BaseAgent):
             ),
             "core_fulltext": sum(
                 1 for p in papers if p["text_source"] == "core_fulltext"
+            ),
+            "google_scholar_pdf": sum(
+                1 for p in papers if p["text_source"] == "google_scholar_pdf"
             ),
             "scihub_pdf": sum(
                 1 for p in papers if p["text_source"] == "scihub_pdf"
