@@ -387,7 +387,8 @@ class Agent1Protocol(BaseAgent):
                             metadata["comparator"] = f"Non-{exposure.lower()}" if exposure != "exposure" else "Non-exposed"
 
             return metadata
-        except:
+        except Exception as e:
+            print(f"  [A1] Protocol parse failed ({e}), using fallback")
             return {
                 "framework": "PICO",
                 "research_question": query,
@@ -395,6 +396,7 @@ class Agent1Protocol(BaseAgent):
                 "intervention": "Intervention",
                 "comparator": "Control",
                 "outcome": "Primary outcome",
+                "_fallback": True,
             }
 
     def _generate_criteria(self, query, metadata):

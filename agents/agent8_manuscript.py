@@ -1924,12 +1924,16 @@ class Agent8Manuscript(BaseAgent):
 
             # Compile (2 passes for TOC)
             for pass_num in range(2):
-                result = subprocess.run(
-                    ["pdflatex", "-interaction=nonstopmode", "manuscript.tex"],
-                    cwd=tex_dir,
-                    capture_output=True,
-                    timeout=60,
-                )
+                try:
+                    result = subprocess.run(
+                        ["pdflatex", "-interaction=nonstopmode", "manuscript.tex"],
+                        cwd=tex_dir,
+                        capture_output=True,
+                        timeout=60,
+                    )
+                except subprocess.TimeoutExpired:
+                    print(f"    [!] pdflatex pass {pass_num+1} timed out after 60s")
+                    break
                 if result.returncode != 0 and pass_num == 1:
                     print(f"    [!] pdflatex pass {pass_num+1} returned {result.returncode}")
                     # Still try to use the PDF if it was generated

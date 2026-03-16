@@ -1623,7 +1623,7 @@ class Agent4FullText(BaseAgent):
             }
 
     def _build_fulltext_prompt(self, paper: Dict, protocol: Dict) -> str:
-        """Build the full-text screening prompt, truncating text to fit context."""
+        """Build the full-text screening prompt, adapting to the review framework."""
         incl = "\n".join(f"  - {c}" for c in protocol.get("inclusion_criteria", []))
         excl = "\n".join(f"  - {c}" for c in protocol.get("exclusion_criteria", []))
 
@@ -1631,11 +1631,13 @@ class Agent4FullText(BaseAgent):
         text_for_review = self._prepare_text_for_prompt(paper)
 
         framework = protocol.get("framework", "PICO")
-        intv = protocol.get("intervention", protocol.get("exposure", ""))
         pop = protocol.get("population", "")
         outcome = protocol.get("outcome", "")
 
+        # Build framework-specific focus rules and decision criteria
         if framework == "PECO":
+            intv = protocol.get("exposure", protocol.get("intervention", ""))
+            comparator = protocol.get("comparator", "")
             focus_rule = (
                 f'CRITICAL RULE — PRIMARY EXPOSURE:\n'
                 f'The paper must study "{intv}" as its PRIMARY exposure in "{pop}" with '
@@ -1646,7 +1648,72 @@ class Agent4FullText(BaseAgent):
                 f'  - A control variable without being the main predictor\n'
                 f'  - A brief mention in the discussion without being the focus'
             )
+            design_focus = (
+                "- Actual study design (cohort, case-control, cross-sectional?)\n"
+                "- Exposure measurement and definition\n"
+                "- Outcome measures used\n"
+                "- Population characteristics and sample size\n"
+                "- Confounders controlled for"
+            )
+            decision_include = f'paper studies "{intv}" as a primary exposure and meets ALL inclusion criteria'
+            decision_exclude = f'"{intv}" is NOT a primary exposure, OR paper fails any inclusion criterion, OR triggers any exclusion criterion'
+
+        elif framework == "SPIDER":
+            intv = protocol.get("phenomenon_of_interest", protocol.get("intervention", protocol.get("interest", "")))
+            design_type = protocol.get("design", "qualitative")
+            eval_type = protocol.get("evaluation", outcome)
+            focus_rule = (
+                f'SCREENING FOCUS — QUALITATIVE / MIXED-METHODS REVIEW:\n'
+                f'This is a SPIDER-framework review. Do NOT require a treatment or intervention.\n'
+                f'The paper must focus on "{intv}" as its central phenomenon of interest in "{pop}".\n'
+                f'INCLUDE if the paper:\n'
+                f'  - Explores, investigates, or examines "{intv}" as a main topic\n'
+                f'  - Studies the perspectives, experiences, perceptions, or barriers related to "{intv}"\n'
+                f'  - Uses qualitative, mixed-methods, or survey methodology relevant to "{intv}"\n'
+                f'EXCLUDE only if:\n'
+                f'  - "{intv}" is only mentioned peripherally or in passing\n'
+                f'  - The paper is a systematic review, editorial, commentary, or protocol\n'
+                f'  - The population is clearly different from "{pop}"'
+            )
+            design_focus = (
+                f"- Study design ({design_type}: interviews, focus groups, surveys, ethnography, etc.)\n"
+                "- Whether the phenomenon of interest is a central focus\n"
+                f"- How findings relate to \"{eval_type}\"\n"
+                "- Population and setting\n"
+                "- Data collection and analysis methods"
+            )
+            decision_include = f'paper explores or investigates "{intv}" in "{pop}" and meets ALL inclusion criteria'
+            decision_exclude = f'"{intv}" is NOT a central focus, OR population differs from "{pop}", OR paper is a review/editorial/protocol'
+
+        elif framework == "PCC":
+            intv = protocol.get("concept", protocol.get("intervention", ""))
+            context = protocol.get("context", "")
+            focus_rule = (
+                f'SCREENING FOCUS — SCOPING REVIEW (PCC):\n'
+                f'This is a PCC-framework scoping review. Do NOT require an intervention or treatment.\n'
+                f'The paper must address "{intv}" as its central concept in the context of "{context}" for "{pop}".\n'
+                f'INCLUDE if the paper:\n'
+                f'  - Directly addresses, maps, or explores "{intv}"\n'
+                f'  - Is relevant to the context of "{context}"\n'
+                f'  - Any study design is acceptable (quantitative, qualitative, mixed-methods)\n'
+                f'EXCLUDE only if:\n'
+                f'  - "{intv}" is only mentioned peripherally\n'
+                f'  - The paper is a systematic review, editorial, or protocol\n'
+                f'  - The context or population clearly does not match'
+            )
+            design_focus = (
+                "- Study design (any design is acceptable for scoping reviews)\n"
+                f"- Whether \"{intv}\" is a central concept\n"
+                f"- Relevance to context: \"{context}\"\n"
+                "- Population and setting"
+            )
+            decision_include = f'paper addresses "{intv}" in "{pop}" within the context of "{context}" and meets ALL inclusion criteria'
+            decision_exclude = f'"{intv}" is NOT a central concept, OR context/population clearly does not match, OR paper is a review/editorial/protocol'
+
         else:
+            # PICO (default) — intervention/treatment studies
+            intv = protocol.get("intervention", "")
+            comparator = protocol.get("comparator", "")
             focus_rule = (
                 f'SCREENING FOCUS:\n'
                 f'The paper must use "{intv}" as one of its main interventions or treatments.\n'
@@ -1655,9 +1722,20 @@ class Agent4FullText(BaseAgent):
                 f'EXCLUDE only if "{intv}" is not an active treatment in this study, or if the '
                 f'paper is a review, editorial, or case report.'
             )
+            design_focus = (
+                "- Actual study design (RCT, quasi-experimental, observational?)\n"
+                "- Specific outcome measures used\n"
+                "- Population characteristics and sample size\n"
+                "- Follow-up duration\n"
+                "- Whether intervention matches protocol criteria"
+            )
+            decision_include = f'paper studies "{intv}" as an active intervention and meets ALL inclusion criteria'
+            decision_exclude = f'"{intv}" is NOT studied as a treatment/intervention, OR paper fails any inclusion criterion, OR triggers any exclusion criterion'
 
-        return f"""You are a Cochrane systematic review expert performing FULL-TEXT screening.
-You have already screened this paper by title/abstract and it passed. Now review the full text against detailed PRISMA criteria.
+        return f"""You are a systematic review expert performing FULL-TEXT screening.
+You have already screened this paper by title/abstract and it passed. Now review the full text against the protocol criteria.
+
+REVIEW FRAMEWORK: {framework}
 
 INCLUSION CRITERIA:
 {incl}
@@ -1673,17 +1751,13 @@ FULL TEXT (may be truncated):
 {text_for_review}
 
 SCREENING FOCUS (criteria hard to verify from abstract alone):
-- Actual study design (RCT, quasi-experimental, observational?)
-- Specific outcome measures used
-- Population characteristics and sample size
-- Follow-up duration
-- Whether intervention matches protocol criteria
+{design_focus}
 
 {focus_rule}
 
 DECISION RULES:
-- INCLUDE: paper studies "{intv}" and meets ALL inclusion criteria on full-text review
-- EXCLUDE: "{intv}" is NOT studied as a treatment/intervention, OR paper fails any inclusion criterion, OR triggers any exclusion criterion
+- INCLUDE: {decision_include}
+- EXCLUDE: {decision_exclude}
 
 Respond ONLY with valid JSON:
 {{"decision": "INCLUDE or EXCLUDE", "reasoning": "2-3 sentences", "exclusion_reason": "brief reason if EXCLUDE, empty string if INCLUDE"}}"""

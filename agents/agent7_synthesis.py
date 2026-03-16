@@ -88,7 +88,7 @@ class Agent7Synthesis:
         # Prepare data grouped by measure type
         groups = self._prepare_data(papers)
         if not groups:
-            print("  No usable outcome data found.")
+            print("  WARNING: No usable outcome data found in any paper. Check A5 extraction results.")
             return self._empty_result(papers)
 
         print(f"  Outcome groups (before conversion): {list(groups.keys())}")

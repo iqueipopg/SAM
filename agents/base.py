@@ -4,9 +4,17 @@ from agents.logger import get_logger
 
 class BaseAgent:
     def __init__(self, agent_name):
-        self.config = yaml.safe_load(open("config.yaml"))
+        try:
+            with open("config.yaml") as _f:
+                self.config = yaml.safe_load(_f) or {}
+        except FileNotFoundError:
+            raise FileNotFoundError("config.yaml not found — run from project root directory")
+        except yaml.YAMLError as e:
+            raise ValueError(f"config.yaml has invalid YAML syntax: {e}")
         self.agent_name = agent_name
         self.logger = get_logger(self.__class__.__name__)
+        if agent_name not in self.config.get('models', {}):
+            raise KeyError(f"Model key '{agent_name}' not found in config.yaml 'models' section")
         model_cfg = self.config['models'][agent_name]
         # Support both string (single model) and list (multi-model ensemble)
         if isinstance(model_cfg, list):
@@ -15,8 +23,8 @@ class BaseAgent:
         else:
             self.model_paths = [model_cfg]
             self.model_path = model_cfg
-        self.device = self.config['device']
-        self.quantization = self.config['quantization']
+        self.device = self.config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.quantization = self.config.get('quantization', 'none')
         self.model = None
         self.tokenizer = None
         self._loaded_path = None

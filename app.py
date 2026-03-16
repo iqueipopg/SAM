@@ -888,6 +888,7 @@ def init_session_state():
         "a3_ensemble": 3,
         "a3_vote_threshold": 0.60,
         "a4_ensemble": 1,
+        "a4_vote_threshold": 0.60,
         "dedup_threshold": 0.90,
         "resume_run_dir": None,
         # Pipeline history
@@ -1506,17 +1507,20 @@ def render_manuscript_section(a8_data):
 
     dl_col1, dl_col2 = st.columns(2)
     pdf_path = a8_data.get("pdf_path")
-    if pdf_path and os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as pf:
-            pdf_bytes = pf.read()
-        dl_col1.download_button(
-            "\U0001f4d1 Download Manuscript (.pdf)",
-            data=pdf_bytes,
-            file_name=os.path.basename(pdf_path),
-            mime="application/pdf",
-        )
-    else:
-        dl_col1.caption("PDF not available")
+    try:
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as pf:
+                pdf_bytes = pf.read()
+            dl_col1.download_button(
+                "\U0001f4d1 Download Manuscript (.pdf)",
+                data=pdf_bytes,
+                file_name=os.path.basename(pdf_path),
+                mime="application/pdf",
+            )
+        else:
+            dl_col1.caption("PDF not available")
+    except Exception:
+        dl_col1.caption("PDF not available (read error)")
 
     dl_col2.download_button(
         "\U0001f4c4 Download Manuscript (.txt)",
@@ -1900,9 +1904,10 @@ def render_results(data):
 
     # Calibration: A4 sensitivity (in results view)
     a4_ens = cfg.get("a4_ensemble", 1)
+    a4_thr = cfg.get("a4_vote_threshold", a3_thr)
     if a4 and a4.get("papers"):
         _render_voting_sensitivity(
-            a4, "A4", ensemble_size=a4_ens, voting_threshold=a3_thr,
+            a4, "A4", ensemble_size=a4_ens, voting_threshold=a4_thr,
             categories=["INCLUDE", "EXCLUDE"],
         )
 
@@ -1930,6 +1935,7 @@ def render_results(data):
             file_name=f'meta_analysis_{time.strftime("%Y%m%d_%H%M%S")}.csv',
             mime="text/csv",
         )
+        os.remove(_csv_path)
     except Exception:
         dl_cols[1].caption("CSV export unavailable")
 
@@ -1946,6 +1952,7 @@ def render_results(data):
             file_name=f'meta_analysis_{time.strftime("%Y%m%d_%H%M%S")}.xlsx',
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+        os.remove(_xlsx_path)
     except Exception:
         dl_cols[2].caption("Excel export unavailable")
 
@@ -1962,6 +1969,7 @@ def render_results(data):
             file_name=f'revman_{time.strftime("%Y%m%d_%H%M%S")}.xml',
             mime="application/xml",
         )
+        os.remove(_xml_path)
     except Exception:
         dl_cols[3].caption("RevMan export unavailable")
 
@@ -1994,6 +2002,7 @@ def run_pipeline(query, resume_dir=None):
     a3_ensemble = st.session_state.a3_ensemble
     a3_vote_thr = st.session_state.a3_vote_threshold
     a4_ensemble = st.session_state.a4_ensemble
+    a4_vote_thr = st.session_state.get("a4_vote_threshold", a3_vote_thr)
 
     # Determine run directory
     if resume_dir and os.path.isdir(resume_dir):
@@ -2031,6 +2040,8 @@ def run_pipeline(query, resume_dir=None):
             try:
                 a1 = Agent1Protocol()
                 protocol = a1.generate_protocol(query)
+                if protocol.get("_fallback"):
+                    st.warning("Protocol generation failed — using generic fallback. Results may be inaccurate.")
                 pubmed_query = a1.generate_pubmed_query(query, protocol)
                 fw = protocol.get("framework", "?")
                 st.write(f"**Framework:** {fw}")
@@ -2042,7 +2053,9 @@ def run_pipeline(query, resume_dir=None):
                 st.write(f"**PubMed query:** `{pubmed_query}`")
                 # Generate PROSPERO draft
                 try:
-                    _cfg = yaml.safe_load(open("config.yaml")) if os.path.exists("config.yaml") else {}
+                    _cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+                    with open(_cfg_path) as _cf:
+                        _cfg = yaml.safe_load(_cf) or {}
                     prospero_draft = a1.generate_prospero_draft(protocol, config=_cfg)
                     protocol["prospero_draft"] = prospero_draft
                     # Save PROSPERO draft to file
@@ -2083,6 +2096,7 @@ def run_pipeline(query, resume_dir=None):
                     if _dbv:
                         _db_parts.append(f"{_dbl}: **{_dbv}**")
                 st.write(" | ".join(_db_parts) + f" | After dedup: **{a2_stats['total_after_dedup']}**")
+                free_vram(a2)
                 save_checkpoint(run_dir, "a2_search", {"papers": papers, "stats": a2_stats})
                 _n_dbs = sum(1 for k in ('pubmed','europepmc','semantic_scholar','google_scholar') if a2_stats.get(k, 0))
                 s2.update(
@@ -2090,12 +2104,14 @@ def run_pipeline(query, resume_dir=None):
                     state="complete", expanded=False,
                 )
             except Exception as e:
+                free_vram(a2)
                 s2.update(label=f"A2: Failed \u2014 {e}", state="error", expanded=True)
                 st.error(f"Agent 2 failed: {e}")
                 return None
 
     if not papers:
         st.warning("No papers found. Try a different query or increase max results.")
+        save_checkpoint(run_dir, "a1_protocol", {"query": query, "protocol": protocol, "pubmed_query": pubmed_query})
         return None
 
     _log_pipeline_stage(run_dir, "A2", f"Search returned {len(papers)} papers")
@@ -2163,7 +2179,7 @@ def run_pipeline(query, resume_dir=None):
         else:
             with st.status(f"A4: Full-text screening ({len(papers_for_a4)} papers)...", expanded=True) as s4:
                 try:
-                    a4 = Agent4FullText(ensemble_size=a4_ensemble, voting_threshold=a3_vote_thr)
+                    a4 = Agent4FullText(ensemble_size=a4_ensemble, voting_threshold=a4_vote_thr)
                     a4_result = a4.run(papers_for_a4, papers, protocol)
                     stats4 = a4_result["stats"]
                     st.write(
@@ -2201,7 +2217,7 @@ def run_pipeline(query, resume_dir=None):
     # ── A4 Calibration & Sensitivity ──────────────────────────
     if a4_result and a4_result.get("papers"):
         _render_voting_sensitivity(
-            a4_result, "A4", ensemble_size=a4_ensemble, voting_threshold=a3_vote_thr,
+            a4_result, "A4", ensemble_size=a4_ensemble, voting_threshold=a4_vote_thr,
             categories=["INCLUDE", "EXCLUDE"],
         )
 
@@ -2523,7 +2539,7 @@ def run_pipeline(query, resume_dir=None):
         if prisma_flow_path:
             prisma["prisma_flow_diagram"] = prisma_flow_path
     except Exception as e:
-        print(f"  PRISMA diagram generation failed: {e}")
+        st.caption(f"PRISMA diagram generation failed: {e}")
 
     # Clean A7 result: remove non-serializable R objects
     a7_clean = None
@@ -2572,6 +2588,7 @@ def run_pipeline(query, resume_dir=None):
             "a3_ensemble": a3_ensemble,
             "a3_vote_threshold": a3_vote_thr,
             "a4_ensemble": a4_ensemble,
+            "a4_vote_threshold": a4_vote_thr,
         },
         "prisma": prisma,
         "search_stats": _a2s,
@@ -2823,9 +2840,11 @@ with st.sidebar:
         col_a3, col_a4 = st.columns(2)
         with col_a3:
             st.markdown('<span style="font-size:0.7rem;font-weight:600;color:#0D9488;">A3</span>', unsafe_allow_html=True)
+            _a3_ens_options = [1, 3, 5]
+            _a3_ens_idx = _a3_ens_options.index(st.session_state.a3_ensemble) if st.session_state.a3_ensemble in _a3_ens_options else 1
             st.session_state.a3_ensemble = st.selectbox(
-                "Ensemble", [1, 3, 5],
-                index=[1, 3, 5].index(st.session_state.a3_ensemble),
+                "Ensemble", _a3_ens_options,
+                index=_a3_ens_idx,
                 key="a3_ens_sel",
             )
             st.session_state.a3_vote_threshold = st.slider(
@@ -2835,31 +2854,47 @@ with st.sidebar:
             )
         with col_a4:
             st.markdown('<span style="font-size:0.7rem;font-weight:600;color:#06B6D4;">A4</span>', unsafe_allow_html=True)
+            _a4_ens_options = [1, 3]
+            _a4_ens_idx = _a4_ens_options.index(st.session_state.a4_ensemble) if st.session_state.a4_ensemble in _a4_ens_options else 0
             st.session_state.a4_ensemble = st.selectbox(
-                "Ensemble", [1, 3],
-                index=[1, 3].index(st.session_state.a4_ensemble),
+                "Ensemble", _a4_ens_options,
+                index=_a4_ens_idx,
                 key="a4_ens_sel",
+            )
+            st.session_state.a4_vote_threshold = st.slider(
+                "Threshold", 0.50, 0.90,
+                st.session_state.a4_vote_threshold, step=0.05,
+                key="a4_vote_sl",
             )
 
     st.divider()
 
     # ── GPU info ──────────────────────────────────────────────────
-    if torch.cuda.is_available():
-        _gpu_name = torch.cuda.get_device_name(0)
-        _vram_total = torch.cuda.get_device_properties(0).total_memory / 1e9
-        _vram_used = torch.cuda.memory_allocated() / 1e9
-        st.markdown(
-            f'<div class="sam-gpu-chip">'
-            f'<div class="sam-gpu-dot"></div>'
-            f'<span class="sam-gpu-text">{_gpu_name} \u00b7 {_vram_used:.1f}/{_vram_total:.0f} GB</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    else:
+    try:
+        if torch.cuda.is_available():
+            _gpu_name = torch.cuda.get_device_name(0)
+            _vram_total = torch.cuda.get_device_properties(0).total_memory / 1e9
+            _vram_used = torch.cuda.memory_allocated() / 1e9
+            st.markdown(
+                f'<div class="sam-gpu-chip">'
+                f'<div class="sam-gpu-dot"></div>'
+                f'<span class="sam-gpu-text">{_gpu_name} \u00b7 {_vram_used:.1f}/{_vram_total:.0f} GB</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="sam-gpu-chip">'
+                '<div class="sam-gpu-dot" style="background:#F59E0B;"></div>'
+                '<span class="sam-gpu-text">CPU mode</span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+    except Exception:
         st.markdown(
             '<div class="sam-gpu-chip">'
             '<div class="sam-gpu-dot" style="background:#F59E0B;"></div>'
-            '<span class="sam-gpu-text">CPU mode</span>'
+            '<span class="sam-gpu-text">GPU info unavailable</span>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -2873,8 +2908,15 @@ with st.sidebar:
             f'</div>',
             unsafe_allow_html=True,
         )
+    _sam_version = "0.2.0"
+    try:
+        _cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+        with open(_cfg_path) as _vf:
+            _sam_version = (yaml.safe_load(_vf) or {}).get("project", {}).get("version", "0.2.0")
+    except Exception:
+        pass
     st.markdown(
-        '<p class="sam-footer">SAM v0.2.0</p>',
+        f'<p class="sam-footer">SAM v{_sam_version}</p>',
         unsafe_allow_html=True,
     )
 
