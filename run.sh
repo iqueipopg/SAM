@@ -252,6 +252,8 @@ show_help() {
     echo "  single \"query\"   Ejecuta pipeline para una pregunta clínica"
     echo "  ui               Lanza interfaz web Streamlit"
     echo "  test             Ejecuta suite de tests"
+    echo "  nutrition        Test local con PDFs de nutrición (A5→A8)"
+    echo "  nutrition-a5     Solo extracción A5 (rápido, para diagnóstico)"
     echo "  model <ruta>     Cambia el modelo LLM en config.yaml"
     echo "  gpu              Muestra info de GPU disponible"
     echo "  help             Muestra esta ayuda"
@@ -292,6 +294,14 @@ case "$CMD" in
         ;;
     test)
         run_tests
+        ;;
+    nutrition)
+        log "Ejecutando test local de nutrición (A5→A8)..."
+        "$PYTHON" tests/test_local_nutrition.py ${2:+--max-papers "$2"}
+        ;;
+    nutrition-a5)
+        log "Ejecutando extracción A5 sobre PDFs de nutrición..."
+        "$PYTHON" tests/test_local_nutrition.py --a5-only ${2:+--max-papers "$2"}
         ;;
     model)
         configure_model "${2:-}"
