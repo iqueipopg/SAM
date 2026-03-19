@@ -146,139 +146,48 @@ run_single_query() {
     log "Ejecutando pipeline para: $QUERY"
 
     "$PYTHON" -c "
-import sys, os, json, time, gc, yaml
+import sys, os
 sys.path.insert(0, '.')
 os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
 
 from dotenv import load_dotenv
 load_dotenv()
 
-import torch
+import time
 from datetime import datetime
-from agents.agent1_protocol import Agent1Protocol
-from agents.agent2_search import Agent2Search
-from agents.agent3_screening import Agent3Screening
-from agents.agent4_fulltext import Agent4FullText
-from agents.agent5_extraction import Agent5Extraction
-from agents.agent6_quality import Agent6Quality
-from agents.agent7_synthesis import Agent7Synthesis
-from agents.agent8_manuscript import Agent8Manuscript
-
-def free_vram(agent=None):
-    if agent and hasattr(agent, 'model') and agent.model:
-        del agent.model; agent.model = None
-    if agent and hasattr(agent, 'tokenizer') and agent.tokenizer:
-        del agent.tokenizer; agent.tokenizer = None
-    gc.collect()
-    if torch.cuda.is_available(): torch.cuda.empty_cache()
+from batch_run import run_single_pipeline, analyze_run, clean_r_objects, log as blog
 
 query = '''$QUERY'''
 ts = time.strftime('%Y%m%d_%H%M%S')
-run_dir = f'outputs/run_{ts}'
+run_dir = os.path.join('outputs', f'run_{ts}')
 os.makedirs(run_dir, exist_ok=True)
-os.makedirs(f'{run_dir}/plots', exist_ok=True)
 
 print(f'[SAM] Query: {query}')
 print(f'[SAM] Output: {run_dir}')
+
+run_log = []
 start = time.time()
-
-# A1
-print('[SAM] A1: Generating protocol...')
-a1 = Agent1Protocol()
-protocol = a1.generate_protocol(query)
-pubmed_query = a1.generate_pubmed_query(query, protocol)
-free_vram(a1)
-print(f'[SAM] A1: Framework={protocol.get(\"framework\")}')
-
-# A2
-print('[SAM] A2: Searching databases...')
-a2 = Agent2Search()
-a2_result = a2.search(protocol, pubmed_query, max_results=150)
-papers = a2_result['papers']
-print(f'[SAM] A2: Found {len(papers)} papers')
-
-# A3
-print(f'[SAM] A3: Screening {len(papers)} papers...')
-a3 = Agent3Screening(ensemble_size=3, voting_threshold=0.60)
-a3_results = a3.screen_batch(papers, protocol)
-free_vram(a3)
-included = a3_results.get('include', [])
-uncertain = a3_results.get('uncertain', [])
-print(f'[SAM] A3: {len(included)} included, {len(uncertain)} uncertain')
-
-a4_candidates = included + uncertain
-if not a4_candidates:
-    print('[SAM] No papers passed screening. Done.')
-    sys.exit(0)
-
-# A4
-print(f'[SAM] A4: Full-text screening ({len(a4_candidates)} papers)...')
-a4 = Agent4FullText(ensemble_size=3, voting_threshold=0.60)
-a4_result = a4.run(a4_candidates, papers, protocol)
-free_vram(a4)
-ft_included = a4_result.get('include', [])
-print(f'[SAM] A4: {len(ft_included)} included')
-
-if not ft_included:
-    print('[SAM] No papers passed full-text screening. Done.')
-    sys.exit(0)
-
-# A5
-print(f'[SAM] A5: Extracting data ({len(ft_included)} papers)...')
-a5 = Agent5Extraction()
-a5_result = a5.extract_all(ft_included, protocol)
-free_vram(a5)
-
-# A6
-a6_papers = a5_result.get('papers', ft_included)
-print(f'[SAM] A6: Quality assessment ({len(a6_papers)} papers)...')
-a6 = Agent6Quality()
-a6_result = a6.assess_all(a6_papers, protocol)
-free_vram(a6)
-
-# A7
-if len(a6_result.get('papers', [])) >= 2:
-    print('[SAM] A7: Statistical synthesis...')
-    config = {}
-    if os.path.exists('config.yaml'):
-        with open('config.yaml') as f: config = yaml.safe_load(f) or {}
-    a7 = Agent7Synthesis(config=config)
-    a7_result = a7.synthesize(a6_result, protocol, output_dir=run_dir)
-    # Clean R objects for JSON serialization
-    def clean_r(obj):
-        if isinstance(obj, dict): return {k: clean_r(v) for k, v in obj.items() if k != '_fit'}
-        if isinstance(obj, list): return [clean_r(i) for i in obj]
-        return obj
-    a7_result = clean_r(a7_result)
-else:
-    a7_result = None
-    print('[SAM] A7: Skipped (< 2 papers)')
-
-# A8
-if len(ft_included) >= 2:
-    print('[SAM] A8: Generating manuscript...')
-    a8 = Agent8Manuscript()
-    s3 = a3_results.get('stats', {})
-    s4 = a4_result.get('stats', {})
-    prisma = {
-        'identified': s3.get('total', 0),
-        'excluded_title_abstract': s3.get('excluded', 0),
-        'assessed_fulltext': s3.get('included', 0) + s3.get('uncertain', 0),
-        'excluded_fulltext': s4.get('fulltext_excluded', 0),
-        'included_final': s4.get('fulltext_included', len(ft_included)),
-    }
-    prot = dict(protocol); prot['pubmed_query'] = pubmed_query
-    a8_result = a8.generate_manuscript(
-        protocol=prot, included_papers=ft_included,
-        extraction=a5_result, quality=a6_result,
-        synthesis=a7_result, output_dir=run_dir, prisma=prisma
-    )
-    free_vram(a8)
-    print(f'[SAM] A8: PDF at {a8_result.get(\"pdf_path\", \"N/A\")}')
-
+result = run_single_pipeline(query, run_dir, run_log)
 elapsed = round(time.time() - start, 1)
-print(f'[SAM] Pipeline complete in {elapsed}s')
-print(f'[SAM] Results: {run_dir}/')
+
+# Analyze and print report
+report = analyze_run(run_dir, result)
+report['elapsed_s'] = elapsed
+
+print(f'\n--- SUMMARY ---')
+print(f'  Framework: {report[\"framework\"]}')
+print(f'  Papers found: {report.get(\"papers_found\", 0)}')
+print(f'  A3 screening: {report.get(\"a3_included\", 0)} included / {report.get(\"a3_total\", 0)} total')
+print(f'  Final included: {report.get(\"final_included\", 0)}')
+print(f'  Analyses: {report.get(\"n_analyses\", 0)}')
+for detail in report.get('synthesis_details', []):
+    print(f'    {detail[\"measure\"]}: pooled={detail[\"pooled\"]} [{detail[\"ci_lower\"]}, {detail[\"ci_upper\"]}], k={detail[\"k_studies\"]}, GRADE={detail[\"grade\"]}')
+print(f'  Verdict: {report[\"verdict\"]}')
+if report.get('issues'):
+    for issue in report['issues']:
+        print(f'  ! {issue}')
+print(f'  Time: {elapsed}s')
+print(f'  Results: {run_dir}/')
 "
 }
 

@@ -126,9 +126,16 @@ def analyze_run(run_dir, result):
 
     # Synthesis stats
     a7 = result.get("a7_result", {})
-    analyses = a7.get("analyses", {})
+    analyses = a7.get("analyses", {}) if a7 else {}
     report["n_analyses"] = len(analyses)
     report["synthesis_details"] = []
+
+    # Flag if extraction yielded data but no meta-analysis was possible
+    if report["final_included"] >= 2 and len(analyses) == 0:
+        report["issues"].append(
+            f"0 meta-analyses despite {report['final_included']} included papers — "
+            "A5 did not extract usable numeric outcomes (effect sizes, CIs)"
+        )
 
     for measure, analysis in analyses.items():
         model = analysis.get("model", {})
@@ -211,7 +218,7 @@ def run_single_pipeline(query, run_dir, run_log):
         a2_stats = a2_result["stats"]
         result["a2_stats"] = a2_stats
         save_checkpoint(run_dir, "a2_search", {"papers": papers, "stats": a2_stats})
-        log(f"A2: Found {a2_stats['total_after_dedup']} papers (PubMed={a2_stats['pubmed']}, EPMC={a2_stats['europepmc']}, S2={a2_stats['semantic_scholar']})", run_log)
+        log(f"A2: Found {a2_stats['total_after_dedup']} papers (PubMed={a2_stats['pubmed']}, EPMC={a2_stats['europepmc']}, S2={a2_stats['semantic_scholar']}, GScholar={a2_stats.get('google_scholar', 0)})", run_log)
     except Exception as e:
         log(f"A2: FAILED — {e}", run_log)
         result["error"] = f"A2: {e}"
