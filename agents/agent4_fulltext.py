@@ -696,6 +696,35 @@ class Agent4FullText(BaseAgent):
             except Exception as e:
                 print(f"pdfplumber error: {e} ", end="", flush=True)
 
+        # Backend 3: Extract structured tables and append
+        # (pdfplumber table extraction preserves column alignment that raw text loses)
+        if text and len(text) >= MIN_CHARS:
+            try:
+                import pdfplumber
+
+                table_parts = []
+                with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                    for page_num, page in enumerate(pdf.pages, 1):
+                        page_tables = page.extract_tables()
+                        if not page_tables:
+                            continue
+                        for table in page_tables:
+                            if not table or len(table) < 2:
+                                continue
+                            rows = []
+                            for row in table:
+                                cells = [str(c).strip() if c else "" for c in row]
+                                if any(cells):
+                                    rows.append(" | ".join(cells))
+                            if rows:
+                                table_parts.append(
+                                    f"\nTABLE (page {page_num}):\n" + "\n".join(rows)
+                                )
+                if table_parts:
+                    text += "\n\n--- EXTRACTED TABLES ---\n" + "\n".join(table_parts)
+            except Exception:
+                pass  # Table extraction is best-effort
+
         return text if text and len(text.strip()) > 0 else None
 
     # ------------------------------------------------------------------ #

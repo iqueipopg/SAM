@@ -85,8 +85,45 @@ def find_pdf_dir():
     raise FileNotFoundError(f"No PDF directory found in {PDF_DIR}")
 
 
+def extract_pdf_tables(pdf_path: Path) -> str:
+    """Extract tables from PDF using pdfplumber and format as readable text.
+
+    Returns formatted table text like:
+        TABLE (page 5): Weight change on 'intention to treat' basis
+        Group | Clinic | Behavioural | Dexfenfluramine | Home visits
+        Number (M:F) | 37 (16:21) | 38 (20:18) | 37 (14:23) | 35 (20:15)
+        Weight change at 3 months (kg) | -1.59 | -1.20 | -3.40 | -1.69
+        ...
+    """
+    tables_text = []
+    try:
+        import pdfplumber
+        with pdfplumber.open(str(pdf_path)) as pdf:
+            for page_num, page in enumerate(pdf.pages, 1):
+                page_tables = page.extract_tables()
+                if not page_tables:
+                    continue
+                for table in page_tables:
+                    if not table or len(table) < 2:
+                        continue
+                    # Format table rows as pipe-separated text
+                    rows = []
+                    for row in table:
+                        cells = [str(c).strip() if c else "" for c in row]
+                        # Skip rows that are all empty
+                        if not any(cells):
+                            continue
+                        rows.append(" | ".join(cells))
+                    if rows:
+                        tables_text.append(f"\nTABLE (page {page_num}):\n" + "\n".join(rows))
+    except Exception:
+        pass
+    return "\n".join(tables_text)
+
+
 def extract_pdf_text(pdf_path: Path) -> str:
-    """Extract text from PDF using PyMuPDF (primary) + pdfplumber (fallback)."""
+    """Extract text from PDF using PyMuPDF (primary) + pdfplumber (fallback),
+    plus structured table extraction appended at the end."""
     text = ""
 
     # Primary: PyMuPDF
@@ -110,6 +147,12 @@ def extract_pdf_text(pdf_path: Path) -> str:
                 text = fallback
         except Exception:
             pass
+
+    # Append structured tables (pdfplumber extracts tabular data better than
+    # raw text extraction, which often loses column alignment)
+    tables = extract_pdf_tables(pdf_path)
+    if tables:
+        text += "\n\n--- EXTRACTED TABLES ---\n" + tables
 
     return text.strip()
 

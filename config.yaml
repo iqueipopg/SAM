@@ -120,7 +120,7 @@ extraction:
   max_chars:
     study_characteristics: 4000
     intervention: 3000
-    outcomes: 4000
+    outcomes: 6000  # results sections need more context for tables/multi-arm trials
 
 # ── A6: Quality Assessment ────────────────────────────────────────
 quality:

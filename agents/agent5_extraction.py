@@ -641,9 +641,10 @@ Respond ONLY with valid JSON:
                           temperature: float = 0.1) -> Optional[List[Dict]]:
         from agents.prompts import AGENT5_OUTCOMES_TEMPLATE
 
-        results_text = self._get_section_text(paper, "results", max_chars=4000)
+        _max_results = self.config.get("extraction", {}).get("max_chars", {}).get("outcomes", 6000)
+        results_text = self._get_section_text(paper, "results", max_chars=_max_results)
         if not results_text:
-            results_text = self._get_section_text(paper, "full_text", max_chars=4000)
+            results_text = self._get_section_text(paper, "full_text", max_chars=_max_results)
 
         outcome_of_interest = protocol.get("outcome", "")
 
@@ -813,10 +814,11 @@ Respond ONLY with valid JSON:
         """
         from agents.prompts import AGENT5_NUMERIC_RECOVERY_TEMPLATE
 
-        # Use the best available text
-        text = self._get_section_text(paper, "results", max_chars=4000)
+        # Use the best available text (generous limit — recovery is the last chance)
+        _max_results = self.config.get("extraction", {}).get("max_chars", {}).get("outcomes", 6000)
+        text = self._get_section_text(paper, "results", max_chars=_max_results)
         if not text or len(text) < 50:
-            text = self._get_section_text(paper, "full_text", max_chars=5000)
+            text = self._get_section_text(paper, "full_text", max_chars=_max_results + 1000)
         if not text or len(text) < 50:
             text = paper.get("abstract", "") or ""
         if not text:
@@ -919,22 +921,44 @@ Respond ONLY with valid JSON:
         """
         import re
 
-        # Map section names to heading patterns
+        # Map section names to heading patterns (loose: handles PDF quirks like
+        # missing newlines, ALL CAPS, "Results and Discussion", trailing punctuation)
         heading_patterns = {
-            "results": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Results?|Findings)\s*\n',
-            "methods": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Methods?|Materials?\s*(?:and|&)\s*Methods?|Study\s*Design|Procedure)\s*\n',
-            "introduction": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Introduction|Background)\s*\n',
-            "discussion": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Discussion)\s*\n',
-            "conclusion": r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Conclusions?|Summary)\s*\n',
+            "results": [
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:RESULTS?\b|FINDINGS\b|RESULTS?\s+AND\s+DISCUSSION)',
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Results?\b|Findings\b|Results?\s+and\s+[Dd]iscussion)',
+            ],
+            "methods": [
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:METHODS?\b|MATERIALS?\s*(?:AND|&)\s*METHODS?\b|STUDY\s*DESIGN|PROCEDURE|RESEARCH\s+DESIGN)',
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Methods?\b|Materials?\s*(?:and|&)\s*Methods?\b|Study\s*[Dd]esign|Patients?\s+and\s+[Mm]ethods?)',
+            ],
+            "introduction": [
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:INTRODUCTION|BACKGROUND)',
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Introduction|Background)',
+            ],
+            "discussion": [
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:DISCUSSION)',
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Discussion)',
+            ],
+            "conclusion": [
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:CONCLUSIONS?|SUMMARY)',
+                r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Conclusions?|Summary)',
+            ],
         }
 
-        pattern = heading_patterns.get(section_name)
-        if not pattern:
+        patterns = heading_patterns.get(section_name, [])
+        if not patterns:
             return ""
 
-        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        # Try each pattern (strict first, then loose)
+        match = None
+        for pattern in patterns:
+            match = re.search(pattern, text, re.MULTILINE)
+            if match:
+                break
+
         if not match:
-            # Try a looser search for results — look for numeric-dense regions
+            # Last resort for results: find numeric-dense regions
             if section_name == "results":
                 return _find_numeric_dense_region(text, max_chars)
             return ""
@@ -942,7 +966,7 @@ Respond ONLY with valid JSON:
         start = match.end()
         # Find the next major heading to delimit the section
         next_heading = re.search(
-            r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Discussion|Conclusion|Results?|Methods?|References|Bibliography|Acknowledgements?)\s*\n',
+            r'(?:^|\n)\s*(?:\d+\.?\s*)?(?:Discussion|Conclusion|Results?|Methods?|References|Bibliography|Acknowledgements?|DISCUSSION|CONCLUSION|REFERENCES)\s*(?:\n|$)',
             text[start:], re.IGNORECASE | re.MULTILINE,
         )
         end = start + next_heading.start() if next_heading else start + max_chars

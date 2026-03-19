@@ -78,12 +78,19 @@ RESULTS TEXT:
 INSTRUCTIONS:
 1. Extract EXACT numeric values from the text. If a value is not reported, use null. Do NOT describe results in prose.
 2. For effect_size_type, use ONLY one of: SMD, OR, RR, HR, MD, PROP
-3. If the paper reports means and SDs per group, calculate SMD = (M1-M2)/SDpooled and provide it as effect_size_value.
+3. If the paper reports means and SDs per group, set effect_size_type="MD", effect_size_value = mean_intervention - mean_control, and fill in mean_intervention, sd_intervention, mean_control, sd_control.
 4. If the paper reports OR/RR with 95% CI, extract all three numbers (value, ci_lower, ci_upper).
 5. If only a p-value and sample sizes are given, still report them — downstream analysis can use them.
 
+HANDLING TABLES: Data often appears in tables where columns are separated by spaces. Look for patterns like:
+- Column headers: "Group   Mean   SD   N" followed by rows of numbers
+- Parenthetical CIs: "-1.59 (-0.94, -2.24)" means value=-1.59, ci_lower=-2.24, ci_upper=-0.94
+- Mean ± SD format: "10.8 ± 3.1" means mean=10.8, sd=3.1
+
+MULTI-ARM TRIALS: If the study has 3+ groups, extract the PRIMARY intervention vs control comparison. If there are multiple intervention arms, create one outcome per arm vs control.
+
 Extract ALL reported outcomes as a JSON array. For EACH outcome provide these EXACT fields:
-- name: outcome measure name (e.g. "Depression severity (PHQ-9)")
+- name: outcome measure name (e.g. "Weight change at 12 months - behavioral vs control")
 - effect_size_type: one of "SMD", "OR", "RR", "HR", "MD", "PROP" (uppercase, required)
 - effect_size_value: the main numeric effect size as a float (e.g. 0.45, 1.82, -0.33) or null
 - ci_lower: lower bound of 95% CI as a float (e.g. 0.21) or null
@@ -98,8 +105,11 @@ Extract ALL reported outcomes as a JSON array. For EACH outcome provide these EX
 - mean_control: mean value in control group (float) or null
 - sd_control: SD in control group (float) or null
 
-CONCRETE EXAMPLE:
-[{{"name": "Depression severity (BDI-II)", "effect_size_type": "SMD", "effect_size_value": -0.52, "ci_lower": -0.89, "ci_upper": -0.15, "p_value": 0.006, "se": 0.19, "n_intervention": 45, "n_control": 43, "n_total": 88, "mean_intervention": 12.3, "sd_intervention": 6.1, "mean_control": 15.8, "sd_control": 7.2}}, {{"name": "Remission rate", "effect_size_type": "OR", "effect_size_value": 2.14, "ci_lower": 1.12, "ci_upper": 4.09, "p_value": 0.021, "se": null, "n_intervention": 45, "n_control": 43, "n_total": 88, "mean_intervention": null, "sd_intervention": null, "mean_control": null, "sd_control": null}}]
+EXAMPLE 1 (means and SDs):
+[{{"name": "Weight change (kg)", "effect_size_type": "MD", "effect_size_value": -3.5, "ci_lower": -5.2, "ci_upper": -1.8, "p_value": 0.006, "se": null, "n_intervention": 45, "n_control": 43, "n_total": 88, "mean_intervention": -4.2, "sd_intervention": 6.1, "mean_control": -0.7, "sd_control": 7.2}}]
+
+EXAMPLE 2 (multi-arm, table data):
+[{{"name": "Weight change at 12m - clinic vs control", "effect_size_type": "MD", "effect_size_value": -2.42, "ci_lower": null, "ci_upper": null, "p_value": 0.01, "se": null, "n_intervention": 37, "n_control": 58, "n_total": 95, "mean_intervention": -1.21, "sd_intervention": null, "mean_control": 1.21, "sd_control": null}}, {{"name": "Weight change at 12m - behavioral vs control", "effect_size_type": "MD", "effect_size_value": -3.03, "ci_lower": null, "ci_upper": null, "p_value": 0.01, "se": null, "n_intervention": 38, "n_control": 58, "n_total": 96, "mean_intervention": -1.82, "sd_intervention": null, "mean_control": 1.21, "sd_control": null}}]
 
 Respond ONLY with a valid JSON array:"""
 
@@ -111,9 +121,9 @@ TEXT:
 {text}
 
 Extract ONLY numeric values for meta-analysis. For each outcome you can find, provide:
-- name: outcome name
+- name: outcome name (include arm label if multi-arm, e.g. "Weight change - behavioral vs control")
 - effect_size_type: one of "SMD", "OR", "RR", "HR", "MD", "PROP"
-- effect_size_value: the numeric effect size (float)
+- effect_size_value: the numeric effect size (float). For means difference: intervention_mean - control_mean
 - ci_lower: lower 95% CI bound (float or null)
 - ci_upper: upper 95% CI bound (float or null)
 - p_value: p-value (float or null)
@@ -126,13 +136,17 @@ Extract ONLY numeric values for meta-analysis. For each outcome you can find, pr
 - mean_control: group mean (float or null)
 - sd_control: group SD (float or null)
 
-Look for patterns like:
+Look for these patterns in the text:
 - "d = 0.45" or "Cohen's d" or "Hedges' g" → effect_size_type = "SMD"
 - "OR = 2.1 (95% CI: 1.2-3.8)" → effect_size_type = "OR", value = 2.1, ci_lower = 1.2, ci_upper = 3.8
-- "M = 12.3, SD = 6.1" in one group vs "M = 15.8, SD = 7.2" in another → compute SMD
 - "RR = 0.75, 95% CI [0.58, 0.97]" → effect_size_type = "RR"
-- "p < 0.001" → p_value = 0.001
 - "HR = 1.45 (1.10-1.92)" → effect_size_type = "HR"
+- "p < 0.001" → p_value = 0.001
+- TABLE DATA: rows with numbers separated by spaces. Example:
+  "Weight change  -1.59  (-0.94, -2.24)  -1.21  (+0.16, -2.58)"
+  → mean=-1.59, ci_lower=-2.24, ci_upper=-0.94 for one group
+- MEAN ± SD: "10.8 ± 3.1" → mean=10.8, sd=3.1. Compute MD = mean_intervention - mean_control.
+- If 3+ groups exist, extract primary intervention vs control. Create separate entries for each arm vs control.
 
 Respond ONLY with a valid JSON array (even if only one outcome):"""
 
