@@ -2578,18 +2578,32 @@ def run_pipeline(query, resume_dir=None):
     except Exception as e:
         st.caption(f"Review report generation failed (non-blocking): {e}")
 
+    # Collect system info + full config for reproducibility
+    _sys_info = {"timestamp": datetime.now().isoformat()}
+    try:
+        _sys_info["python"] = sys.version.split()[0]
+        _sys_info["torch"] = torch.__version__
+        if torch.cuda.is_available():
+            _sys_info["gpu"] = torch.cuda.get_device_name(0)
+            _sys_info["gpu_memory_gb"] = round(torch.cuda.get_device_properties(0).total_mem / 1e9, 1)
+            _sys_info["cuda"] = torch.version.cuda
+    except Exception:
+        pass
+
+    _full_cfg = {}
+    try:
+        _cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+        with open(_cfg_path) as _cf:
+            _full_cfg = yaml.safe_load(_cf) or {}
+    except Exception:
+        pass
+
     output = {
         "query": query,
         "protocol": protocol,
         "pubmed_query": pubmed_query,
-        "config": {
-            "max_results": max_results,
-            "dedup_threshold": dedup_threshold,
-            "a3_ensemble": a3_ensemble,
-            "a3_vote_threshold": a3_vote_thr,
-            "a4_ensemble": a4_ensemble,
-            "a4_vote_threshold": a4_vote_thr,
-        },
+        "config_snapshot": _full_cfg,
+        "system_info": _sys_info,
         "prisma": prisma,
         "search_stats": _a2s,
         "screening": a3_results,

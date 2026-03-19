@@ -505,16 +505,25 @@ def run_single_pipeline(query, run_dir, run_log):
     except Exception as e:
         log(f"Review report: FAILED — {e}", run_log)
 
+    # ── Collect system info for reproducibility ──
+    _sys_info = {"timestamp": datetime.now().isoformat()}
+    try:
+        _sys_info["python"] = sys.version.split()[0]
+        _sys_info["torch"] = torch.__version__
+        if torch.cuda.is_available():
+            _sys_info["gpu"] = torch.cuda.get_device_name(0)
+            _sys_info["gpu_memory_gb"] = round(torch.cuda.get_device_properties(0).total_mem / 1e9, 1)
+            _sys_info["cuda"] = torch.version.cuda
+    except Exception:
+        pass
+
     # ── Unified pipeline JSON (same format as app.py) ──
     pipeline_data = {
         "query": query,
         "protocol": protocol,
         "pubmed_query": pubmed_query,
-        "config": {
-            "max_results": MAX_RESULTS,
-            "ensemble_size": ENSEMBLE_SIZE,
-            "voting_threshold": VOTING_THRESHOLD,
-        },
+        "config_snapshot": _CFG,  # full config.yaml for reproducibility
+        "system_info": _sys_info,
         "prisma": prisma,
         "search_stats": a2_stats,
         "screening": a3_results,

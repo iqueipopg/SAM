@@ -963,8 +963,8 @@ Respond ONLY with valid JSON:
                 **inputs,
                 max_new_tokens=max_tokens,
                 temperature=temperature,
-                do_sample=True,
-                top_p=0.9,
+                do_sample=self.do_sample,
+                top_p=self.top_p,
                 pad_token_id=self.tokenizer.eos_token_id,
             )
         return self._decode_response(outputs, input_length)

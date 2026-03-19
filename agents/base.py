@@ -25,6 +25,10 @@ class BaseAgent:
             self.model_path = model_cfg
         self.device = self.config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.quantization = self.config.get('quantization', 'none')
+        gen_cfg = self.config.get('generation', {})
+        self.do_sample = gen_cfg.get('do_sample', True)
+        self.top_p = gen_cfg.get('top_p', 0.9)
+        self.repetition_penalty = gen_cfg.get('repetition_penalty', 1.3)
         self.model = None
         self.tokenizer = None
         self._loaded_path = None
@@ -137,13 +141,16 @@ class BaseAgent:
     def generate(self, prompt, max_new_tokens=512, temperature=0.7):
         inputs = self._tokenize_prompt(prompt)
         input_length = inputs["input_ids"].shape[1]
+        gen_kwargs = dict(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=self.do_sample,
+            temperature=temperature,
+            top_p=self.top_p,
+            pad_token_id=self.tokenizer.eos_token_id,
+        )
+        if self.repetition_penalty and self.repetition_penalty != 1.0:
+            gen_kwargs["repetition_penalty"] = self.repetition_penalty
         with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=temperature,
-                top_p=0.9,
-                pad_token_id=self.tokenizer.eos_token_id
-            )
+            outputs = self.model.generate(**gen_kwargs)
         return self._decode_response(outputs, input_length)

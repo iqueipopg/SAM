@@ -155,7 +155,8 @@ class Agent3Screening(BaseAgent):
             f"  - {c.replace('**', '')}" for c in protocol.get("exclusion_criteria", [])
         )
         title = paper.get("title", "")
-        abstract = str(paper.get("abstract", ""))[:1200]
+        _abs_max = self.config.get("screening", {}).get("abstract_max_chars", 800)
+        abstract = str(paper.get("abstract", ""))[:_abs_max]
 
         # Build framework-aware screening rule
         framework = protocol.get("framework", "PICO")
@@ -497,8 +498,8 @@ Respond ONLY with valid JSON:
                 **inputs,
                 max_new_tokens=max_tokens,
                 temperature=0.2,
-                do_sample=True,
-                top_p=0.9,
+                do_sample=self.do_sample,
+                top_p=self.top_p,
                 pad_token_id=self.tokenizer.eos_token_id,
             )
         return self._decode_response(outputs, input_length)

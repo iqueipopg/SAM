@@ -30,6 +30,12 @@ quantization: "4bit"  # "4bit", "8bit", or "none"
 batch_size: 1
 max_tokens: 2048
 
+# ── Generation Parameters (shared by all LLM agents) ──────────
+generation:
+  do_sample: true       # false = greedy decoding (deterministic)
+  top_p: 0.9            # nucleus sampling threshold
+  repetition_penalty: 1.3  # penalize repeated tokens (used by A8, available to all)
+
 # ── Paths ─────────────────────────────────────────────────────────
 paths:
   outputs: "./outputs"
