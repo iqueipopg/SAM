@@ -185,7 +185,10 @@ def run_single_pipeline(query, run_dir, run_log):
     from agents.agent6_quality import Agent6Quality
     from agents.agent7_synthesis import Agent7Synthesis
     from agents.agent8_manuscript import Agent8Manuscript
-    from agents.exporters import export_csv, export_excel, export_summary_table
+    from agents.exporters import export_csv, export_excel, export_revman, export_summary_table
+    from agents.prisma_flow import generate_prisma_flow
+    from agents.rob_plots import generate_rob_traffic_light, generate_rob_summary
+    from agents.review_report import ReviewReportGenerator
 
     os.makedirs(run_dir, exist_ok=True)
     plots_dir = os.path.join(run_dir, "plots")
@@ -199,6 +202,18 @@ def run_single_pipeline(query, run_dir, run_log):
         a1 = Agent1Protocol()
         protocol = a1.generate_protocol(query)
         pubmed_query = a1.generate_pubmed_query(query, protocol)
+        # Generate PROSPERO draft (non-critical)
+        try:
+            _cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+            with open(_cfg_path) as _cf:
+                _cfg = yaml.safe_load(_cf) or {}
+            prospero_draft = a1.generate_prospero_draft(protocol, config=_cfg)
+            protocol["prospero_draft"] = prospero_draft
+            _prospero_path = os.path.join(run_dir, "prospero_draft.txt")
+            with open(_prospero_path, "w", encoding="utf-8") as _pf:
+                _pf.write(prospero_draft)
+        except Exception:
+            pass
         free_vram(a1)
         result["protocol"] = protocol
         result["pubmed_query"] = pubmed_query
@@ -310,6 +325,23 @@ def run_single_pipeline(query, run_dir, run_log):
         except Exception as e:
             log(f"A6: FAILED — {e}", run_log)
 
+    # ── RoB Plots (after A6) ──
+    if a6_result and a6_result.get("papers"):
+        try:
+            rob_tl_path = generate_rob_traffic_light(
+                a6_result, os.path.join(plots_dir, "rob_traffic_light.png")
+            )
+            rob_sum_path = generate_rob_summary(
+                a6_result, os.path.join(plots_dir, "rob_summary.png")
+            )
+            if rob_tl_path:
+                a6_result["rob_traffic_light_plot"] = rob_tl_path
+            if rob_sum_path:
+                a6_result["rob_summary_plot"] = rob_sum_path
+            log("RoB plots generated", run_log)
+        except Exception as e:
+            log(f"RoB plots: FAILED — {e}", run_log)
+
     # ── A7: Synthesis ──
     a7_result = None
     a7_input = None
@@ -388,30 +420,139 @@ def run_single_pipeline(query, run_dir, run_log):
     else:
         log("A8: Skipped (fewer than 2 included papers)", run_log)
 
-    # ── Exports ──
+    # ── PRISMA Flow Diagram ──
+    _s3 = a3_results.get("stats", {})
+    _s4 = a4_result.get("stats", {}) if a4_result else {}
+    _n_ext = 0
+    if a5_result and a5_result.get("stats"):
+        _n_ext = a5_result["stats"].get("complete_extraction", 0) + a5_result["stats"].get("partial_extraction", 0)
+    _n_qa = 0
+    if a6_result and a6_result.get("stats"):
+        _n_qa = a6_result["stats"].get("rob2_assessed", 0) + a6_result["stats"].get("robins_i_assessed", 0) + a6_result["stats"].get("jbi_assessed", 0)
+
+    prisma = {
+        "identified": a2_stats.get("total_before_dedup", _s3.get("total", 0)),
+        "identified_per_db": {
+            "pubmed": a2_stats.get("pubmed", 0),
+            "europepmc": a2_stats.get("europepmc", 0),
+            "semantic_scholar": a2_stats.get("semantic_scholar", 0),
+            "google_scholar": a2_stats.get("google_scholar", 0),
+        },
+        "after_dedup": a2_stats.get("total_after_dedup", _s3.get("total", 0)),
+        "duplicates_removed": a2_stats.get("duplicates_removed", 0),
+        "screened": _s3.get("total", 0),
+        "excluded_title_abstract": _s3.get("excluded", 0),
+        "uncertain_title_abstract": _s3.get("uncertain", 0),
+        "assessed_fulltext": _s3.get("included", 0) + _s3.get("uncertain", 0),
+        "excluded_fulltext": _s4.get("fulltext_excluded", 0),
+        "included_final": _s4.get("fulltext_included", 0),
+        "extracted": _n_ext,
+        "quality_assessed": _n_qa,
+    }
+
     try:
-        export_csv(result_to_pipeline_data(result, a3_results, a4_result, a5_result, a6_result, a7_result, a8_result),
-                    os.path.join(run_dir, "included_studies.csv"))
-        export_summary_table(result_to_pipeline_data(result, a3_results, a4_result, a5_result, a6_result, a7_result, a8_result),
-                             os.path.join(run_dir, "summary_table.md"))
-        log("Exports: CSV + Summary table generated", run_log)
+        n_synthesis = 0
+        if a7_result and a7_result.get("stats"):
+            n_synthesis = a7_result["stats"].get("papers_with_usable_data", 0)
+        prisma_diagram_data = {
+            "identified": prisma["identified"],
+            "identified_per_db": prisma["identified_per_db"],
+            "duplicates_removed": prisma["duplicates_removed"],
+            "screened": prisma["screened"],
+            "excluded_screening": prisma["excluded_title_abstract"],
+            "fulltext_assessed": prisma["assessed_fulltext"],
+            "excluded_fulltext": prisma["excluded_fulltext"],
+            "not_retrieved": 0,
+            "included_review": prisma["included_final"],
+            "included_synthesis": n_synthesis,
+            "quality_assessed": _n_qa,
+        }
+        prisma_flow_path = generate_prisma_flow(
+            prisma_diagram_data, os.path.join(plots_dir, "prisma_flow.png")
+        )
+        if prisma_flow_path:
+            prisma["prisma_flow_diagram"] = prisma_flow_path
+            log("PRISMA flow diagram generated", run_log)
     except Exception as e:
-        log(f"Exports: FAILED — {e}", run_log)
+        log(f"PRISMA flow: FAILED — {e}", run_log)
 
-    return result
+    # ── Review Report ──
+    review_report_data = None
+    try:
+        _interim = {
+            "screening": a3_results,
+            "fulltext_retrieval": a4_result,
+            "data_extraction": a5_result,
+            "quality_assessment": a6_result,
+            "synthesis": a7_result,
+        }
+        rr_gen = ReviewReportGenerator()
+        review_report_data = rr_gen.generate(_interim)
 
+        rr_json_path = os.path.join(run_dir, "review_report.json")
+        with open(rr_json_path, "w", encoding="utf-8") as f:
+            json.dump(review_report_data, f, indent=2, ensure_ascii=False)
 
-def result_to_pipeline_data(result, a3_results, a4_result, a5_result, a6_result, a7_result, a8_result):
-    """Convert run result to the pipeline_data format expected by exporters."""
-    return {
-        "protocol": result.get("protocol", {}),
+        rr_txt = rr_gen.generate_text_report(review_report_data)
+        rr_txt_path = os.path.join(run_dir, "review_report.txt")
+        with open(rr_txt_path, "w", encoding="utf-8") as f:
+            f.write(rr_txt)
+
+        n_flags = review_report_data.get("summary", {}).get("total_flags", 0)
+        confidence = review_report_data.get("summary", {}).get("pipeline_confidence", "?")
+        log(f"Review report: {n_flags} flags, confidence: {confidence}", run_log)
+    except Exception as e:
+        log(f"Review report: FAILED — {e}", run_log)
+
+    # ── Unified pipeline JSON (same format as app.py) ──
+    pipeline_data = {
+        "query": query,
+        "protocol": protocol,
+        "pubmed_query": pubmed_query,
+        "config": {
+            "max_results": MAX_RESULTS,
+            "ensemble_size": ENSEMBLE_SIZE,
+            "voting_threshold": VOTING_THRESHOLD,
+        },
+        "prisma": prisma,
+        "search_stats": a2_stats,
         "screening": a3_results,
         "fulltext_retrieval": a4_result,
         "data_extraction": a5_result,
         "quality_assessment": a6_result,
         "synthesis": a7_result,
         "manuscript": a8_result,
+        "review_report": review_report_data,
     }
+
+    out_path = os.path.join(run_dir, "pipeline.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(pipeline_data, f, indent=2, ensure_ascii=False, default=str)
+    log(f"Pipeline JSON saved: {out_path}", run_log)
+
+    # ── Exports (CSV, Excel, RevMan XML, summary table) ──
+    try:
+        export_csv(pipeline_data, os.path.join(run_dir, "included_studies.csv"))
+        log("Export: CSV generated", run_log)
+    except Exception as e:
+        log(f"Export CSV: FAILED — {e}", run_log)
+    try:
+        export_excel(pipeline_data, os.path.join(run_dir, "meta_analysis.xlsx"))
+        log("Export: Excel generated", run_log)
+    except Exception as e:
+        log(f"Export Excel: FAILED — {e}", run_log)
+    try:
+        export_revman(pipeline_data, os.path.join(run_dir, "revman_export.xml"))
+        log("Export: RevMan XML generated", run_log)
+    except Exception as e:
+        log(f"Export RevMan: FAILED — {e}", run_log)
+    try:
+        export_summary_table(pipeline_data, os.path.join(run_dir, "summary_table.md"))
+        log("Export: Summary table generated", run_log)
+    except Exception as e:
+        log(f"Export Summary: FAILED — {e}", run_log)
+
+    return result
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
