@@ -1613,15 +1613,19 @@ class Agent8Manuscript(BaseAgent):
             else:
                 body += f"\\section*{{{label}}}\n\\addcontentsline{{toc}}{{section}}{{{label}}}\n\n{escaped}\n\n"
 
-        # PRISMA flow diagram (before forest/funnel plots)
+            # After Results: insert forest plots inline, then funnel plots
+            if sec_key == "results":
+                forest_tex = self._build_forest_plots_inline(synthesis, tex_dir)
+                if forest_tex:
+                    body += forest_tex
+                funnel_tex = self._build_funnel_plots_subsection(synthesis, tex_dir)
+                if funnel_tex:
+                    body += funnel_tex
+
+        # PRISMA flow diagram (end of methods or start of results)
         prisma_fig_tex = self._build_prisma_figure(tex_dir)
         if prisma_fig_tex:
             body += prisma_fig_tex
-
-        # Plots section
-        plots_tex = self._build_plots_section(synthesis, tex_dir)
-        if plots_tex:
-            body += plots_tex
 
         # Appendix
         body += "\\appendix\n\n"
@@ -1657,29 +1661,87 @@ class Agent8Manuscript(BaseAgent):
 
         return preamble + title_page + body
 
-    def _build_plots_section(self, synthesis: Optional[Dict], tex_dir: str) -> str:
-        """Build LaTeX for forest/funnel plots."""
+    # Friendly display names for clinical outcome categories
+    _CATEGORY_DISPLAY = {
+        "weight": "Weight Change",
+        "waist": "Waist Circumference",
+        "glycemic": "Glycemic Control",
+        "lipids": "Lipid Profile",
+        "blood_pressure": "Blood Pressure",
+        "dietary_intake": "Dietary Intake",
+        "physical_activity": "Physical Activity",
+        "adherence": "Treatment Adherence",
+        "quality_of_life": "Quality of Life",
+        "other": "Other Outcomes",
+    }
+
+    def _category_label(self, key: str) -> str:
+        """Map outcome group key to a human-readable label."""
+        # Try clinical category display name first, then uppercase the key
+        return self._CATEGORY_DISPLAY.get(key, key.replace("_", " ").title())
+
+    def _build_forest_plots_inline(self, synthesis: Optional[Dict], tex_dir: str) -> str:
+        """Build LaTeX for forest plots placed inline after Results text."""
         if not synthesis or not synthesis.get("analyses"):
             return ""
 
-        parts = ["\\subsection{Figures}\n\n"]
-        for measure, analysis in synthesis.get("analyses", {}).items():
+        parts = []
+        fig_num = 1
+        for group_key, analysis in synthesis.get("analyses", {}).items():
             plots = analysis.get("plots", {})
-            for plot_type in ("forest", "funnel"):
-                plot_path = plots.get(plot_type)
-                if plot_path and os.path.exists(plot_path):
-                    fname = os.path.basename(plot_path)
-                    label = f"{plot_type}_{measure}".replace(" ", "_").lower()
-                    caption = f"{plot_type.title()} Plot --- {measure}"
-                    parts.append(f"""\\begin{{figure}}[H]
+            plot_path = plots.get("forest")
+            if not plot_path or not os.path.exists(plot_path):
+                continue
+            fname = os.path.basename(plot_path)
+            label = f"forest_{group_key}".replace(" ", "_").lower()
+            display = self._category_label(group_key)
+            measure = analysis.get("measure_type", analysis.get("model", {}).get("measure", group_key))
+            k = analysis.get("model", {}).get("k_studies", "")
+            caption = f"Forest plot: {display} ({measure}, k={k} studies)"
+            # Scale down large plots (>20 studies) to fit on page
+            width = "0.85" if k and int(k) > 20 else "0.9"
+            parts.append(f"""\\begin{{figure}}[H]
 \\centering
-\\includegraphics[width=0.9\\textwidth]{{{fname}}}
+\\includegraphics[width={width}\\textwidth]{{{fname}}}
 \\caption{{{self._latex_escape(caption)}}}
 \\label{{fig:{label}}}
 \\end{{figure}}
 
 """)
-        return "".join(parts) if len(parts) > 1 else ""
+            fig_num += 1
+        return "".join(parts)
+
+    def _build_funnel_plots_subsection(self, synthesis: Optional[Dict], tex_dir: str) -> str:
+        """Build LaTeX subsection for funnel plots (publication bias assessment)."""
+        if not synthesis or not synthesis.get("analyses"):
+            return ""
+
+        parts = []
+        for group_key, analysis in synthesis.get("analyses", {}).items():
+            plots = analysis.get("plots", {})
+            plot_path = plots.get("funnel")
+            if not plot_path or not os.path.exists(plot_path):
+                continue
+            fname = os.path.basename(plot_path)
+            label = f"funnel_{group_key}".replace(" ", "_").lower()
+            display = self._category_label(group_key)
+            caption = f"Funnel plot: {display} (publication bias assessment)"
+            parts.append(f"""\\begin{{figure}}[H]
+\\centering
+\\includegraphics[width=0.75\\textwidth]{{{fname}}}
+\\caption{{{self._latex_escape(caption)}}}
+\\label{{fig:{label}}}
+\\end{{figure}}
+
+""")
+
+        if not parts:
+            return ""
+        return "\\subsection{Publication Bias}\n\n" + "".join(parts)
+
+    def _build_plots_section(self, synthesis: Optional[Dict], tex_dir: str) -> str:
+        """Legacy method — plots are now inline in Results. Returns empty string."""
+        return ""
 
     def _build_prisma_figure(self, tex_dir: str) -> str:
         """Build LaTeX figure for PRISMA flow diagram if it exists."""

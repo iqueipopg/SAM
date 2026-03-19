@@ -45,6 +45,20 @@ _DEFAULT_SYNTHESIS_CONFIG = {
 }
 
 
+# Clinical outcome category keyword map (lowercase keywords)
+OUTCOME_CATEGORIES = {
+    "weight": ["weight", "bmi", "body mass", "adiposity", "fat mass", "body fat"],
+    "waist": ["waist", "circumference", "abdominal"],
+    "glycemic": ["hba1c", "a1c", "glucose", "glycemic", "glycated", "fasting blood sugar", "insulin"],
+    "lipids": ["cholesterol", "triglyceride", "lipid", "hdl", "ldl"],
+    "blood_pressure": ["blood pressure", "systolic", "diastolic", "hypertension"],
+    "dietary_intake": ["fruit", "vegetable", "diet", "calori", "fat intake", "nutrition", "eating", "food"],
+    "physical_activity": ["physical activity", "exercise", "step", "walk", "mvpa", "met ", "fitness", "sedentary"],
+    "adherence": ["adherence", "compliance", "self-management", "self-efficacy", "attendance"],
+    "quality_of_life": ["quality of life", "well-being", "wellbeing", "happiness", "satisfaction"],
+}
+
+
 class Agent7Synthesis:
     """Statistical meta-analysis engine — no LLM, uses R/metafor."""
 
@@ -102,12 +116,14 @@ class Agent7Synthesis:
         os.makedirs(plots_dir, exist_ok=True)
 
         analyses = {}
-        for measure, data in groups.items():
+        for group_key, data in groups.items():
             k = len(data["yi"])
-            print(f"\n  --- Analyzing {measure} ({k} studies) ---")
+            # The statistical measure type to pass to R/metafor (SMD, MD, OR, etc.)
+            measure = data.get("_measure_type", group_key)
+            print(f"\n  --- Analyzing '{group_key}' (measure={measure}, k={k}) ---")
 
             if k < 2:
-                print(f"    Skipping {measure}: need >= 2 studies")
+                print(f"    Skipping '{group_key}': need >= 2 studies")
                 continue
 
             analysis = {}
@@ -115,9 +131,14 @@ class Agent7Synthesis:
             # Fit random-effects model (includes prediction interval)
             rma_result = self._fit_random_effects(data, measure)
             if not rma_result:
-                print(f"    Failed to fit model for {measure}")
+                print(f"    Failed to fit model for '{group_key}'")
                 continue
+            # Store measure type on rma_result for downstream use (GRADE imprecision)
+            rma_result["_measure_type"] = measure
             analysis["model"] = rma_result
+            # Record which clinical category / group key this analysis covers
+            analysis["outcome_category"] = group_key
+            analysis["measure_type"] = measure
 
             # Total participants
             analysis["total_participants"] = self._compute_total_participants(data)
@@ -146,9 +167,16 @@ class Agent7Synthesis:
             # Meta-regression (if enough studies)
             analysis["meta_regression"] = self._run_meta_regression(data, measure)
 
-            # Plots
-            forest_path = self._generate_forest_plot(data, measure, os.path.join(plots_dir, f"forest_{measure}.png"))
-            funnel_path = self._generate_funnel_plot(data, measure, os.path.join(plots_dir, f"funnel_{measure}.png"))
+            # Plots — use group_key (category name) for filenames
+            safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', group_key)
+            forest_path = self._generate_forest_plot(
+                data, measure,
+                os.path.join(plots_dir, f"forest_{safe_key}.png")
+            )
+            funnel_path = self._generate_funnel_plot(
+                data, measure,
+                os.path.join(plots_dir, f"funnel_{safe_key}.png")
+            )
             analysis["plots"] = {"forest": forest_path, "funnel": funnel_path}
 
             # Improved GRADE assessment
@@ -159,12 +187,12 @@ class Agent7Synthesis:
                 data,
             )
 
-            # Summary of Findings table
+            # Summary of Findings table (use category label as outcome label)
             analysis["summary_of_findings"] = self._generate_sof(
-                measure, rma_result, analysis, data
+                group_key, rma_result, analysis, data
             )
 
-            analyses[measure] = analysis
+            analyses[group_key] = analysis
 
         elapsed = round(time.time() - start, 1)
 
@@ -240,9 +268,19 @@ class Agent7Synthesis:
     # ================================================================== #
 
     def _prepare_data(self, papers: List[Dict]) -> Dict[str, Dict]:
-        """Group outcomes by compatible measure type, build yi/vi arrays.
-        Returns dict of { measure_type: { yi, vi, labels, quality_weights, pmids,
-        study_designs, rob_levels, sample_sizes, years, abstract_only, ... } }
+        """Group outcomes by clinical category (with measure-type fallback), build yi/vi arrays.
+
+        Primary grouping: clinical outcome category (weight, glycemic, etc.) derived
+        from keyword matching on the outcome name field.  If an outcome has no name or
+        no category matches, the group key falls back to the canonical measure type
+        (SMD, MD, OR, RR, HR, PROP) — preserving backward compatibility.
+
+        Each group dict contains a ``_measure_type`` field recording the dominant
+        statistical measure used within that group (required by R/metafor and GRADE).
+
+        Returns dict of { group_key: { yi, vi, labels, quality_weights, pmids,
+        study_designs, rob_levels, sample_sizes, years, abstract_only,
+        _measure_type, ... } }
         """
         # Canonical measure type mapping
         type_map = {
@@ -258,10 +296,12 @@ class Agent7Synthesis:
         }
 
         groups = {}
+        # Track which measure types appear in each clinical category group
+        # so we can record _measure_type after all outcomes are added.
+        group_measure_counts: Dict[str, Dict[str, int]] = {}
 
         for paper in papers:
             pmid = paper.get("pmid", "unknown")
-            title = paper.get("title", "")[:40]
             weight = paper.get("quality_weight", 0.5)
             outcomes = paper.get("outcomes", [])
 
@@ -304,8 +344,28 @@ class Agent7Synthesis:
                 if vi is None or vi <= 0:
                     continue
 
-                if measure not in groups:
-                    groups[measure] = {
+                # --- Determine group key ---
+                # Use clinical category if the outcome has a name that matches;
+                # fall back to measure type for unnamed or unclassifiable outcomes.
+                outcome_name = str(outcome.get("name", "") or "").strip()
+                if outcome_name:
+                    category = self._classify_outcome_category(outcome_name)
+                    # "other" category with a name: use category key so related
+                    # unnamed outcomes still cluster together under their measure.
+                    group_key = category if category != "other" else measure
+                else:
+                    # No name → backward-compat: group by measure type
+                    group_key = measure
+
+                # Build label from outcome name (truncated) rather than paper title
+                if outcome_name:
+                    label = f"{pmid}: {outcome_name[:50]}"
+                else:
+                    title = paper.get("title", "")[:40]
+                    label = f"{pmid}: {title}"
+
+                if group_key not in groups:
+                    groups[group_key] = {
                         "yi": [], "vi": [], "labels": [],
                         "quality_weights": [], "pmids": [],
                         "abstract_only": [],
@@ -319,24 +379,37 @@ class Agent7Synthesis:
                         "original_effect_sizes": [],
                         "original_ci_lowers": [],
                         "original_ci_uppers": [],
+                        "_measure_type": measure,  # Will be updated below
                     }
+                    group_measure_counts[group_key] = {}
 
-                groups[measure]["yi"].append(yi)
-                groups[measure]["vi"].append(vi)
-                groups[measure]["labels"].append(f"{pmid}: {title}")
-                groups[measure]["quality_weights"].append(weight)
-                groups[measure]["pmids"].append(pmid)
-                groups[measure]["abstract_only"].append(text_src == "abstract_only")
-                groups[measure]["study_designs"].append(design)
-                groups[measure]["rob_levels"].append(rob_level)
-                groups[measure]["sample_sizes"].append(sample_size)
-                groups[measure]["years"].append(year)
-                groups[measure]["outcomes_raw"].append(outcome)
-                groups[measure]["converted_flags"].append(False)
-                groups[measure]["conversion_notes"].append("")
-                groups[measure]["original_effect_sizes"].append(yi)
-                groups[measure]["original_ci_lowers"].append(outcome.get("ci_lower"))
-                groups[measure]["original_ci_uppers"].append(outcome.get("ci_upper"))
+                groups[group_key]["yi"].append(yi)
+                groups[group_key]["vi"].append(vi)
+                groups[group_key]["labels"].append(label)
+                groups[group_key]["quality_weights"].append(weight)
+                groups[group_key]["pmids"].append(pmid)
+                groups[group_key]["abstract_only"].append(text_src == "abstract_only")
+                groups[group_key]["study_designs"].append(design)
+                groups[group_key]["rob_levels"].append(rob_level)
+                groups[group_key]["sample_sizes"].append(sample_size)
+                groups[group_key]["years"].append(year)
+                groups[group_key]["outcomes_raw"].append(outcome)
+                groups[group_key]["converted_flags"].append(False)
+                groups[group_key]["conversion_notes"].append("")
+                groups[group_key]["original_effect_sizes"].append(yi)
+                groups[group_key]["original_ci_lowers"].append(outcome.get("ci_lower"))
+                groups[group_key]["original_ci_uppers"].append(outcome.get("ci_upper"))
+
+                # Track measure frequency per group
+                group_measure_counts[group_key][measure] = (
+                    group_measure_counts[group_key].get(measure, 0) + 1
+                )
+
+        # Set _measure_type to the most-common measure within each group
+        for gkey, mcounts in group_measure_counts.items():
+            if mcounts:
+                dominant = max(mcounts, key=lambda m: mcounts[m])
+                groups[gkey]["_measure_type"] = dominant
 
         return groups
 
@@ -345,17 +418,77 @@ class Agent7Synthesis:
     # ================================================================== #
 
     def _attempt_conversions(self, groups: Dict[str, Dict]) -> Dict[str, Dict]:
-        """Identify and merge compatible measure groups via effect-size conversion.
+        """Harmonise effect-size measures within each group and merge compatible
+        measure-type groups (backward-compat path).
 
-        Currently supported merges:
-          - MD + SMD  → all converted to SMD (if conversion is possible)
-          - OR + RR   → all converted to OR  (preferred common scale)
+        Two levels of conversion:
 
-        Studies that cannot be converted (missing required parameters) remain
-        in their original group.  Conversion metadata is recorded per study.
+        1. **Intra-group**: A clinical-category group may contain both MD and SMD
+           outcomes (different studies reported different metrics).  These are
+           harmonised to SMD so metafor can pool them.
+
+        2. **Inter-group**: When the old measure-type keys (MD/SMD, OR/RR) exist as
+           top-level group keys (backward-compat path — no outcome names), they are
+           merged as before.
+
+        Studies that cannot be converted remain with their original measure type.
+        Conversion metadata is recorded per study.
         """
         groups = dict(groups)  # shallow copy to avoid mutating caller's dict
 
+        # ---- 1. Intra-group harmonisation (clinical category groups) ---- #
+        for gkey in list(groups.keys()):
+            # Skip pure measure-type keys (backward-compat path)
+            if gkey in ("SMD", "MD", "OR", "RR", "HR", "PROP"):
+                continue
+            group = groups[gkey]
+            mcounts = {}
+            for raw_outcome in group.get("outcomes_raw", []):
+                if not isinstance(raw_outcome, dict):
+                    continue
+                raw_type = str(raw_outcome.get("measure_type", "")).lower().strip()
+                # Use the same type_map logic
+                _type_map = {
+                    "smd": "SMD", "hedges_g": "SMD", "cohen_d": "SMD",
+                    "standardized mean difference": "SMD",
+                    "or": "OR", "odds_ratio": "OR", "odds ratio": "OR",
+                    "rr": "RR", "risk_ratio": "RR", "risk ratio": "RR",
+                    "relative_risk": "RR", "relative risk": "RR",
+                    "hr": "HR", "hazard_ratio": "HR", "hazard ratio": "HR",
+                    "md": "MD", "mean_diff": "MD", "mean_difference": "MD",
+                    "mean difference": "MD",
+                    "proportion": "PROP", "prevalence": "PROP",
+                }
+                m = _type_map.get(raw_type)
+                if not m:
+                    for k, v in _type_map.items():
+                        if k in raw_type:
+                            m = v
+                            break
+                if m:
+                    mcounts[m] = mcounts.get(m, 0) + 1
+
+            has_md = mcounts.get("MD", 0) > 0
+            has_smd = mcounts.get("SMD", 0) > 0
+
+            if has_md and has_smd:
+                # Mixed MD + SMD within a clinical group → convert MD entries to SMD
+                groups[gkey] = self._harmonise_md_to_smd_ingroup(group)
+            elif has_md and not has_smd:
+                # All MD — try converting all to SMD for cleaner pooling
+                converted = self._try_convert_all_md(group)
+                if converted is not None:
+                    converted["_measure_type"] = "SMD"
+                    groups[gkey] = converted
+                    print(f"    [{gkey}] Converted all MD to SMD for pooling")
+
+            # Similar logic for OR/RR within a group (convert RR→OR)
+            has_or = mcounts.get("OR", 0) > 0
+            has_rr = mcounts.get("RR", 0) > 0
+            if has_rr and has_or:
+                groups[gkey] = self._harmonise_rr_to_or_ingroup(groups[gkey])
+
+        # ---- 2. Inter-group merges (backward-compat: measure-type keys) ---- #
         # ----- MD → SMD merge ----- #
         if "MD" in groups and "SMD" in groups:
             groups = self._merge_md_into_smd(groups)
@@ -363,6 +496,7 @@ class Agent7Synthesis:
             # Try converting all MD to SMD — only if every study can convert
             converted_group = self._try_convert_all_md(groups["MD"])
             if converted_group is not None:
+                converted_group["_measure_type"] = "SMD"
                 groups["SMD"] = converted_group
                 del groups["MD"]
                 print(f"    Converted all {len(converted_group['yi'])} MD studies to SMD")
@@ -465,6 +599,126 @@ class Agent7Synthesis:
         groups["OR"] = or_group
         return groups
 
+    def _harmonise_md_to_smd_ingroup(self, group: Dict) -> Dict:
+        """Within a single clinical-category group, convert MD entries to SMD
+        so all entries share a common scale for pooling.
+
+        Entries that cannot be converted keep their original yi/vi but are
+        flagged.  The group's ``_measure_type`` is updated to "SMD".
+        """
+        _type_map = {
+            "smd": "SMD", "hedges_g": "SMD", "cohen_d": "SMD",
+            "standardized mean difference": "SMD",
+            "md": "MD", "mean_diff": "MD", "mean_difference": "MD",
+            "mean difference": "MD",
+        }
+        new_group = self._empty_group()
+        converted_count = 0
+
+        for i in range(len(group["yi"])):
+            outcome = group["outcomes_raw"][i]
+            raw_type = str(outcome.get("measure_type", "")).lower().strip()
+            m = _type_map.get(raw_type)
+            if not m:
+                for k, v in _type_map.items():
+                    if k in raw_type:
+                        m = v
+                        break
+
+            if m == "MD":
+                result = convert_md_to_smd_study(group["yi"][i], group["vi"][i], outcome)
+                if result is not None and result["vi"] is not None and result["vi"] > 0:
+                    self._append_study_to_group(
+                        new_group, group, i,
+                        yi_new=result["yi"],
+                        vi_new=result["vi"],
+                        converted=True,
+                        conversion_note=result["conversion_note"],
+                        original_es=result["original_effect_size"],
+                        original_ci_lower=result.get("original_ci_lower"),
+                        original_ci_upper=result.get("original_ci_upper"),
+                    )
+                    converted_count += 1
+                    continue
+                # Conversion failed — keep as-is
+            # Keep entry unchanged (SMD or unconvertable MD)
+            self._append_study_to_group(
+                new_group, group, i,
+                yi_new=group["yi"][i],
+                vi_new=group["vi"][i],
+                converted=group["converted_flags"][i],
+                conversion_note=group["conversion_notes"][i],
+                original_es=group["original_effect_sizes"][i],
+                original_ci_lower=group["original_ci_lowers"][i],
+                original_ci_upper=group["original_ci_uppers"][i],
+            )
+
+        if converted_count > 0:
+            print(f"    Intra-group: converted {converted_count} MD entries to SMD")
+
+        new_group["_measure_type"] = "SMD"
+        return new_group
+
+    def _harmonise_rr_to_or_ingroup(self, group: Dict) -> Dict:
+        """Within a single clinical-category group, convert RR entries to OR
+        so all entries share a common scale for pooling.
+
+        The group's ``_measure_type`` is updated to "OR".
+        """
+        _type_map = {
+            "or": "OR", "odds_ratio": "OR", "odds ratio": "OR",
+            "rr": "RR", "risk_ratio": "RR", "risk ratio": "RR",
+            "relative_risk": "RR", "relative risk": "RR",
+        }
+        baseline_risk = self._estimate_baseline_risk(group)
+        new_group = self._empty_group()
+        converted_count = 0
+
+        for i in range(len(group["yi"])):
+            outcome = group["outcomes_raw"][i]
+            raw_type = str(outcome.get("measure_type", "")).lower().strip()
+            m = _type_map.get(raw_type)
+            if not m:
+                for k, v in _type_map.items():
+                    if k in raw_type:
+                        m = v
+                        break
+
+            if m == "RR":
+                result = convert_rr_to_or_study(
+                    group["yi"][i], group["vi"][i], baseline_risk=baseline_risk
+                )
+                if result is not None and result["vi"] is not None and result["vi"] > 0:
+                    self._append_study_to_group(
+                        new_group, group, i,
+                        yi_new=result["yi"],
+                        vi_new=result["vi"],
+                        converted=True,
+                        conversion_note=result["conversion_note"],
+                        original_es=result["original_effect_size"],
+                        original_ci_lower=result.get("original_ci_lower"),
+                        original_ci_upper=result.get("original_ci_upper"),
+                    )
+                    converted_count += 1
+                    continue
+            # Keep entry unchanged (OR or unconvertable RR)
+            self._append_study_to_group(
+                new_group, group, i,
+                yi_new=group["yi"][i],
+                vi_new=group["vi"][i],
+                converted=group["converted_flags"][i],
+                conversion_note=group["conversion_notes"][i],
+                original_es=group["original_effect_sizes"][i],
+                original_ci_lower=group["original_ci_lowers"][i],
+                original_ci_upper=group["original_ci_uppers"][i],
+            )
+
+        if converted_count > 0:
+            print(f"    Intra-group: converted {converted_count} RR entries to OR")
+
+        new_group["_measure_type"] = "OR"
+        return new_group
+
     def _try_convert_all_md(self, md_group: Dict) -> Optional[Dict]:
         """Try to convert every study in an MD-only group to SMD.
 
@@ -527,6 +781,7 @@ class Agent7Synthesis:
             "original_effect_sizes": [],
             "original_ci_lowers": [],
             "original_ci_uppers": [],
+            "_measure_type": "",  # Set by callers after construction
         }
 
     @staticmethod
@@ -610,6 +865,19 @@ class Agent7Synthesis:
         if m:
             return int(m.group())
         return None
+
+    @staticmethod
+    def _classify_outcome_category(outcome_name: str) -> str:
+        """Map an outcome name string to a clinical category using keyword matching.
+
+        Returns one of the keys in OUTCOME_CATEGORIES, or 'other' if no match.
+        """
+        name_lower = outcome_name.lower()
+        for category, keywords in OUTCOME_CATEGORIES.items():
+            for kw in keywords:
+                if kw in name_lower:
+                    return category
+        return "other"
 
     def _get_variance(self, outcome: Dict, yi: float) -> Optional[float]:
         """Get variance from CI, SE, or estimate from p-value."""
@@ -1424,7 +1692,7 @@ class Agent7Synthesis:
         # OIS: continuous=800 total (400/group), binary varies
         measure_type = rma_result.get("_measure_type", "")
         ois = 800  # default for continuous outcomes
-        if any(m in str(data.get("_measure", "")).upper() for m in ["OR", "RR", "HR"]):
+        if any(m in str(measure_type).upper() for m in ["OR", "RR", "HR"]):
             ois = 300  # lower OIS for binary outcomes (rough estimate)
 
         below_ois = (total_n is not None and total_n < ois)
