@@ -29,45 +29,46 @@ PDF_DIR = PROJECT_ROOT / "docs" / "meta-nutricion-paula"
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 
 # Hardcoded protocol (PICO) matching Paula's nutrition meta-analysis
+# Source: Paula Collazo Castiñeira, confirmed 2026-03-19
 PROTOCOL = {
     "framework": "PICO",
     "research_question": (
-        "Are behavioral and dietary interventions effective for improving "
-        "weight, metabolic markers, and dietary outcomes in adults with "
-        "chronic conditions such as obesity, type 2 diabetes, or "
-        "cardiovascular disease?"
+        "What psychological intervention components are effective in promoting "
+        "dietary changes in adults of retirement age (55-65 years)?"
     ),
     "population": (
-        "Adults (18+) with chronic metabolic conditions including obesity, "
-        "type 2 diabetes, metabolic syndrome, or cardiovascular disease"
+        "Adults of retirement age (mean age 55-65, range approximately 50-70 "
+        "considering standard deviation)"
     ),
     "intervention": (
-        "Behavioral or dietary lifestyle interventions including nutritional "
-        "counseling, motivational interviewing, computer-tailored programs, "
-        "dietary self-management, weight management programs, or combined "
-        "diet and exercise interventions"
+        "Interventions with psychological components that promote dietary changes, "
+        "including motivational interviewing, cognitive behavioral therapy, "
+        "self-management programs, goal setting, behavior modification, "
+        "computer-tailored behavioral programs, and theory-based lifestyle interventions"
     ),
-    "comparator": "Usual care, standard treatment, education-only control, or waitlist",
+    "comparator": "Any comparator (active control, usual care, waitlist, education-only)",
     "outcome": (
-        "Primary: weight change (kg or BMI). Secondary: HbA1c, fasting glucose, "
-        "lipid profiles, dietary intake (fruit/vegetable servings, fat intake, "
-        "caloric intake), physical activity, treatment adherence"
+        "Primary: dietary changes (vegetable/fruit consumption, caloric intake, "
+        "fat intake, diet quality scores). Secondary: anthropometric measures "
+        "(weight change, BMI, waist circumference, visceral fat, body composition). "
+        "EXCLUDED: HbA1c and blood-based biological measures"
     ),
     "original_query": (
-        "Efectividad de intervenciones nutricionales y conductuales sobre "
-        "peso y marcadores metabolicos en adultos con enfermedades cronicas"
+        "Identificar que componentes psicologicos son efectivos en la promocion "
+        "de cambios en la dieta en personas en edad de jubilacion"
     ),
     "inclusion_criteria": [
         "Randomized controlled trial (RCT) or cluster-RCT",
-        "Adults (18+) with obesity, diabetes, metabolic syndrome, or cardiovascular disease",
-        "Behavioral or dietary intervention targeting nutrition or weight management",
-        "Comparison to control, usual care, or standard treatment",
-        "Reports at least one quantitative outcome (weight, BMI, HbA1c, dietary intake)",
+        "Adults of retirement age (mean age approximately 55-65 years)",
+        "Intervention with identifiable psychological components promoting dietary change",
+        "Any comparator (active or control)",
+        "Reports dietary outcomes (consumption, intake, diet quality) or anthropometric measures (weight, BMI, waist, body fat)",
     ],
     "exclusion_criteria": [
         "Non-randomized studies, case reports, editorials, reviews",
-        "Pediatric populations (<18 years)",
-        "Pharmacological-only interventions without behavioral/dietary component",
+        "Populations with mean age below 50 or above 70",
+        "Purely pharmacological interventions without psychological/behavioral component",
+        "Outcomes limited to blood-based biological measures only (HbA1c, lipids, glucose)",
     ],
 }
 
@@ -297,7 +298,20 @@ def clean_r_objects(obj):
 # ── Pipeline stages ───────────────────────────────────────────────────────────
 
 def run_a5(papers, protocol, run_dir):
-    """A5: Data extraction."""
+    """A5: Data extraction (skips if checkpoint exists)."""
+    ckpt_path = os.path.join(run_dir, "checkpoint_a5_extraction.json")
+    if os.path.exists(ckpt_path):
+        print(f"\n{'='*60}")
+        print(f"A5: LOADING FROM CHECKPOINT")
+        print(f"{'='*60}")
+        with open(ckpt_path, "r", encoding="utf-8") as f:
+            a5_result = json.load(f)
+        stats = a5_result.get("stats", {})
+        print(f"  Complete: {stats.get('complete_extraction', 0)}")
+        print(f"  Partial:  {stats.get('partial_extraction', 0)}")
+        print(f"  Numeric:  {stats.get('numeric_complete', 0)}")
+        return a5_result
+
     from agents.agent5_extraction import Agent5Extraction
 
     print(f"\n{'='*60}")
@@ -360,7 +374,18 @@ def run_a5(papers, protocol, run_dir):
 
 
 def run_a6(a5_result, protocol, run_dir):
-    """A6: Quality assessment."""
+    """A6: Quality assessment (skips if checkpoint exists)."""
+    ckpt_path = os.path.join(run_dir, "checkpoint_a6_quality.json")
+    if os.path.exists(ckpt_path):
+        print(f"\n{'='*60}")
+        print(f"A6: LOADING FROM CHECKPOINT")
+        print(f"{'='*60}")
+        with open(ckpt_path, "r", encoding="utf-8") as f:
+            a6_result = json.load(f)
+        stats = a6_result.get("stats", {})
+        print(f"  RoB2: {stats.get('rob2_assessed', 0)} | ROBINS-I: {stats.get('robins_i_assessed', 0)}")
+        return a6_result
+
     from agents.agent6_quality import Agent6Quality
 
     papers = a5_result.get("papers", [])
