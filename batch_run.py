@@ -14,7 +14,17 @@ from datetime import datetime
 
 import torch
 
-# ── Config ──────────────────────────────────────────────────────────────────
+# ── Config (read from config.yaml, with sensible defaults) ─────────────────
+
+def _load_config():
+    """Load config.yaml and return the dict."""
+    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+    if os.path.exists(cfg_path):
+        with open(cfg_path) as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+_CFG = _load_config()
 
 QUERIES = [
     # PICO — intervention comparison
@@ -29,12 +39,10 @@ QUERIES = [
     "Are SGLT2 inhibitors effective in reducing heart failure hospitalizations in diabetic patients?",
 ]
 
-# Papers to request per query (total across all databases)
-MAX_RESULTS = 150
-
-# Screening parameters
-ENSEMBLE_SIZE = 3
-VOTING_THRESHOLD = 0.60
+# Read from config.yaml → screening/search sections, fallback to hardcoded defaults
+MAX_RESULTS = _CFG.get("search", {}).get("max_results_per_database", 150)
+ENSEMBLE_SIZE = _CFG.get("screening", {}).get("ensemble_size", 3)
+VOTING_THRESHOLD = _CFG.get("screening", {}).get("voting_threshold", 0.60)
 
 # Minimum included papers to consider a run "successful"
 MIN_INCLUDED_FOR_SUCCESS = 5
@@ -204,10 +212,7 @@ def run_single_pipeline(query, run_dir, run_log):
         pubmed_query = a1.generate_pubmed_query(query, protocol)
         # Generate PROSPERO draft (non-critical)
         try:
-            _cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
-            with open(_cfg_path) as _cf:
-                _cfg = yaml.safe_load(_cf) or {}
-            prospero_draft = a1.generate_prospero_draft(protocol, config=_cfg)
+            prospero_draft = a1.generate_prospero_draft(protocol, config=_CFG)
             protocol["prospero_draft"] = prospero_draft
             _prospero_path = os.path.join(run_dir, "prospero_draft.txt")
             with open(_prospero_path, "w", encoding="utf-8") as _pf:
@@ -353,11 +358,7 @@ def run_single_pipeline(query, run_dir, run_log):
     if a7_input and len(a7_input.get("papers", [])) >= 2:
         log(f"A7: Statistical synthesis ({len(a7_input['papers'])} papers)...", run_log)
         try:
-            _config = {}
-            if os.path.exists("config.yaml"):
-                with open("config.yaml") as cf:
-                    _config = yaml.safe_load(cf) or {}
-            a7 = Agent7Synthesis(config=_config)
+            a7 = Agent7Synthesis(config=_CFG)
             a7_result = a7.synthesize(a7_input, protocol, output_dir=run_dir)
             a7_result = clean_r_objects(a7_result)
             save_checkpoint(run_dir, "a7_synthesis", a7_result)
