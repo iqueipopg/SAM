@@ -570,13 +570,32 @@ A8_RAG_K = {
 }
 
 
-def get_a8_rag_query(section_name: str, protocol: dict) -> str:
-    """Build a RAG query for a manuscript section."""
+def get_a8_rag_query(section_name: str, protocol: dict,
+                     outcome_names: list = None, synthesis_keys: list = None) -> str:
+    """Build a RAG query for a manuscript section.
+
+    For Results and Discussion, appends extracted outcome names and synthesis
+    group keys so RAG retrieves outcome-specific chunks (not just generic text).
+    """
     template = _A8_RAG_QUERIES.get(section_name, "")
     if not template:
         return ""
     topic = protocol.get("research_question", protocol.get("population", ""))
-    return template.format(topic=topic)
+    query = template.format(topic=topic)
+
+    # Enhance Results/Discussion queries with actual outcome names
+    if section_name in ("results", "discussion"):
+        extras = []
+        if outcome_names:
+            # Top 10 unique outcome names (truncated)
+            unique = list(dict.fromkeys(outcome_names))[:10]
+            extras.extend(n[:50] for n in unique)
+        if synthesis_keys:
+            extras.extend(synthesis_keys[:5])
+        if extras:
+            query += " " + " ".join(extras)
+
+    return query
 
 
 def get_a8_section_prompt(

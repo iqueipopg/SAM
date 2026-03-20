@@ -46,16 +46,70 @@ _DEFAULT_SYNTHESIS_CONFIG = {
 
 
 # Clinical outcome category keyword map (lowercase keywords)
+# Expanded with synonyms for nutrition/dietary/anthropometric outcomes
 OUTCOME_CATEGORIES = {
-    "weight": ["weight", "bmi", "body mass", "adiposity", "fat mass", "body fat"],
-    "waist": ["waist", "circumference", "abdominal"],
-    "glycemic": ["hba1c", "a1c", "glucose", "glycemic", "glycated", "fasting blood sugar", "insulin"],
-    "lipids": ["cholesterol", "triglyceride", "lipid", "hdl", "ldl"],
-    "blood_pressure": ["blood pressure", "systolic", "diastolic", "hypertension"],
-    "dietary_intake": ["fruit", "vegetable", "diet", "calori", "fat intake", "nutrition", "eating", "food"],
-    "physical_activity": ["physical activity", "exercise", "step", "walk", "mvpa", "met ", "fitness", "sedentary"],
-    "adherence": ["adherence", "compliance", "self-management", "self-efficacy", "attendance"],
-    "quality_of_life": ["quality of life", "well-being", "wellbeing", "happiness", "satisfaction"],
+    "weight": [
+        "weight", "bmi", "body mass", "adiposity", "fat mass", "body fat",
+        "body composition", "lean mass", "lean body", "visceral fat",
+        "visceral adipos", "body weight", "weight change", "weight loss",
+        "weight gain", "kg", "percent body fat", "fat-free mass",
+        "trunk fat", "android fat", "fat percentage", "dexa",
+        "body density", "skinfold", "bioimpedance", "bia",
+    ],
+    "waist": [
+        "waist", "circumference", "abdominal", "waist-to-hip",
+        "waist hip ratio", "whr", "central obesity", "sagittal",
+        "abdominal girth",
+    ],
+    "glycemic": [
+        "hba1c", "a1c", "glucose", "glycemic", "glycated",
+        "fasting blood sugar", "insulin", "homa", "insulin resistance",
+        "glycosylated", "blood glucose",
+    ],
+    "lipids": [
+        "cholesterol", "triglyceride", "lipid", "hdl", "ldl",
+        "total cholesterol", "vldl", "lipoprotein",
+    ],
+    "blood_pressure": [
+        "blood pressure", "systolic", "diastolic", "hypertension",
+        "sbp", "dbp", "arterial pressure", "mmhg",
+    ],
+    "dietary_intake": [
+        "fruit", "vegetable", "diet", "calori", "fat intake",
+        "nutrition", "eating", "food", "kcal", "energy intake",
+        "fiber", "fibre", "sodium", "salt", "sugar intake",
+        "saturated fat", "protein intake", "carbohydrate",
+        "dietary quality", "diet quality", "healthy eating",
+        "diet score", "dietary pattern", "food frequency",
+        "serving", "portion", "mediterranean", "dash",
+        "nutritional", "meal", "snack", "alcohol",
+        "micronutrient", "macronutrient", "dietary change",
+        "food intake", "nutrient", "consumption",
+        "dietary adherence", "dietary compliance",
+    ],
+    "physical_activity": [
+        "physical activity", "exercise", "step", "walk", "mvpa",
+        "met ", "fitness", "sedentary", "aerobic", "strength",
+        "endurance", "cardiorespiratory", "vo2",
+    ],
+    "adherence": [
+        "adherence", "compliance", "self-management",
+        "self-efficacy", "attendance", "engagement",
+        "motivation", "goal attainment", "behavior change",
+        "behavioural change", "behavioral change",
+    ],
+    "quality_of_life": [
+        "quality of life", "well-being", "wellbeing",
+        "happiness", "satisfaction", "sf-36", "sf-12",
+        "eq-5d", "mental health", "depression", "anxiety",
+        "psychological", "mood", "stress",
+    ],
+    "psychological": [
+        "self-efficacy", "self efficacy", "locus of control",
+        "readiness to change", "stage of change", "motivation",
+        "intention", "attitude", "knowledge", "awareness",
+        "health literacy", "empowerment",
+    ],
 }
 
 
@@ -152,11 +206,12 @@ class Agent7Synthesis:
             else:
                 analysis["publication_bias"] = {"note": "Skipped: fewer than 3 studies"}
 
-            # Sensitivity: leave-one-out
+            # Sensitivity: leave-one-out + exclude-high-risk + quality-weighted
             if k >= 3:
                 analysis["sensitivity"] = {
                     "leave_one_out": self._sensitivity_leave_one_out(data, measure),
                     "exclude_high_risk": self._sensitivity_exclude_high_risk(data, measure),
+                    "quality_weighted": self._sensitivity_quality_weighted(data, measure),
                 }
             else:
                 analysis["sensitivity"] = {"note": "Skipped: fewer than 3 studies"}
@@ -868,16 +923,49 @@ class Agent7Synthesis:
 
     @staticmethod
     def _classify_outcome_category(outcome_name: str) -> str:
-        """Map an outcome name string to a clinical category using keyword matching.
+        """Map an outcome name string to a clinical category.
+
+        Strategy:
+        1. Exact keyword matching (fast path)
+        2. Fuzzy token overlap (catches "visceral fat area" → weight, etc.)
 
         Returns one of the keys in OUTCOME_CATEGORIES, or 'other' if no match.
         """
         name_lower = outcome_name.lower()
+
+        # Pass 1: exact substring matching (fast)
         for category, keywords in OUTCOME_CATEGORIES.items():
             for kw in keywords:
                 if kw in name_lower:
                     return category
-        return "other"
+
+        # Pass 2: fuzzy token overlap — catches multi-word outcome names
+        # where no single keyword matches but tokens overlap
+        name_tokens = set(re.split(r'[\s\-_/,;()]+', name_lower))
+        name_tokens.discard("")
+        best_category = "other"
+        best_score = 0.0
+
+        for category, keywords in OUTCOME_CATEGORIES.items():
+            # Build token set from all keywords in this category
+            cat_tokens = set()
+            for kw in keywords:
+                for token in re.split(r'[\s\-_/,;()]+', kw):
+                    if len(token) >= 3:  # skip short tokens like "kg"
+                        cat_tokens.add(token)
+
+            if not cat_tokens or not name_tokens:
+                continue
+
+            # Jaccard-like overlap score
+            overlap = name_tokens & cat_tokens
+            if overlap:
+                score = len(overlap) / len(name_tokens)
+                if score > best_score and score >= 0.3:  # at least 30% token overlap
+                    best_score = score
+                    best_category = category
+
+        return best_category
 
     def _get_variance(self, outcome: Dict, yi: float) -> Optional[float]:
         """Get variance from CI, SE, or estimate from p-value."""
@@ -1111,6 +1199,65 @@ class Agent7Synthesis:
             print(f"    leave1out error: {e}")
 
         return results
+
+    def _sensitivity_quality_weighted(self, data: Dict, measure: str) -> Dict:
+        """Quality-weighted sensitivity analysis.
+
+        Adjusts study variances by quality weight: vi_adj = vi / weight.
+        Studies with lower quality get inflated variance (less influence).
+        This is a common approach when quality scores are available.
+        """
+        try:
+            weights = data.get("quality_weights", [])
+            if not weights or len(weights) != len(data["yi"]):
+                return {"note": "No quality weights available"}
+
+            # Check if all weights are equal (no variation → no point)
+            if len(set(weights)) <= 1:
+                return {"note": "All quality weights identical — no adjustment needed"}
+
+            # Adjust variance: vi_adj = vi / quality_weight
+            # Lower quality → higher variance → less influence
+            yi_adj = []
+            vi_adj = []
+            for i in range(len(data["yi"])):
+                w = max(weights[i], 0.1)  # floor to avoid division by near-zero
+                yi_adj.append(data["yi"][i])
+                vi_adj.append(data["vi"][i] / w)
+
+            yi_r = self.FloatVector(yi_adj)
+            vi_r = self.FloatVector(vi_adj)
+            fit = self.metafor.rma(yi=yi_r, vi=vi_r, method="REML")
+
+            pooled_adj = round(float(fit.rx2("beta")[0]), 4)
+            ci_lb = round(float(fit.rx2("ci.lb")[0]), 4)
+            ci_ub = round(float(fit.rx2("ci.ub")[0]), 4)
+            pval = round(float(fit.rx2("pval")[0]), 6)
+            i2 = round(float(fit.rx2("I2")[0]), 2)
+
+            # Compare with unweighted
+            orig_fit = self.metafor.rma(
+                yi=self.FloatVector(data["yi"]),
+                vi=self.FloatVector(data["vi"]),
+                method="REML",
+            )
+            pooled_orig = round(float(orig_fit.rx2("beta")[0]), 4)
+            change = round(pooled_adj - pooled_orig, 4)
+            direction_changed = (pooled_adj > 0) != (pooled_orig > 0)
+
+            return {
+                "pooled_estimate_adjusted": pooled_adj,
+                "ci_lower": ci_lb,
+                "ci_upper": ci_ub,
+                "p_value": pval,
+                "I2": i2,
+                "pooled_estimate_original": pooled_orig,
+                "change_from_original": change,
+                "direction_changed": direction_changed,
+                "method": "variance inflation by 1/quality_weight",
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
     def _sensitivity_exclude_high_risk(self, data: Dict, measure: str) -> Dict:
         """Refit model excluding studies with quality_weight <= 0.3 (high risk)."""

@@ -141,6 +141,13 @@ class Agent8Manuscript(BaseAgent):
             chunks_per_section[section_name] = n_used
             print(f"    -> {len(text)} chars, {n_used} RAG chunks used")
 
+        # Cross-section coherence check
+        coherence_report = self._check_coherence(manuscript, synthesis)
+        if coherence_report["warnings"]:
+            print(f"\n  Coherence check: {len(coherence_report['warnings'])} warning(s)")
+            for w in coherence_report["warnings"][:5]:
+                print(f"    - {w}")
+
         # Ensure ALL included papers appear in references (systematic review standard)
         for pmid, info in self._paper_lookup.items():
             if pmid not in self._cited_pmids:
@@ -170,6 +177,7 @@ class Agent8Manuscript(BaseAgent):
             "references": self._references,
             "pdf_path": pdf_path,
             "citation_verification": verification_summary,
+            "coherence_check": coherence_report,
             "stats": {
                 "total_chunks": n_chunks,
                 "chunks_per_section": chunks_per_section,
@@ -481,6 +489,17 @@ class Agent8Manuscript(BaseAgent):
             )
         return "\n".join(parts)
 
+    def _get_extracted_outcome_names(self) -> List[str]:
+        """Collect all outcome names from A5 extraction results."""
+        names = []
+        if self._extraction and self._extraction.get("papers"):
+            for paper in self._extraction["papers"]:
+                for outcome in paper.get("outcomes", []):
+                    name = outcome.get("name") or outcome.get("outcome_name")
+                    if name and name.strip():
+                        names.append(name.strip())
+        return names
+
     # ================================================================== #
     #  RAG RETRIEVAL                                                       #
     # ================================================================== #
@@ -525,8 +544,14 @@ class Agent8Manuscript(BaseAgent):
         n_studies: int,
     ) -> Tuple[str, int]:
         """Generate one manuscript section using RAG + LLM."""
-        # RAG retrieval with variable k per section
-        rag_query = get_a8_rag_query(section_name, protocol)
+        # Build outcome-aware RAG query
+        outcome_names = self._get_extracted_outcome_names()
+        synthesis_keys = list((self._synthesis or {}).get("analyses", {}).keys())
+        rag_query = get_a8_rag_query(
+            section_name, protocol,
+            outcome_names=outcome_names,
+            synthesis_keys=synthesis_keys,
+        )
         k = A8_RAG_K.get(section_name, 4)
         chunks = self._retrieve_chunks(rag_query, k=k) if rag_query else []
 
@@ -710,31 +735,38 @@ class Agent8Manuscript(BaseAgent):
             r',?\s*(\d{4})'                                  # year
         )
 
-        def _check_single_citation(surname: str, second_author: Optional[str], year: str) -> bool:
-            """Check if a single author-year citation matches the index. Conservative: keep if unsure."""
+        def _check_single_citation(surname: str, second_author: Optional[str], year: str) -> Tuple[bool, float]:
+            """Check if a single author-year citation matches the index.
+
+            Returns (matched, confidence) where confidence is 0.0-1.0:
+            - 1.0: exact (surname, year) match
+            - 0.9: exact (surname, second_author, year) match
+            - 0.7: surname found in any author list for that year
+            - 0.0: no match found
+            """
             s_lower = surname.lower()
             y = year.strip()
 
             # Direct match: (surname, year)
             if (s_lower, y) in self._citation_index:
-                return True
+                return True, 1.0
 
             # Try with second author: (surname, second, year)
             if second_author:
                 s2_lower = second_author.lower()
                 if (s_lower, s2_lower, y) in self._citation_index:
-                    return True
+                    return True, 0.9
 
             # Fuzzy: check if surname appears in any paper's author list for that year
             for (key_surname, *rest), info in self._citation_index.items():
                 if len(rest) >= 1 and rest[-1] == y:
                     # Check if surname matches first author or any author
                     if s_lower == key_surname:
-                        return True
+                        return True, 0.8
                     if s_lower in info.get("all_surnames", []):
-                        return True
+                        return True, 0.7
 
-            return False
+            return False, 0.0
 
         def _replace_paren_group(match):
             nonlocal total, verified, removed, details
@@ -761,14 +793,18 @@ class Agent8Manuscript(BaseAgent):
                 year = m.group(3)
                 total += 1
 
-                if _check_single_citation(surname, second_author, year):
+                matched, confidence = _check_single_citation(surname, second_author, year)
+                if matched:
                     verified_parts.append(part)
                     verified += 1
-                    details.append({"citation": part, "status": "verified"})
+                    status = "verified" if confidence >= 0.8 else "verified_low_confidence"
+                    details.append({"citation": part, "status": status, "confidence": confidence})
+                    if confidence < 0.8:
+                        print(f"    [citation] Low confidence ({confidence:.1f}): {part}")
                 else:
                     removed += 1
                     any_removed = True
-                    details.append({"citation": part, "status": "removed_phantom"})
+                    details.append({"citation": part, "status": "removed_phantom", "confidence": 0.0})
 
             if not verified_parts:
                 # All citations in the group were phantom — replace with neutral text
@@ -816,14 +852,16 @@ class Agent8Manuscript(BaseAgent):
                 year = m.group(3)
                 total += 1
 
-                if _check_single_citation(surname, second_author, year):
+                matched, confidence = _check_single_citation(surname, second_author, year)
+                if matched:
                     verified_parts.append(part)
                     verified += 1
-                    details.append({"citation": part, "status": "verified"})
+                    status = "verified" if confidence >= 0.8 else "verified_low_confidence"
+                    details.append({"citation": part, "status": status, "confidence": confidence})
                 else:
                     removed += 1
                     any_removed = True
-                    details.append({"citation": part, "status": "removed_phantom_bracket"})
+                    details.append({"citation": part, "status": "removed_phantom_bracket", "confidence": 0.0})
 
             if not verified_parts:
                 return "previous research"
@@ -1017,6 +1055,78 @@ class Agent8Manuscript(BaseAgent):
             "total_removed": total_removed,
             "per_section": per_section,
             "removed_citations": removed_details,
+        }
+
+    # ================================================================== #
+    #  CROSS-SECTION COHERENCE CHECK                                       #
+    # ================================================================== #
+
+    def _check_coherence(self, manuscript: Dict, synthesis: Optional[Dict]) -> Dict:
+        """Validate cross-section coherence of the generated manuscript.
+
+        Checks:
+        1. Results claims should appear in Discussion/Conclusion
+        2. Figure/Table references should be valid
+        3. Key statistics in Results should match synthesis data
+        4. Abstract should not contain claims absent from Results
+
+        Returns dict with warnings list and pass/fail status.
+        """
+        warnings = []
+        results_text = (manuscript.get("results") or "").lower()
+        discussion_text = (manuscript.get("discussion") or "").lower()
+        conclusion_text = (manuscript.get("conclusion") or "").lower()
+        abstract_text = (manuscript.get("abstract") or "").lower()
+
+        # 1. Check figure/table references exist
+        all_text = " ".join(manuscript.get(s, "") for s in manuscript)
+        fig_refs = re.findall(r'[Ff]igure\s+(\d+)', all_text)
+        table_refs = re.findall(r'[Tt]able\s+(\d+)', all_text)
+
+        # Count actual figures (from synthesis plots)
+        n_actual_figures = 0
+        if synthesis and synthesis.get("analyses"):
+            for analysis in synthesis["analyses"].values():
+                plots = analysis.get("plots", {})
+                if plots.get("forest"):
+                    n_actual_figures += 1
+                if plots.get("funnel"):
+                    n_actual_figures += 1
+
+        for fig_num in fig_refs:
+            n = int(fig_num)
+            if n > n_actual_figures + 2:  # +2 for PRISMA + possible extra
+                warnings.append(f"Reference to Figure {n} but only ~{n_actual_figures} figures exist")
+
+        # 2. Check that key pooled estimates from Results appear in Discussion
+        # Extract numbers that look like effect sizes from Results
+        es_pattern = re.compile(r'(?:pooled|overall)\s+(?:estimate|effect)[^.]*?(-?\d+\.?\d*)', re.IGNORECASE)
+        results_estimates = es_pattern.findall(results_text)
+        for est in results_estimates[:3]:  # check top 3
+            if est not in discussion_text and est not in conclusion_text:
+                warnings.append(f"Pooled estimate {est} in Results not mentioned in Discussion/Conclusion")
+
+        # 3. Check abstract consistency — abstract shouldn't have numbers not in results
+        abstract_numbers = re.findall(r'(?:pooled|estimate|effect)\s*=?\s*(-?\d+\.\d+)', abstract_text)
+        for num in abstract_numbers:
+            if num not in results_text:
+                warnings.append(f"Abstract mentions effect size {num} not found in Results section")
+
+        # 4. Check that synthesis group keys are mentioned in Results
+        if synthesis and synthesis.get("analyses"):
+            for group_key in synthesis["analyses"]:
+                # Check if category name or related term appears in results
+                key_lower = group_key.lower().replace("_", " ")
+                if key_lower not in results_text and key_lower not in "smd md or rr hr prop":
+                    # Try partial match
+                    key_tokens = key_lower.split()
+                    if not any(t in results_text for t in key_tokens if len(t) > 3):
+                        warnings.append(f"Synthesis group '{group_key}' not clearly discussed in Results")
+
+        return {
+            "warnings": warnings,
+            "n_warnings": len(warnings),
+            "passed": len(warnings) == 0,
         }
 
     # ================================================================== #

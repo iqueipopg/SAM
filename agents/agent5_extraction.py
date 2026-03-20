@@ -123,43 +123,55 @@ class Agent5Extraction(BaseAgent):
                         extracted["outcomes"][j] = self._extract_numeric_fields(outcome)
 
                 # --- Count numeric completeness before recovery ---
-                any_complete_before = any(
-                    o.get("numeric_complete") for o in extracted.get("outcomes", [])
+                outcomes_before = extracted.get("outcomes", [])
+                n_complete_before = sum(
+                    1 for o in outcomes_before if o.get("numeric_complete")
+                )
+                n_partial_before = len(outcomes_before) - n_complete_before
+
+                # --- 4th pass: numeric recovery ---
+                # Trigger on: (a) no outcomes, (b) no numeric-complete, (c) has partial outcomes
+                needs_recovery = (
+                    not outcomes_before  # no outcomes at all
+                    or n_complete_before == 0  # none are numeric-complete
+                    or (n_partial_before > 0 and n_complete_before < len(outcomes_before))  # some partial
                 )
 
-                # --- 4th pass: numeric recovery for incomplete papers ---
-                if extracted.get("outcomes") and not any_complete_before:
-                    print(f"    [numeric recovery] no complete numeric outcomes, attempting recovery...")
+                if needs_recovery:
+                    reason = ("no outcomes" if not outcomes_before
+                              else f"{n_complete_before}/{len(outcomes_before)} numeric-complete")
+                    print(f"    [numeric recovery] {reason}, attempting recovery...")
                     recovered = self._numeric_recovery_pass(paper, protocol)
                     if recovered:
-                        # Post-process recovered outcomes too
                         recovered = [self._extract_numeric_fields(o) for o in recovered]
                         any_recovered_complete = any(
                             o.get("numeric_complete") for o in recovered
                         )
-                        if any_recovered_complete:
-                            # Merge recovered outcomes: replace incomplete ones
+                        n_new_complete = sum(1 for o in recovered if o.get("numeric_complete"))
+
+                        if not outcomes_before:
+                            # No original outcomes — use recovered
+                            if any(o.get("numeric_complete") or o.get("effect_size_value") is not None
+                                   for o in recovered):
+                                extracted["outcomes"] = recovered
+                                n_numeric_recovered += 1
+                                extracted["extraction_quality"] = "partial"
+                                print(f"    [numeric recovery] SUCCESS — recovered {len(recovered)} outcomes")
+                        elif n_new_complete > n_complete_before:
+                            # Recovery found more complete outcomes — merge
                             extracted["outcomes"] = self._merge_recovered_outcomes(
                                 extracted["outcomes"], recovered
                             )
                             n_numeric_recovered += 1
-                            print(f"    [numeric recovery] SUCCESS — recovered numeric data")
-                            if "sections_used" in extracted and "recovery" not in extracted["sections_used"]:
-                                extracted["sections_used"].append("recovery")
+                            print(f"    [numeric recovery] SUCCESS — improved {n_complete_before}→{n_new_complete} complete outcomes")
                         else:
                             print(f"    [numeric recovery] no improvement")
-                elif not extracted.get("outcomes"):
-                    # No outcomes at all — try recovery from scratch
-                    print(f"    [numeric recovery] no outcomes found, attempting recovery...")
-                    recovered = self._numeric_recovery_pass(paper, protocol)
-                    if recovered:
-                        recovered = [self._extract_numeric_fields(o) for o in recovered]
-                        if any(o.get("numeric_complete") or o.get("effect_size_value") is not None
-                               for o in recovered):
-                            extracted["outcomes"] = recovered
-                            n_numeric_recovered += 1
-                            extracted["extraction_quality"] = "partial"
-                            print(f"    [numeric recovery] SUCCESS — recovered outcomes")
+
+                        if n_numeric_recovered > 0 and "sections_used" in extracted:
+                            if "recovery" not in extracted["sections_used"]:
+                                extracted["sections_used"].append("recovery")
+                    else:
+                        print(f"    [numeric recovery] no results")
 
                 # --- Final numeric completeness count ---
                 if any(o.get("numeric_complete") for o in extracted.get("outcomes", [])):
@@ -232,9 +244,15 @@ class Agent5Extraction(BaseAgent):
     def _extract_single_paper(self, paper: Dict, protocol: Dict) -> Dict:
         """Run 3 focused prompts on a single paper.
 
-        If dual_extraction is enabled, runs extraction twice at different
-        temperatures and reconciles.  Otherwise behaves identically to the
-        original single-pass logic.
+        If dual_extraction is enabled, uses ADAPTIVE strategy: runs pass 1,
+        evaluates confidence heuristically, and only runs pass 2 if confidence
+        is low (saving ~50% GPU time on clear-cut papers).
+
+        Confidence triggers for pass 2:
+        - No outcomes extracted
+        - No numeric-complete outcomes
+        - abstract-only text source
+        - Very short text (< 2000 chars)
         """
         if not self.dual_extraction:
             result = self._extract_once(paper, protocol, temperature=0.1)
@@ -242,14 +260,64 @@ class Agent5Extraction(BaseAgent):
             result["concordance"] = None
             return result
 
-        # --- Dual extraction ---
+        # --- Adaptive dual extraction ---
         print(f"    [pass 1] temperature=0.1")
         result_a = self._extract_once(paper, protocol, temperature=0.1)
-        print(f"    [pass 2] temperature=0.3")
+
+        # Evaluate pass 1 confidence heuristically
+        needs_pass2 = self._needs_second_pass(result_a, paper)
+
+        if not needs_pass2:
+            print(f"    [pass 2] SKIPPED — pass 1 confident enough")
+            result_a["extraction_confidence"] = "high"
+            result_a["concordance"] = {"adaptive_skip": True, "reason": "pass1_confident"}
+            return result_a
+
+        print(f"    [pass 2] temperature=0.3 (low confidence on pass 1)")
         result_b = self._extract_once(paper, protocol, temperature=0.3)
 
         final = self._reconcile(result_a, result_b, paper, protocol)
         return final
+
+    def _needs_second_pass(self, result: Dict, paper: Dict) -> bool:
+        """Decide if pass 1 results need verification via a second extraction.
+
+        Returns True if confidence is too low to trust a single pass.
+        """
+        outcomes = result.get("outcomes") or []
+        text_source = paper.get("text_source", "")
+        full_text = paper.get("full_text", "") or ""
+
+        # Always verify abstract-only papers (limited data)
+        if text_source == "abstract_only":
+            return True
+
+        # Always verify very short texts (might miss things)
+        if len(full_text) < 2000:
+            return True
+
+        # No outcomes at all → verify
+        if not outcomes:
+            return True
+
+        # Check numeric completeness of outcomes
+        n_outcomes = len(outcomes)
+        n_numeric_complete = sum(1 for o in outcomes if o.get("numeric_complete"))
+
+        # No numeric-complete outcomes → verify
+        if n_numeric_complete == 0:
+            return True
+
+        # Less than half outcomes are numeric-complete → verify
+        if n_outcomes > 1 and n_numeric_complete < n_outcomes * 0.5:
+            return True
+
+        # Study characteristics missing → verify
+        if result.get("study_characteristics") is None:
+            return True
+
+        # Passed all checks → confident enough
+        return False
 
     def _extract_once(self, paper: Dict, protocol: Dict, temperature: float = 0.1) -> Dict:
         """Single extraction pass at a given temperature (original logic)."""
@@ -258,11 +326,13 @@ class Agent5Extraction(BaseAgent):
         # Prompt 1: Study characteristics
         study_chars = self._extract_study_characteristics(paper, protocol, temperature)
         if study_chars:
+            study_chars = self._normalize_nulls(study_chars)
             sections_used.append("methods")
 
         # Prompt 2: Intervention/exposure details
         intervention = self._extract_intervention_details(paper, protocol, temperature)
         if intervention:
+            intervention = self._normalize_nulls(intervention)
             if "methods" not in sections_used:
                 sections_used.append("methods")
 
@@ -704,6 +774,22 @@ Respond ONLY with valid JSON:
     #  NUMERIC POST-PROCESSING                                             #
     # ================================================================== #
 
+    @staticmethod
+    def _normalize_nulls(o: Dict) -> Dict:
+        """Normalize empty/null-like values consistently to None.
+
+        Handles: "Not specified", "NR", "N/A", "NA", "n/a", "", "null", "None", "?", "-"
+        """
+        _null_strings = {
+            "", "not specified", "not reported", "nr", "n/a", "na", "null",
+            "none", "?", "-", "n.r.", "n.a.", "not available", "not stated",
+            "not provided", "not applicable", "not mentioned",
+        }
+        for key, val in o.items():
+            if isinstance(val, str) and val.strip().lower() in _null_strings:
+                o[key] = None
+        return o
+
     def _extract_numeric_fields(self, outcome: Dict) -> Dict:
         """Post-process an outcome dict to ensure numeric fields are floats,
         calculate SMD from means/SDs if missing, and flag completeness.
@@ -711,6 +797,9 @@ Respond ONLY with valid JSON:
         Mutates and returns the outcome dict.
         """
         o = dict(outcome)
+
+        # --- Normalize null-like strings to None ---
+        o = self._normalize_nulls(o)
 
         # --- Parse core numeric fields to float ---
         for field in ("value", "effect_size_value", "ci_lower", "ci_upper",
