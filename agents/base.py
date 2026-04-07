@@ -29,7 +29,7 @@ class BaseAgent:
         if self._backend == "groq":
             # Cloud backend — no local model needed
             from agents.groq_adapter import GroqProvider
-            self._groq_provider = GroqProvider(self.config)
+            self._groq_provider = GroqProvider(self.config, agent_name=agent_name)
             self.logger.info(
                 "%s: using Groq cloud backend (model=%s)",
                 agent_name, groq_cfg.get("model", "llama-3.3-70b-versatile"),

@@ -247,12 +247,24 @@ manuscript:
   include_rob_plots: true
 
 # ── Groq Cloud LLM ───────────────────────────────────────────────
+# Switch provider to "groq" to use cloud inference instead of local GPU.
+# Switch back to "local" at any time to restore original behavior.
 groq:
-  provider: "local"  # "local" or "groq"
-  model: "llama-3.3-70b-versatile"
+  provider: "groq"  # "local" or "groq"
+  model: "llama-3.3-70b-versatile"  # default model (fallback)
   api_key_env: "GROQ_API_KEY"
   max_retries: 3
   timeout: 60
+  # Per-agent model selection (mixed strategy to save tokens):
+  # 8B for simple tasks, 70B for critical (screening, extraction, quality, manuscript)
+  agent_models:
+    agent1_protocol: "llama-3.1-8b-instant"       # simple: framework detection
+    agent2_search: "llama-3.1-8b-instant"          # CPU only, no LLM
+    agent3_screening: "llama-3.3-70b-versatile"    # critical: precision matters
+    agent4_validation: "llama-3.1-8b-instant"      # simple: fulltext screening
+    agent5_extraction: "llama-3.3-70b-versatile"   # critical: data extraction
+    agent6_quality: "llama-3.3-70b-versatile"      # critical: RoB assessment
+    agent8_manuscript: "llama-3.3-70b-versatile"   # critical: text quality
 
 # ── Pipeline Settings ─────────────────────────────────────────────
 pipeline:
