@@ -8,7 +8,7 @@ En local: solo ejecuta Qwen-7B (el único que cabe en 8GB VRAM).
 
 Para añadir modelos, edita MODEL_CONFIGS abajo.
 """
-import sys, json, gc, time, torch, yaml
+import sys, json, gc, time, torch, yaml, argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -170,13 +170,68 @@ def evaluate_model(model_cfg, papers):
     }
 
 
-def run():
+def generate_latex_table(results):
+    """Generate a LaTeX table from experiment results."""
+    lines = []
+    lines.append(r"\begin{table}[h]\centering")
+    lines.append(r"\begin{tabular}{lrrrrr}\hline")
+    lines.append(r"Model & Sensitivity & Specificity & F1 & Kappa & s/paper \\")
+    lines.append(r"\hline")
+    for r in results.get("models", []):
+        if "error" in r:
+            name = r["model"].replace("_", r"\_")
+            lines.append(f"{name} & \\multicolumn{{5}}{{c}}{{ERROR}} \\\\")
+        else:
+            name = r["model"].replace("_", r"\_")
+            lines.append(
+                f"{name} & {r['sensitivity']:.4f} & {r['specificity']:.4f} & "
+                f"{r['f1']:.4f} & {r['cohen_kappa']:.4f} & {r['s_per_paper']:.1f} \\\\"
+            )
+    lines.append(r"\hline")
+    lines.append(r"\end{tabular}")
+    lines.append(r"\caption{Resultados Experimento 4 --- Model Comparison}\label{tab:exp4}")
+    lines.append(r"\end{table}")
+    return "\n".join(lines)
+
+
+def run(dry_run=False):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("\n[Exp 4] Model Comparison for Screening")
     print("=" * 55)
     print(f"  Models to test: {len(MODEL_CONFIGS)}")
     print(f"  Gold standard : {len(GOLD_LABELS)} papers")
+
+    if dry_run:
+        print("  [DRY RUN] Generating mock results...")
+        model_results = []
+        for cfg in MODEL_CONFIGS:
+            model_results.append({
+                "model": cfg["name"],
+                "model_path": cfg["model_path"],
+                "quantization": cfg.get("quantization", "4bit"),
+                "tp": 8, "fp": 1, "fn": 0, "tn": 9,
+                "sensitivity": 1.0, "specificity": 0.9,
+                "precision": 0.8889, "f1": 0.9412, "cohen_kappa": 0.8889,
+                "elapsed_s": 0.0, "s_per_paper": 0.0,
+                "rows": [],
+            })
+        output = {
+            "experiment": "exp4_model_comparison",
+            "n_papers": len(GOLD_LABELS),
+            "gold_include": len(GOLD_INCLUDE),
+            "gold_exclude": len(GOLD_EXCLUDE),
+            "protocol": FIXED_PROTOCOL,
+            "models": model_results,
+        }
+        latex = generate_latex_table(output)
+        output["latex_table"] = latex
+        print(latex)
+        out_path = RESULTS_DIR / "exp4_results.json"
+        with open(out_path, "w") as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
+        print(f"\n  Results -> {out_path}")
+        return output
 
     # Fetch papers once
     print("  Fetching papers...")
@@ -211,6 +266,11 @@ def run():
         "protocol": FIXED_PROTOCOL,
         "models": model_results,
     }
+
+    latex = generate_latex_table(output)
+    output["latex_table"] = latex
+    print(f"\n  LaTeX table:\n{latex}")
+
     out_path = RESULTS_DIR / "exp4_results.json"
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
@@ -219,4 +279,7 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Exp 4 - Model Comparison")
+    parser.add_argument("--dry-run", action="store_true", help="Mock run without GPU")
+    args = parser.parse_args()
+    run(dry_run=args.dry_run)

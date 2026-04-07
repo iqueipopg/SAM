@@ -49,6 +49,12 @@ except Exception:
 
 
 class Agent8Manuscript(BaseAgent):
+    """RAG-based manuscript generator producing a systematic review document.
+
+    Input: protocol, included papers, extraction, quality, and synthesis data.
+    Output: dict with sections (abstract through conclusion), references, and LaTeX/PDF paths.
+    GPU: yes -- uses MiniLM-L6-v2 (CPU) for RAG embeddings and Qwen2.5-7B for prose generation.
+    """
 
     def __init__(self, language: str = None):
         super().__init__("agent8_manuscript")
@@ -314,7 +320,7 @@ class Agent8Manuscript(BaseAgent):
         has_synthesis = bool(self._synthesis and self._synthesis.get("analyses"))
 
         parts = [
-            f"This systematic review followed PRISMA guidelines.",
+            "This systematic review followed PRISMA guidelines.",
             f"The PubMed database was searched for studies examining {intv} in {pop} with {outc} as the outcome.",
         ]
         if pubmed_query:
@@ -831,7 +837,7 @@ class Agent8Manuscript(BaseAgent):
 
         def _replace_bracket_group(match):
             nonlocal total, verified, removed, details
-            full_match = match.group(0)
+            match.group(0)
             inner = match.group(1)
 
             parts = [p.strip().lstrip('@') for p in inner.split(';')]
@@ -1081,7 +1087,7 @@ class Agent8Manuscript(BaseAgent):
         # 1. Check figure/table references exist
         all_text = " ".join(manuscript.get(s, "") for s in manuscript)
         fig_refs = re.findall(r'[Ff]igure\s+(\d+)', all_text)
-        table_refs = re.findall(r'[Tt]able\s+(\d+)', all_text)
+        re.findall(r'[Tt]able\s+(\d+)', all_text)
 
         # Count actual figures (from synthesis plots)
         n_actual_figures = 0

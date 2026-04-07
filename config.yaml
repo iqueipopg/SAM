@@ -246,6 +246,14 @@ manuscript:
   include_prisma_diagram: true
   include_rob_plots: true
 
+# ── Groq Cloud LLM ───────────────────────────────────────────────
+groq:
+  provider: "local"  # "local" or "groq"
+  model: "llama-3.3-70b-versatile"
+  api_key_env: "GROQ_API_KEY"
+  max_retries: 3
+  timeout: 60
+
 # ── Pipeline Settings ─────────────────────────────────────────────
 pipeline:
   checkpointing: true     # save intermediate outputs per agent

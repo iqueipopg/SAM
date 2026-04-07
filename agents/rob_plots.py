@@ -110,7 +110,7 @@ def _extract_study_data(quality_data: dict) -> Tuple[List[Dict], str]:
 
         pmid = p.get("pmid", "?")
         # Try to extract first author from title or authors
-        title = p.get("title", "")
+        p.get("title", "")
         authors = p.get("authors", [])
         if authors:
             first_author = authors[0].split(",")[0].split()[-1] if authors[0] else ""

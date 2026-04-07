@@ -25,6 +25,12 @@ from typing import List, Dict, Optional
 
 
 class Agent6Quality(BaseAgent):
+    """Quality and risk-of-bias assessment using RoB 2.0, ROBINS-I, or JBI.
+
+    Input: list of extracted papers (from A5) and protocol (from A1).
+    Output: dict with 'papers' (each annotated with quality_assessment and quality_weight) and 'stats'.
+    GPU: yes -- uses LLM for design detection and domain-level assessment.
+    """
 
     def __init__(self):
         super().__init__("agent6_quality")

@@ -15,6 +15,13 @@ from agents.retry import retry_with_backoff
 
 
 class Agent2Search:
+    """Multi-database literature search with semantic deduplication.
+
+    Input: protocol (dict from A1) and pubmed_query (str).
+    Output: dict with 'papers' (list of unique papers) and 'stats' (per-DB counts).
+    GPU: no -- uses CPU-only MiniLM-L6-v2 for deduplication embeddings.
+    """
+
     def __init__(self):
         self.dedup_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 

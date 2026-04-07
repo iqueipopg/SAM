@@ -9,6 +9,12 @@ import json, torch, re
 
 
 class Agent1Protocol(BaseAgent):
+    """Generates a systematic review protocol from a research question.
+
+    Input: user_query (str) -- a clinical research question in natural language.
+    Output: dict with framework (PICO/SPIDER/PECO/PCC), criteria, and PubMed query.
+    GPU: yes -- uses Qwen2.5-7B for framework detection and criteria generation.
+    """
 
     _MESH_MAPPING = {
         # Interventions
@@ -87,7 +93,7 @@ class Agent1Protocol(BaseAgent):
         metadata = self._generate_metadata(en_query)
         print(f"\u2705 Step 1/2: Framework={metadata['framework']}")
         criteria = self._generate_criteria(en_query, metadata)
-        print(f"\u2705 Step 2/2: Criteria generated")
+        print("\u2705 Step 2/2: Criteria generated")
         metadata["original_query"] = user_query
         protocol = {**metadata, **criteria}
 
@@ -106,7 +112,7 @@ class Agent1Protocol(BaseAgent):
             "PCC": "prevalence",
         }.get(framework, "randomized controlled trial")
 
-        pop = protocol.get("population", "")
+        protocol.get("population", "")
         intv = protocol.get("intervention", protocol.get("exposure", ""))
         comp = protocol.get("comparator", "")
         outcome = protocol.get("outcome", "")
@@ -538,6 +544,10 @@ class Agent1Protocol(BaseAgent):
         # Post-process: remove any criteria with Spanish words
         inclusion = [self._clean_criterion(c) for c in inclusion[:5]]
         exclusion = [self._clean_criterion(c) for c in exclusion[:2]]
+
+        # Fix known LLM hallucination: "CCT" instead of "CBT"
+        inclusion = [c.replace("CCT","CBT").replace(" CCT "," CBT ") for c in inclusion]
+        exclusion = [c.replace("CCT","CBT").replace(" CCT "," CBT ") for c in exclusion]
 
         return {"inclusion_criteria": inclusion, "exclusion_criteria": exclusion}
 

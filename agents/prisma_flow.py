@@ -166,7 +166,7 @@ def generate_prisma_flow(prisma_data: dict, output_path: str) -> str:
     draw_box(
         dup_x, dup_y, dup_w, dup_h,
         texts=[
-            f"Duplicates removed",
+            "Duplicates removed",
             f"(n={duplicates_removed})",
         ],
         bg=EXCLUDED_BG,
@@ -183,7 +183,7 @@ def generate_prisma_flow(prisma_data: dict, output_path: str) -> str:
         box2_x, box2_y, box2_w, box2_h,
         texts=[
             f"Records screened (n={screened})",
-            f"Title/abstract screening",
+            "Title/abstract screening",
         ],
         header="Screening",
     )
@@ -196,7 +196,7 @@ def generate_prisma_flow(prisma_data: dict, output_path: str) -> str:
     draw_box(
         exc_s_x, exc_s_y, exc_s_w, exc_s_h,
         texts=[
-            f"Records excluded",
+            "Records excluded",
             f"(n={excluded_screening})",
         ],
         bg=EXCLUDED_BG,
@@ -212,7 +212,7 @@ def generate_prisma_flow(prisma_data: dict, output_path: str) -> str:
     draw_box(
         box3_x, box3_y, box3_w, box3_h,
         texts=[
-            f"Full-text articles assessed",
+            "Full-text articles assessed",
             f"for eligibility (n={fulltext_assessed})",
         ],
         header="Eligibility",

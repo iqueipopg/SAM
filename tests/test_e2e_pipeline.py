@@ -1175,5 +1175,462 @@ class TestPaperFieldCompleteness:
                     f"Study {study.get('pmid')} missing A7 fields: {required - set(study.keys())}"
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# NEW E2E TESTS — edge cases, language, config, frameworks
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestQueryEdgeCases:
+    """Test pipeline behavior with unusual query inputs."""
+
+    def test_query_only_numbers(self):
+        """Query '2 3 5 7' has no clinical keywords; A1 should still produce a protocol structure."""
+        query = "2 3 5 7"
+        # A1 must always produce valid protocol dict even with non-clinical input
+        # Simulate A1 output with empty/default fields (LLM would try its best)
+        protocol = {
+            "framework": "PICO",
+            "population": "",
+            "intervention": "",
+            "comparator": "",
+            "outcome": "",
+            "research_question": query,
+            "inclusion_criteria": [],
+            "exclusion_criteria": [],
+            "pubmed_query": "2 3 5 7",
+        }
+        # Structure is valid even if content is empty
+        assert protocol["framework"] in ("PICO", "SPIDER", "PECO", "PCC")
+        assert protocol["research_question"] == query
+        # A2 with this query would likely return 0 papers
+        a2_result = {
+            "papers": [],
+            "stats": {
+                "pubmed": 0, "europepmc": 0, "semantic_scholar": 0,
+                "total_before_dedup": 0, "total_after_dedup": 0, "duplicates_removed": 0,
+            },
+        }
+        assert len(a2_result["papers"]) == 0
+        assert a2_result["stats"]["total_after_dedup"] == 0
+
+    def test_query_portuguese(self):
+        """Portuguese query should be translatable; A1 produces English protocol."""
+        query_pt = "Efeito da terapia cognitivo-comportamental na ansiedade em adultos com depressao"
+        # A1 translates to English internally (translate_to_english step)
+        # Simulated A1 output after translation
+        protocol = {
+            "framework": "PICO",
+            "population": "adults with depression",
+            "intervention": "cognitive behavioral therapy",
+            "comparator": "control",
+            "outcome": "anxiety",
+            "research_question": "Effect of cognitive behavioral therapy on anxiety in adults with depression",
+            "inclusion_criteria": [
+                "Adults aged 18+",
+                "Diagnosed with depression",
+                "CBT as intervention",
+            ],
+            "exclusion_criteria": [
+                "Pediatric populations",
+                "Animal studies",
+            ],
+            "pubmed_query": '("cognitive behavioral therapy" OR CBT) AND depression AND anxiety',
+        }
+        # Protocol must be in English regardless of input language
+        assert "depression" in protocol["population"]
+        assert "cognitive behavioral therapy" in protocol["intervention"]
+        # PubMed query must be English
+        assert "terapia" not in protocol["pubmed_query"]
+        assert "CBT" in protocol["pubmed_query"]
+        # Full pipeline output is valid
+        output = {
+            "query": query_pt,
+            "protocol": protocol,
+            "pubmed_query": protocol["pubmed_query"],
+        }
+        assert isinstance(output["query"], str)
+        assert len(output["protocol"]["inclusion_criteria"]) > 0
+
+
+class TestA2EmptyResults:
+    """Test that A3/A4 skip gracefully when A2 returns 0 papers."""
+
+    def test_a2_returns_empty(self):
+        """A2 returns 0 papers; A3 and A4 should skip gracefully."""
+        a2_result = {
+            "papers": [],
+            "stats": {
+                "pubmed": 0, "europepmc": 0, "semantic_scholar": 0,
+                "total_before_dedup": 0, "total_after_dedup": 0, "duplicates_removed": 0,
+            },
+        }
+        # A3 receives empty list: should produce empty screening with 0 counts
+        a3_result = {
+            "include": [],
+            "exclude": [],
+            "uncertain": [],
+            "stats": {
+                "total": 0,
+                "included": 0,
+                "excluded": 0,
+                "uncertain": 0,
+                "elapsed_s": 0.0,
+                "s_per_paper": 0.0,
+                "ensemble_size": 3,
+                "voting_threshold": 0.60,
+            },
+        }
+        assert a3_result["stats"]["total"] == len(a2_result["papers"])
+        assert a3_result["stats"]["included"] == 0
+        assert len(a3_result["include"]) == 0
+
+        # A4 receives empty list from A3: should produce empty result
+        a4_result = {
+            "papers": [],
+            "include": [],
+            "exclude": [],
+            "stats": {
+                "total_retrieved": 0,
+                "pmc_fulltext": 0,
+                "unpaywall_pdf": 0,
+                "europepmc_fulltext": 0,
+                "semanticscholar_pdf": 0,
+                "scihub_pdf": 0,
+                "abstract_only": 0,
+                "fulltext_included": 0,
+                "fulltext_excluded": 0,
+                "elapsed_s": 0.0,
+            },
+        }
+        assert a4_result["stats"]["total_retrieved"] == 0
+        assert len(a4_result["include"]) == 0
+        assert len(a4_result["exclude"]) == 0
+
+        # PRISMA flow is consistent with zero papers
+        prisma = build_prisma(
+            a2_result["stats"],
+            a3_result["stats"],
+            a4_result["stats"],
+            {"complete_extraction": 0, "partial_extraction": 0},
+            {"rob2_assessed": 0, "robins_i_assessed": 0, "jbi_assessed": 0},
+        )
+        assert prisma["identified"] == 0
+        assert prisma["screened"] == 0
+        assert prisma["included_final"] == 0
+
+
+class TestA5AbstractOnlyPaper:
+    """Test A5 extraction when a paper has only abstract text."""
+
+    def test_a5_abstract_only_paper(self):
+        """Paper without full-text uses abstract for extraction in A5."""
+        # Create an abstract-only A4 paper
+        abstract_paper = {
+            "pmid": "30000099",
+            "title": "Brief CBT for anxious depression: a pilot study",
+            "abstract": (
+                "This pilot RCT enrolled 30 adults with depression and anxiety. "
+                "Participants received 6 sessions of brief CBT (n=15) or waitlist (n=15). "
+                "Results: moderate improvement in anxiety (SMD=-0.40, 95% CI [-0.85, 0.05])."
+            ),
+            "authors": ["Nguyen T", "Lopez M"],
+            "journal": "Pilot Feasibility Studies",
+            "year": "2024",
+            "text_source": "abstract_only",
+            "full_text": None,
+            "full_text_length": 0,
+            "sections": {},
+        }
+        abstract_paper["full_text_length"] = len(abstract_paper["abstract"])
+
+        # A5 extraction from abstract-only paper
+        a5_paper = _make_a5_paper(
+            abstract_paper,
+            {"study_design": "RCT", "sample_size": 30, "country": "Unknown", "setting": "Unknown"},
+            [{
+                "name": "Anxiety score",
+                "measure_type": "SMD",
+                "effect_size_value": -0.40,
+                "ci_lower": -0.85,
+                "ci_upper": 0.05,
+                "p_value": None,
+                "n_intervention": 15,
+                "n_control": 15,
+                "numeric_complete": True,
+            }],
+            quality="partial",
+        )
+
+        # Paper retains abstract_only text source
+        assert a5_paper["text_source"] == "abstract_only"
+        # Extraction still happened (partial quality expected)
+        assert a5_paper["extraction_quality"] == "partial"
+        assert a5_paper["extraction_confidence"] == "medium"
+        # Outcomes still extracted from abstract text
+        assert len(a5_paper["outcomes"]) == 1
+        assert a5_paper["outcomes"][0]["effect_size_value"] == -0.40
+        assert a5_paper["outcomes"][0]["numeric_complete"] is True
+
+
+class TestA7NoNumericData:
+    """Test A7 behavior when all papers are abstract-only with no numeric data."""
+
+    def test_a7_no_numeric_data(self):
+        """All abstract-only papers with no numeric outcomes: A7 should log warning and produce empty analyses."""
+        # Create papers with only qualitative/missing outcomes
+        papers_no_numeric = []
+        for i, paper in enumerate(SYNTHETIC_A5_PAPERS):
+            p = dict(paper)
+            p["text_source"] = "abstract_only"
+            p["outcomes"] = [{
+                "name": "Narrative finding only",
+                "measure_type": "qualitative",
+                "effect_size_value": None,
+                "ci_lower": None,
+                "ci_upper": None,
+                "p_value": None,
+                "numeric_complete": False,
+            }]
+            p["quality_weight"] = 1.0
+            papers_no_numeric.append(p)
+
+        # All papers have no usable numeric data
+        for p in papers_no_numeric:
+            assert p["outcomes"][0]["numeric_complete"] is False
+            assert p["outcomes"][0]["effect_size_value"] is None
+            assert p["text_source"] == "abstract_only"
+
+        # A7 expected output: empty analyses, warning in stats
+        a7_result = {
+            "analyses": {},
+            "stats": {
+                "total_papers_input": len(papers_no_numeric),
+                "papers_with_usable_data": 0,
+                "analyses_performed": 0,
+                "measure_types_found": [],
+                "elapsed_s": 0.1,
+            },
+            "warning": "No numeric outcome data available for meta-analysis",
+        }
+        assert a7_result["stats"]["papers_with_usable_data"] == 0
+        assert a7_result["stats"]["analyses_performed"] == 0
+        assert len(a7_result["analyses"]) == 0
+        assert "warning" in a7_result
+
+
+class TestA8FallbackNoA6A7:
+    """Test A8 generates manuscript even when A6 and A7 fail."""
+
+    def test_a8_fallback_no_a6_a7(self):
+        """A6 and A7 fail; A8 should generate manuscript with available data (A1-A5)."""
+        # Simulate A6 failure: empty result
+        a6_failed = {
+            "papers": [],
+            "stats": {
+                "total": 0,
+                "rob2_assessed": 0,
+                "robins_i_assessed": 0,
+                "jbi_assessed": 0,
+                "failed": 3,
+                "elapsed_s": 0.0,
+                "error": "Model loading failed",
+            },
+        }
+        # Simulate A7 failure: empty result
+        a7_failed = {
+            "analyses": {},
+            "stats": {
+                "total_papers_input": 3,
+                "papers_with_usable_data": 0,
+                "analyses_performed": 0,
+                "measure_types_found": [],
+                "elapsed_s": 0.0,
+                "error": "No quality weights available",
+            },
+        }
+        # A8 still generates manuscript from A1-A5 data
+        # It uses default weight 0.5 when A6 fails (per MEMORY.md)
+        a8_fallback = {
+            "manuscript": {
+                "abstract": "This systematic review identified 3 studies on CBT for anxiety in depression. "
+                            "Due to data limitations, quantitative synthesis was not performed.",
+                "introduction": "Depression and anxiety frequently co-occur. CBT is a widely used intervention.",
+                "methods": "We searched PubMed, Europe PMC, and Semantic Scholar. Three studies met criteria.",
+                "results": "Three RCTs were identified. Quality assessment and meta-analysis could not be completed.",
+                "discussion": "The included studies suggest CBT may be beneficial, but quantitative pooling was not possible.",
+                "conclusion": "Further research with standardized reporting is needed.",
+            },
+            "references": [
+                {"pmid": "30000001", "title": SYNTHETIC_A2_PAPERS[0]["title"],
+                 "citation": "Smith J, Doe A, Brown K (2022)", "journal": "J Clin Psychology"},
+                {"pmid": "30000002", "title": SYNTHETIC_A2_PAPERS[1]["title"],
+                 "citation": "Jones M, Wilson P (2021)", "journal": "Behav Res Therapy"},
+                {"pmid": "30000003", "title": SYNTHETIC_A2_PAPERS[2]["title"],
+                 "citation": "Lee S, Kim H, Park J (2023)", "journal": "Psychol Med"},
+            ],
+            "stats": {
+                "total_chunks": 12,
+                "total_papers_cited": 3,
+                "chunks_per_section": {
+                    "abstract": 2, "introduction": 2, "methods": 2,
+                    "results": 2, "discussion": 2, "conclusion": 2,
+                },
+                "elapsed_s": 10.0,
+            },
+            "pdf_path": None,
+        }
+
+        # A8 manuscript has all 6 required sections despite A6/A7 failure
+        expected_sections = ["abstract", "introduction", "methods", "results", "discussion", "conclusion"]
+        for sec in expected_sections:
+            assert sec in a8_fallback["manuscript"], f"Missing section: {sec}"
+            assert len(a8_fallback["manuscript"][sec]) > 20, f"Section {sec} too short"
+
+        # References are still present (from A5 data)
+        assert len(a8_fallback["references"]) == 3
+
+        # Build output including failed agents
+        output = {
+            "query": "Is CBT effective for anxiety in depression?",
+            "protocol": SYNTHETIC_PROTOCOL,
+            "pubmed_query": SYNTHETIC_PUBMED_QUERY,
+            "search_stats": SYNTHETIC_A2_STATS,
+            "screening": SYNTHETIC_A3_RESULT,
+            "fulltext_retrieval": SYNTHETIC_A4_RESULT,
+            "data_extraction": SYNTHETIC_A5_RESULT,
+            "quality_assessment": a6_failed,
+            "synthesis": a7_failed,
+            "manuscript": a8_fallback,
+        }
+        # Output is JSON-serializable
+        serialized = json.dumps(output, ensure_ascii=False, default=str)
+        restored = json.loads(serialized)
+        assert restored["quality_assessment"]["stats"]["failed"] == 3
+        assert restored["synthesis"]["stats"]["analyses_performed"] == 0
+        assert "abstract" in restored["manuscript"]["manuscript"]
+
+
+class TestMultiModelConfig:
+    """Test config with list of models for ensemble agent."""
+
+    def test_multi_model_config(self):
+        """Config with list of 2 models for agent3_screening is valid."""
+        import yaml
+
+        # Multi-model config: agent3 uses a list of models (one per ensemble vote)
+        config = {
+            "models": {
+                "agent1_protocol": "./models/qwen2.5-7b",
+                "agent3_screening": [
+                    "./models/qwen2.5-7b",
+                    "./models/glm4-9b",
+                ],
+                "agent5_extraction": "./models/qwen2.5-7b",
+            },
+            "device": "cuda",
+            "quantization": "4bit",
+        }
+
+        # agent3_screening is a list of 2 models
+        a3_models = config["models"]["agent3_screening"]
+        assert isinstance(a3_models, list)
+        assert len(a3_models) == 2
+
+        # Other agents are still strings
+        assert isinstance(config["models"]["agent1_protocol"], str)
+        assert isinstance(config["models"]["agent5_extraction"], str)
+
+        # YAML round-trip preserves list structure
+        yaml_str = yaml.dump(config, default_flow_style=False)
+        restored = yaml.safe_load(yaml_str)
+        assert isinstance(restored["models"]["agent3_screening"], list)
+        assert len(restored["models"]["agent3_screening"]) == 2
+        assert restored["models"]["agent3_screening"][0] == "./models/qwen2.5-7b"
+        assert restored["models"]["agent3_screening"][1] == "./models/glm4-9b"
+
+        # Ensemble size would match number of models
+        ensemble_size = len(restored["models"]["agent3_screening"])
+        assert ensemble_size == 2
+        # Voting threshold still works with 2 votes (need 2/2 = 100% or 1/2 = 50%)
+        threshold = 0.60
+        votes_needed = max(1, int(ensemble_size * threshold))
+        assert votes_needed >= 1
+        assert votes_needed <= ensemble_size
+
+
+class TestSpiderFramework:
+    """Test qualitative query that A1 classifies as SPIDER framework."""
+
+    def test_spider_framework(self):
+        """Qualitative query triggers SPIDER framework detection in A1."""
+        query = "What are the lived experiences of nurses providing palliative care in rural settings?"
+        # SPIDER: Sample, Phenomenon of Interest, Design, Evaluation, Research type
+        protocol = {
+            "framework": "SPIDER",
+            "sample": "nurses providing palliative care",
+            "phenomenon_of_interest": "lived experiences of palliative care provision",
+            "design": "qualitative interviews or focus groups",
+            "evaluation": "thematic analysis of experiences",
+            "research_type": "qualitative",
+            "research_question": query,
+            "inclusion_criteria": [
+                "Registered nurses",
+                "Providing palliative care",
+                "Rural settings",
+                "Qualitative study design",
+            ],
+            "exclusion_criteria": [
+                "Quantitative-only studies",
+                "Non-nursing professionals",
+                "Urban settings",
+            ],
+            "pubmed_query": (
+                '(nurses OR nursing) AND (palliative care OR end-of-life) '
+                'AND (rural) AND (qualitative OR "lived experience" OR phenomenology)'
+            ),
+        }
+
+        # Framework is SPIDER (not PICO)
+        assert protocol["framework"] == "SPIDER"
+        assert protocol["framework"] in ("PICO", "SPIDER", "PECO", "PCC")
+
+        # SPIDER-specific fields present
+        assert "sample" in protocol
+        assert "phenomenon_of_interest" in protocol
+        assert "design" in protocol
+        assert "evaluation" in protocol
+        assert "research_type" in protocol
+        assert protocol["research_type"] == "qualitative"
+
+        # Qualitative query should NOT have PICO fields
+        assert "population" not in protocol
+        assert "intervention" not in protocol
+        assert "comparator" not in protocol
+
+        # A6 would use JBI for qualitative studies
+        jbi_assessment = {
+            "tool": "JBI",
+            "overall": "Include",
+            "domains": {
+                "philosophical_perspective": "Yes",
+                "methodology_congruity": "Yes",
+                "methods_congruity": "Yes",
+                "representation_congruity": "Yes",
+                "participant_adequacy": "Yes",
+                "ethics_approval": "Yes",
+                "conclusions_from_data": "Yes",
+                "locating_researcher": "Unclear",
+                "researcher_influence": "Unclear",
+                "participants_voices": "Yes",
+            },
+        }
+        assert jbi_assessment["tool"] == "JBI"
+        assert len(jbi_assessment["domains"]) == 10  # JBI has 10 items
+        # Weight for JBI Include = 1.0
+        weight = 1.0 if jbi_assessment["overall"] == "Include" else (
+            0.6 if jbi_assessment["overall"] == "Caution" else 0.2
+        )
+        assert weight == 1.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -4,7 +4,7 @@ Mide: %INCLUDE, %UNCERTAIN, s/paper, estabilidad (std entre runs) vs ensemble_si
 Justifica el hiperparámetro ensemble_size=3.
 Requiere: outputs/pipeline_a1_a2_a3.json o pipeline_a1_a2_a3_a4.json
 """
-import sys, json, gc, statistics, torch
+import sys, json, gc, statistics, torch, argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -57,11 +57,42 @@ def stats_from_results(results: dict) -> dict:
     }
 
 
-def run():
+def run(dry_run=False):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("\n[Exp 3] Ensemble Size Ablation")
     print("=" * 55)
+
+    if dry_run:
+        print("  [DRY RUN] Generating mock results...")
+        experiment_results = []
+        for size in ENSEMBLE_SIZES:
+            experiment_results.append({
+                "ensemble_size": size,
+                "mean_include_pct": 30.0,
+                "mean_uncertain_pct": 10.0,
+                "mean_s_per_paper": size * 2.0,
+                "stability_std_include": 5.0 / size,
+                "stability_std_uncertain": 3.0 / size,
+                "runs": [],
+            })
+        output = {
+            "experiment": "exp3_ensemble_ablation",
+            "pubmed_query": "mock",
+            "framework": "PICO",
+            "n_papers": 0,
+            "ensemble_sizes": ENSEMBLE_SIZES,
+            "n_runs": N_RUNS,
+            "results": experiment_results,
+        }
+        latex = generate_latex_table(output)
+        output["latex_table"] = latex
+        print(latex)
+        out_path = RESULTS_DIR / "exp3_results.json"
+        with open(out_path, "w") as f:
+            json.dump(output, f, indent=2)
+        print(f"\n  Results -> {out_path}")
+        return output
 
     pipeline_path = find_pipeline_output()
     if not pipeline_path:
@@ -137,6 +168,11 @@ def run():
         "n_runs": N_RUNS,
         "results": experiment_results,
     }
+
+    latex = generate_latex_table(output)
+    output["latex_table"] = latex
+    print(f"\n  LaTeX table:\n{latex}")
+
     out_path = RESULTS_DIR / "exp3_results.json"
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2)
@@ -144,5 +180,28 @@ def run():
     return output
 
 
+def generate_latex_table(results):
+    """Generate a LaTeX table from experiment results."""
+    lines = []
+    lines.append(r"\begin{table}[h]\centering")
+    lines.append(r"\begin{tabular}{rrrrr}\hline")
+    lines.append(r"Ensemble Size & \%INCLUDE & \%UNCERTAIN & s/paper & std(\%INC) \\")
+    lines.append(r"\hline")
+    for r in results.get("results", []):
+        lines.append(
+            f"{r['ensemble_size']} & {r['mean_include_pct']:.1f} & "
+            f"{r['mean_uncertain_pct']:.1f} & {r['mean_s_per_paper']:.2f} & "
+            f"{r['stability_std_include']:.2f} \\\\"
+        )
+    lines.append(r"\hline")
+    lines.append(r"\end{tabular}")
+    lines.append(r"\caption{Resultados Experimento 3 --- Ensemble Ablation}\label{tab:exp3}")
+    lines.append(r"\end{table}")
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Exp 3 - Ensemble Ablation")
+    parser.add_argument("--dry-run", action="store_true", help="Mock run without GPU")
+    args = parser.parse_args()
+    run(dry_run=args.dry_run)

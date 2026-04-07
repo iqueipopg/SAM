@@ -10,7 +10,12 @@ from typing import Dict, List, Optional, Any
 
 
 class ReviewReportGenerator:
-    """Generates a human review report flagging borderline/uncertain decisions."""
+    """Generates a human review report flagging borderline/uncertain decisions.
+
+    Input: full pipeline_data dict (output of A1-A7).
+    Output: dict with flagged items per stage, priority levels, and recommendations.
+    GPU: no -- purely analytical, no LLM calls.
+    """
 
     # Thresholds
     SCREENING_CONF_HIGH = 0.2    # below this = high priority
@@ -417,7 +422,7 @@ class ReviewReportGenerator:
             heterogeneity = analysis.get("heterogeneity", {})
             pub_bias = analysis.get("publication_bias", {})
             grade = analysis.get("grade", {})
-            sensitivity = analysis.get("sensitivity", {})
+            analysis.get("sensitivity", {})
             loo = analysis.get("leave_one_out", [])
 
             pooled = model.get("pooled_estimate")
@@ -456,7 +461,7 @@ class ReviewReportGenerator:
             grade_level = grade.get("final_level", "")
             if grade_level.lower() in ("very low", "very_low"):
                 flags_for_analysis.append(
-                    f"GRADE certainty: Very low"
+                    "GRADE certainty: Very low"
                 )
 
             # Flag prediction interval crossing null when CI doesn't

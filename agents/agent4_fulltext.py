@@ -54,6 +54,12 @@ _SKIP_SECTIONS = {
 
 
 class Agent4FullText(BaseAgent):
+    """Full-text retrieval (10-source cascade) and LLM-based full-text screening.
+
+    Input: list of included papers (from A3) and protocol (from A1).
+    Output: dict with 'include' and 'exclude' lists, each paper annotated with text_source.
+    GPU: yes -- uses LLM for full-text PRISMA screening (Phase B).
+    """
 
     def __init__(
         self,
@@ -144,7 +150,7 @@ class Agent4FullText(BaseAgent):
         a2_papers: List[Dict],
     ) -> List[Dict]:
         """Enrich included papers with full text from PMC / Unpaywall / abstract."""
-        print(f"\n--- Phase A: Full-Text Retrieval ---")
+        print("\n--- Phase A: Full-Text Retrieval ---")
 
         # Build lookup: pmid → a2 paper (has abstract, authors, etc.)
         a2_lookup = {str(p.get("pmid", "")): p for p in a2_papers}
@@ -224,7 +230,7 @@ class Agent4FullText(BaseAgent):
     def _retrieve_single(self, paper: Dict, stats: Dict):
         """Try PMC → Unpaywall → abstract fallback for a single paper."""
         pmid = paper["pmid"]
-        title_short = paper["title"][:60]
+        paper["title"][:60]
 
         # 1. Try PMC full-text XML
         pmcid = paper.get("pmcid", "")
@@ -1488,7 +1494,7 @@ class Agent4FullText(BaseAgent):
 
     def screen_fulltext(self, papers: List[Dict], protocol: Dict) -> Dict:
         """Screen papers using full text + LLM. Returns include/exclude lists + stats."""
-        print(f"\n--- Phase B: Full-Text PRISMA Screening ---")
+        print("\n--- Phase B: Full-Text PRISMA Screening ---")
         print(f"  Ensemble size: {self.ensemble_size}")
         if len(self.model_paths) > 1:
             print(f"  Multi-model: {len(self.model_paths)} models")
@@ -1517,7 +1523,7 @@ class Agent4FullText(BaseAgent):
             paper["borderline"] = result["borderline"]
 
             icon = {"INCLUDE": "✅", "EXCLUDE": "❌"}[result["decision"]]
-            vote_summary = [v["decision"] for v in result["votes"]]
+            [v["decision"] for v in result["votes"]]
             print(
                 f"    -> {icon} {result['decision']}"
                 f" | screen_conf: {result['screening_confidence']}"
@@ -1666,7 +1672,7 @@ class Agent4FullText(BaseAgent):
         # Build framework-specific focus rules and decision criteria
         if framework == "PECO":
             intv = protocol.get("exposure", protocol.get("intervention", ""))
-            comparator = protocol.get("comparator", "")
+            protocol.get("comparator", "")
             focus_rule = (
                 f'CRITICAL RULE — PRIMARY EXPOSURE:\n'
                 f'The paper must study "{intv}" as its PRIMARY exposure in "{pop}" with '
@@ -1742,7 +1748,7 @@ class Agent4FullText(BaseAgent):
         else:
             # PICO (default) — intervention/treatment studies
             intv = protocol.get("intervention", "")
-            comparator = protocol.get("comparator", "")
+            protocol.get("comparator", "")
             focus_rule = (
                 f'SCREENING FOCUS:\n'
                 f'The paper must use "{intv}" as one of its main interventions or treatments.\n'
@@ -2027,7 +2033,7 @@ Respond ONLY with valid JSON:
         print(f"    CORE            : {s.get('core_fulltext', 0)}")
         print(f"    Sci-Hub PDF     : {s.get('scihub_pdf', 0)}")
         print(f"    Abstract only   : {s['abstract_only']}")
-        print(f"  Full-text screening:")
+        print("  Full-text screening:")
         print(f"    INCLUDE        : {s['fulltext_included']}")
         print(f"    EXCLUDE        : {s['fulltext_excluded']}")
         print(f"  Total time       : {s.get('elapsed_s', 0)}s")

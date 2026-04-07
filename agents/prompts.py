@@ -1,5 +1,7 @@
 """Prompts Agent 1 - ENGLISH VERSION (Qwen funciona mejor en inglés)"""
 
+# Used by A1 (agent1_protocol.py). Temperature: 0.2.
+# Single-shot JSON generation prompt kept minimal to reduce hallucination in framework selection.
 AGENT1_PROMPT_ENGLISH = """You are a Cochrane expert. Generate protocol JSON.
 
 FRAMEWORKS:
@@ -40,7 +42,8 @@ TEMPERATURE_CONFIG = {
     "agent8_manuscript": 0.7,
 }
 
-# Otros agentes (sin cambios)
+# Used by A3 (agent3_screening.py) as a fallback template. Temperature: 0.2.
+# Structured with explicit decision rules so ensemble votes are consistent across runs.
 AGENT3_SCREENING_TEMPLATE = """Cochrane screening expert. Evaluate if this paper meets criteria.
 
 INCLUSION CRITERIA:
@@ -62,11 +65,15 @@ Respond ONLY with valid JSON:
 {{"vote": "INCLUDE or EXCLUDE or UNCERTAIN", "reasoning": "one sentence"}}"""
 
 
+# Used by A5 (agent5_extraction.py) as a lightweight extraction fallback. Temperature: 0.1.
+# Minimal prompt for quick extraction; the main prompts are AGENT5_OUTCOMES_TEMPLATE below.
 AGENT5_EXTRACTION_TEMPLATE = """Extract data with source_page.
 Results: {results_text}
 JSON: {{"outcomes": [...], "flags": [...]}}
 """
 
+# Used by A5 (agent5_extraction.py) for outcome extraction. Temperature: 0.1.
+# Heavily structured with field definitions and examples to maximize numeric accuracy from tables.
 AGENT5_OUTCOMES_TEMPLATE = """You are a systematic review data extractor specializing in NUMERIC effect sizes for meta-analysis. Extract numerical outcomes from this paper's results.
 
 PAPER TITLE: {title}
@@ -113,6 +120,8 @@ EXAMPLE 2 (multi-arm, table data):
 
 Respond ONLY with a valid JSON array:"""
 
+# Used by A5 (agent5_extraction.py) as a 4th-pass recovery for missing effect sizes. Temperature: 0.1.
+# Pattern-matching hints (d=, OR=, etc.) guide the LLM to find numbers missed by the main prompt.
 AGENT5_NUMERIC_RECOVERY_TEMPLATE = """You are a numeric data extraction specialist. A previous extraction attempt missed numeric effect sizes from this paper. Focus ONLY on extracting numbers.
 
 PAPER TITLE: {title}
@@ -150,6 +159,8 @@ Look for these patterns in the text:
 
 Respond ONLY with a valid JSON array (even if only one outcome):"""
 
+# Used by A6 (agent6_quality.py) for RCT quality assessment. Temperature: 0.2.
+# Each domain has explicit Low/Some concerns/High criteria so the LLM produces calibrated judgments.
 AGENT6_ROB2_TEMPLATE = """You are a Cochrane methodologist performing Risk of Bias 2.0 (RoB 2) assessment for a randomized controlled trial.
 
 STUDY TITLE: {title}
@@ -199,6 +210,8 @@ Respond ONLY with valid JSON:
 {{"randomization": {{"judgment": "Low|Some concerns|High", "justification": "..."}}, "deviations": {{"judgment": "...", "justification": "..."}}, "missing_data": {{"judgment": "...", "justification": "..."}}, "measurement": {{"judgment": "...", "justification": "..."}}, "selection": {{"judgment": "...", "justification": "..."}}, "overall": "Low|Some concerns|High", "overall_justification": "one sentence summary"}}"""
 
 
+# Used by A6 (agent6_quality.py) for observational study quality assessment. Temperature: 0.2.
+# 7 domains with 5-level scale; worst-case rule applied for overall judgment to stay conservative.
 AGENT6_ROBINS_I_TEMPLATE = """You are a Cochrane methodologist performing ROBINS-I (Risk Of Bias In Non-randomised Studies of Interventions) assessment for an observational study.
 
 STUDY TITLE: {title}
@@ -274,6 +287,8 @@ Respond ONLY with valid JSON:
 {{"confounding": {{"judgment": "Low|Moderate|Serious|Critical|No information", "justification": "..."}}, "selection_of_participants": {{"judgment": "...", "justification": "..."}}, "classification_of_interventions": {{"judgment": "...", "justification": "..."}}, "deviations_from_interventions": {{"judgment": "...", "justification": "..."}}, "missing_data": {{"judgment": "...", "justification": "..."}}, "measurement_of_outcomes": {{"judgment": "...", "justification": "..."}}, "selection_of_results": {{"judgment": "...", "justification": "..."}}, "overall": "Low|Moderate|Serious|Critical|No information", "overall_justification": "one sentence summary"}}"""
 
 
+# Used by A6 (agent6_quality.py) for qualitative study quality assessment. Temperature: 0.2.
+# 10-item checklist with Yes/No/Unclear answers; threshold-based overall to reduce subjective bias.
 AGENT6_JBI_TEMPLATE = """You are a Cochrane methodologist performing JBI Critical Appraisal for a qualitative research study.
 
 STUDY TITLE: {title}
@@ -310,6 +325,8 @@ Respond ONLY with valid JSON:
 {{"philosophical_perspective": {{"answer": "Yes|No|Unclear|Not applicable", "justification": "..."}}, "methodology_question": {{"answer": "...", "justification": "..."}}, "methodology_methods": {{"answer": "...", "justification": "..."}}, "methodology_analysis": {{"answer": "...", "justification": "..."}}, "methodology_interpretation": {{"answer": "...", "justification": "..."}}, "researcher_positioning": {{"answer": "...", "justification": "..."}}, "researcher_influence": {{"answer": "...", "justification": "..."}}, "participant_voices": {{"answer": "...", "justification": "..."}}, "ethics": {{"answer": "...", "justification": "..."}}, "conclusions": {{"answer": "...", "justification": "..."}}, "yes_count": 0, "overall": "Include|Include with caution|Exclude", "overall_justification": "one sentence summary"}}"""
 
 
+# Used by A6 (agent6_quality.py) as LLM fallback for study design detection. Temperature: 0.2.
+# Simple 3-class classification so A6 can route to the correct assessment tool.
 AGENT6_DESIGN_DETECT_TEMPLATE = """You are a research methods expert. Determine the study design of this paper.
 
 TITLE: {title}
@@ -411,8 +428,10 @@ def format_agent5_prompt(results_text):
 # AGENT 8 — MANUSCRIPT GENERATION WITH RAG
 # ══════════════════════════════════════════════════════════════════════════════
 
-# These prompts are DATA-DRIVEN: the caller pre-injects actual numbers, study
-# lists, and synthesis results so the LLM only needs to write connecting prose.
+# Used by A8 (agent8_manuscript.py) for section-by-section manuscript generation.
+# Temperature: 0.3 (factual sections) to 0.6 (narrative sections).
+# Data-driven design: the caller pre-injects actual numbers, study lists, and
+# synthesis results so the LLM only needs to write connecting prose -- not fabricate.
 # Placeholders filled by get_a8_section_prompt():
 #   {protocol_summary}, {synthesis_summary}, {quality_summary}, {n_studies},
 #   {rag_context}, {prisma_text}, {study_list_text}, {methods_data_block}

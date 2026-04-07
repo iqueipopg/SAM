@@ -14,7 +14,7 @@ No LLM — pure computation. Uses R's metafor package for:
 Requires: R with metafor installed, rpy2 Python package.
 """
 
-import os, time, math, re
+import os, time, math, re, logging
 from typing import Dict, List, Optional, Tuple
 
 from agents.effect_converters import (
@@ -114,9 +114,16 @@ OUTCOME_CATEGORIES = {
 
 
 class Agent7Synthesis:
-    """Statistical meta-analysis engine — no LLM, uses R/metafor."""
+    """Statistical meta-analysis engine using R/metafor via rpy2.
+
+    Input: extraction data (from A5) and quality data (from A6).
+    Output: dict with 'analyses' (pooled estimates, heterogeneity, publication bias,
+            sensitivity, GRADE per outcome group) and 'plots' (forest/funnel PNGs).
+    GPU: no -- pure R computation, no LLM involved.
+    """
 
     def __init__(self, config: Optional[Dict] = None):
+        self.logger = logging.getLogger(__name__)
         self.r = None
         self.metafor = None
         self._r_initialized = False
@@ -156,6 +163,7 @@ class Agent7Synthesis:
         # Prepare data grouped by measure type
         groups = self._prepare_data(papers)
         if not groups:
+            self.logger.warning("A7: No numeric effect sizes from A5. Meta-analysis skipped. Check A5 numeric_recovery_pass.")
             print("  WARNING: No usable outcome data found in any paper. Check A5 extraction results.")
             return self._empty_result(papers)
 
@@ -1471,7 +1479,7 @@ class Agent7Synthesis:
             k = len(data["yi"])
             cat_to_idx = {c: i for i, c in enumerate(unique_cats)}
             # Build R formula via numeric coding
-            mod_vals = [cat_to_idx[categories[i]] for i in range(k)]
+            [cat_to_idx[categories[i]] for i in range(k)]
 
             yi_r = self.FloatVector(data["yi"])
             vi_r = self.FloatVector(data["vi"])
@@ -1723,7 +1731,7 @@ class Agent7Synthesis:
         designs = data.get("study_designs", [])
         rct_pct = sum(1 for d in designs if d == "rct") / max(len(designs), 1) if designs else 0
         weights = data.get("quality_weights", [])
-        avg_weight = sum(weights) / len(weights) if weights else 0.5
+        sum(weights) / len(weights) if weights else 0.5
 
         # If majority RCTs, start High; otherwise Low
         if rct_pct > 0.5:
@@ -1962,11 +1970,9 @@ class Agent7Synthesis:
         if pooled < 0:
             direction = "lower"
             abs_val = abs(pooled)
-            harm_or_benefit = "lower"
         else:
             direction = "higher"
             abs_val = abs(pooled)
-            harm_or_benefit = "higher"
 
         ci_direction_l = "lower" if ci_l < 0 else "higher"
         ci_direction_u = "lower" if ci_u < 0 else "higher"

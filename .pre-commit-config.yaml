@@ -1,0 +1,17 @@
+exclude: '^(venv/|models/)'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-ast
+        name: check python syntax (py_compile)
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.4
+    hooks:
+      - id: ruff
+        name: ruff linter
+      - id: ruff-format
+        name: ruff formatter check
+        args: [--check]

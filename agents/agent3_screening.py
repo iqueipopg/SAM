@@ -10,6 +10,12 @@ from typing import List, Dict
 
 
 class Agent3Screening(BaseAgent):
+    """Title/abstract screening with ensemble voting.
+
+    Input: list of papers (from A2) and protocol (from A1).
+    Output: dict with 'include', 'exclude', 'uncertain' lists and 'stats'.
+    GPU: yes -- runs N LLM votes per paper for majority-rule decisions.
+    """
 
     def __init__(
         self,
@@ -38,7 +44,7 @@ class Agent3Screening(BaseAgent):
         results = {"include": [], "exclude": [], "uncertain": [], "stats": {}}
 
         print(f"\n{'='*60}")
-        print(f"AGENT 3 - SCREENING TÍTULO/ABSTRACT")
+        print("AGENT 3 - SCREENING TÍTULO/ABSTRACT")
         print(f"{'='*60}")
         print(f"📋 Papers a evaluar : {len(papers)}")
         print(f"⚙️  Ensemble size    : {self.ensemble_size}")
@@ -522,7 +528,7 @@ Respond ONLY with valid JSON:
 
     def _print_summary(self, stats: Dict):
         print(f"\n{'='*60}")
-        print(f"📊 RESUMEN SCREENING")
+        print("📊 RESUMEN SCREENING")
         print(f"{'='*60}")
         print(f"   Total evaluados : {stats['total']}")
         print(f"   ✅ INCLUDE       : {stats['included']}")
@@ -655,7 +661,7 @@ if __name__ == "__main__":
     sensitivity = agent.analyze_voting_sensitivity(results)
     print(f"  Fleiss' kappa: {sensitivity['fleiss_kappa']} ({sensitivity['interpretation']})")
     print(f"  Borderline papers: {sensitivity['borderline_count']}")
-    print(f"\n  Threshold sensitivity:")
+    print("\n  Threshold sensitivity:")
     for t_str, info in sensitivity["threshold_sensitivity"].items():
         marker = " <-- current" if float(t_str) == sensitivity["current_threshold"] else ""
         print(f"    {t_str}: INCLUDE={info['included']}, EXCLUDE={info['excluded']}, UNCERTAIN={info['uncertain']}{marker}")

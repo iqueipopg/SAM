@@ -4,7 +4,7 @@ Mide: Cuántos falsos positivos elimina A4 que A3 dejó pasar.
 Compara pipeline con A4 vs sin A4 (solo T/A screening).
 Usa el gold standard de Exp 2 + papers que A3 incluye incorrectamente.
 """
-import sys, json, gc, time, torch
+import sys, json, gc, time, torch, argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -104,12 +104,35 @@ def compute_metrics(tp, fp, fn, tn):
     }
 
 
-def run():
+def run(dry_run=False):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("\n[Exp 6] Full-text Screening Impact")
     print("=" * 55)
     print(f"  Gold: {len(GOLD_INCLUDE)} INCLUDE + {len(GOLD_EXCLUDE)} EXCLUDE")
+
+    if dry_run:
+        print("  [DRY RUN] Generating mock results...")
+        metrics_a3 = {"tp": 7, "fp": 2, "fn": 1, "tn": 8, "accuracy": 0.8333,
+                      "sensitivity": 0.875, "specificity": 0.8, "precision": 0.7778, "f1": 0.8235}
+        metrics_a3a4 = {"tp": 7, "fp": 0, "fn": 1, "tn": 10, "accuracy": 0.9444,
+                        "sensitivity": 0.875, "specificity": 1.0, "precision": 1.0, "f1": 0.9333}
+        output = {
+            "experiment": "exp6_fulltext_impact",
+            "n_papers": len(GOLD_LABELS),
+            "a3_only": metrics_a3,
+            "a3_plus_a4": metrics_a3a4,
+            "impact": {"fp_reduced": 2, "fn_added": 0, "specificity_delta": 0.2, "f1_delta": 0.1098},
+            "a3_rows": [], "a4_rows": [],
+        }
+        latex = generate_latex_table(output)
+        output["latex_table"] = latex
+        print(latex)
+        out_path = RESULTS_DIR / "exp6_results.json"
+        with open(out_path, "w") as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
+        print(f"\n  Results -> {out_path}")
+        return output
 
     # Fetch papers
     print("  Fetching papers...")
@@ -189,7 +212,7 @@ def run():
     fp_reduced = fp_a3 - metrics_a3a4.get("fp", fp_a3)
     fn_added = metrics_a3a4.get("fn", fn_a3) - fn_a3
 
-    print(f"\n  Impact of A4:")
+    print("\n  Impact of A4:")
     print(f"    False positives reduced : {fp_a3} -> {metrics_a3a4.get('fp', fp_a3)} ({fp_reduced} eliminated)")
     print(f"    False negatives added   : {fn_a3} -> {metrics_a3a4.get('fn', fn_a3)} ({fn_added} new)")
     print(f"    Specificity improvement : {metrics_a3['specificity']:.1%} -> {metrics_a3a4['specificity']:.1%}")
@@ -209,6 +232,11 @@ def run():
         "a3_rows": a3_rows,
         "a4_rows": a4_rows,
     }
+
+    latex = generate_latex_table(output)
+    output["latex_table"] = latex
+    print(f"\n  LaTeX table:\n{latex}")
+
     out_path = RESULTS_DIR / "exp6_results.json"
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
@@ -216,5 +244,34 @@ def run():
     return output
 
 
+def generate_latex_table(results):
+    """Generate a LaTeX table from experiment results."""
+    lines = []
+    lines.append(r"\begin{table}[h]\centering")
+    lines.append(r"\begin{tabular}{lrrrrrr}\hline")
+    lines.append(r"Pipeline & Sensitivity & Specificity & Precision & F1 & FP & FN \\")
+    lines.append(r"\hline")
+    for label, key in [("A3 only", "a3_only"), ("A3 + A4", "a3_plus_a4")]:
+        m = results.get(key, {})
+        lines.append(
+            f"{label} & {m.get('sensitivity', 0):.4f} & {m.get('specificity', 0):.4f} & "
+            f"{m.get('precision', 0):.4f} & {m.get('f1', 0):.4f} & "
+            f"{m.get('fp', 0)} & {m.get('fn', 0)} \\\\"
+        )
+    lines.append(r"\hline")
+    impact = results.get("impact", {})
+    lines.append(f"$\\Delta$ & -- & {impact.get('specificity_delta', 0):+.4f} & "
+                 f"-- & {impact.get('f1_delta', 0):+.4f} & "
+                 f"{impact.get('fp_reduced', 0):+d} & {impact.get('fn_added', 0):+d} \\\\")
+    lines.append(r"\hline")
+    lines.append(r"\end{tabular}")
+    lines.append(r"\caption{Resultados Experimento 6 --- Full-text Impact}\label{tab:exp6}")
+    lines.append(r"\end{table}")
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Exp 6 - Full-text Impact")
+    parser.add_argument("--dry-run", action="store_true", help="Mock run without GPU")
+    args = parser.parse_args()
+    run(dry_run=args.dry_run)

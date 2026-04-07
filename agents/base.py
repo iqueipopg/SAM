@@ -3,6 +3,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from agents.logger import get_logger
 
 class BaseAgent:
+    """Base class for all LLM-powered pipeline agents.
+
+    Input: agent_name (str) used to look up model path in config.yaml.
+    Output: provides load_model(), generate(), free_vram() to subclasses.
+    GPU: yes -- loads a quantized causal LM into VRAM.
+    """
+
     def __init__(self, agent_name):
         try:
             with open("config.yaml") as _f:
@@ -13,6 +20,41 @@ class BaseAgent:
             raise ValueError(f"config.yaml has invalid YAML syntax: {e}")
         self.agent_name = agent_name
         self.logger = get_logger(self.__class__.__name__)
+
+        # Determine backend: "local" (default) or "groq"
+        groq_cfg = self.config.get("groq", {})
+        self._backend = groq_cfg.get("provider", "local")
+        self._groq_provider = None
+
+        if self._backend == "groq":
+            # Cloud backend — no local model needed
+            from agents.groq_adapter import GroqProvider
+            self._groq_provider = GroqProvider(self.config)
+            self.logger.info(
+                "%s: using Groq cloud backend (model=%s)",
+                agent_name, groq_cfg.get("model", "llama-3.3-70b-versatile"),
+            )
+            # Set minimal attributes so subclasses don't break
+            model_cfg = self.config.get('models', {}).get(agent_name, "groq-cloud")
+            if isinstance(model_cfg, list):
+                self.model_paths = model_cfg
+                self.model_path = model_cfg[0]
+            else:
+                self.model_paths = [model_cfg]
+                self.model_path = model_cfg
+            self.device = "cloud"
+            self.quantization = "none"
+            gen_cfg = self.config.get('generation', {})
+            self.do_sample = gen_cfg.get('do_sample', True)
+            self.top_p = gen_cfg.get('top_p', 0.9)
+            self.repetition_penalty = gen_cfg.get('repetition_penalty', 1.3)
+            self.model = None
+            self.tokenizer = None
+            self._loaded_path = None
+            self._has_chat_template = None
+            return
+
+        # Local backend — original behaviour
         if agent_name not in self.config.get('models', {}):
             raise KeyError(f"Model key '{agent_name}' not found in config.yaml 'models' section")
         model_cfg = self.config['models'][agent_name]
@@ -35,6 +77,9 @@ class BaseAgent:
         self._has_chat_template = None
 
     def load_model(self, model_path=None):
+        if self._backend == "groq":
+            # Cloud backend — no local model to load
+            return
         path = model_path or self.model_path
         if self._loaded_path == path and self.model is not None:
             return
@@ -58,30 +103,44 @@ class BaseAgent:
             trust_remote_code=True
         )
 
-        try:
-            self.model = AutoModelForCausalLM.from_pretrained(
-                path,
-                quantization_config=quant_config,
-                device_map=self.device,
-                trust_remote_code=True,
-                torch_dtype=torch.float16
-            )
-        except AttributeError as e:
-            if "max_length" in str(e):
-                self.logger.warning("GLM-4 config issue (max_length), applying fix...")
-                from transformers import AutoConfig
-                config = AutoConfig.from_pretrained(path, trust_remote_code=True)
-                config.max_length = config.seq_length
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    path,
-                    config=config,
-                    quantization_config=quant_config,
-                    device_map=self.device,
-                    trust_remote_code=True,
-                    torch_dtype=torch.float16
+        load_kwargs = dict(
+            quantization_config=quant_config,
+            device_map=self.device,
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
+        )
+
+        for attempt in range(3):
+            try:
+                self.model = AutoModelForCausalLM.from_pretrained(path, **load_kwargs)
+                break
+            except AttributeError as e:
+                if "max_length" in str(e):
+                    self.logger.warning("GLM-4 config issue (max_length), applying fix...")
+                    from transformers import AutoConfig
+                    config = AutoConfig.from_pretrained(path, trust_remote_code=True)
+                    config.max_length = config.seq_length
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        path, config=config, **load_kwargs
+                    )
+                    break
+                else:
+                    raise
+            except (BrokenPipeError, OSError) as e:
+                self.logger.warning(
+                    "load_model attempt %d/3 failed: %s. Clearing CUDA and retrying...",
+                    attempt + 1, e,
                 )
-            else:
-                raise
+                import gc
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                if attempt == 2:
+                    raise RuntimeError(
+                        f"Failed to load model after 3 attempts: {e}. "
+                        "Try restarting Streamlit to reset CUDA context."
+                    ) from e
 
         # Detect chat template support
         self._has_chat_template = (
@@ -97,6 +156,9 @@ class BaseAgent:
         self.logger.info("%s loaded on %s", self.agent_name, self.device)
 
     def free_vram(self):
+        if self._backend == "groq":
+            # Cloud backend — no VRAM to free
+            return
         if self.model is not None:
             del self.model
             self.model = None
@@ -139,6 +201,8 @@ class BaseAgent:
         return self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
     def generate(self, prompt, max_new_tokens=512, temperature=0.7):
+        if self._backend == "groq":
+            return self._groq_provider.generate(prompt, max_new_tokens, temperature)
         inputs = self._tokenize_prompt(prompt)
         input_length = inputs["input_ids"].shape[1]
         gen_kwargs = dict(

@@ -55,6 +55,10 @@ def _find_numeric_dense_region(text: str, max_chars: int) -> str:
         r'|SD\s*[:=]\s*[\d.]+'    # standard deviations
         r'|SE\s*[:=]\s*[\d.]+'    # standard errors
         r'|\(\s*\d+\.?\d*\s*[,;]\s*\d+\.?\d*\s*\)'  # (lower, upper)
+        r'|[tT]\(\d+\)\s*=\s*[−-]?\d+\.?\d*'         # t-test: t(14)=2.3
+        r'|[Ff]\(\d+\s*,\s*\d+\)\s*=\s*\d+\.?\d*'    # F-test: F(1,48)=5.67
+        r'|[Bb]eta\s*=\s*[−-]?\d+\.?\d*'              # beta coefficient: beta=0.34
+        r'|\[\s*[−-]?\d+\.?\d*\s*,\s*[−-]?\d+\.?\d*\s*\]'  # bracket CI: [0.12, 0.78]
         r')',
         re.IGNORECASE,
     )
@@ -74,6 +78,12 @@ def _find_numeric_dense_region(text: str, max_chars: int) -> str:
 
 
 class Agent5Extraction(BaseAgent):
+    """Structured data extraction using 3 focused prompts per paper.
+
+    Input: list of included papers (from A4) with full text, and protocol (from A1).
+    Output: dict with 'papers' list, each containing study_characteristics, intervention, and outcomes.
+    GPU: yes -- uses LLM for extraction prompts and optional numeric recovery pass.
+    """
 
     def __init__(self):
         super().__init__("agent5_extraction")
@@ -144,7 +154,7 @@ class Agent5Extraction(BaseAgent):
                     recovered = self._numeric_recovery_pass(paper, protocol)
                     if recovered:
                         recovered = [self._extract_numeric_fields(o) for o in recovered]
-                        any_recovered_complete = any(
+                        any(
                             o.get("numeric_complete") for o in recovered
                         )
                         n_new_complete = sum(1 for o in recovered if o.get("numeric_complete"))
@@ -165,13 +175,13 @@ class Agent5Extraction(BaseAgent):
                             n_numeric_recovered += 1
                             print(f"    [numeric recovery] SUCCESS — improved {n_complete_before}→{n_new_complete} complete outcomes")
                         else:
-                            print(f"    [numeric recovery] no improvement")
+                            print("    [numeric recovery] no improvement")
 
                         if n_numeric_recovered > 0 and "sections_used" in extracted:
                             if "recovery" not in extracted["sections_used"]:
                                 extracted["sections_used"].append("recovery")
                     else:
-                        print(f"    [numeric recovery] no results")
+                        print("    [numeric recovery] no results")
 
                 # --- Final numeric completeness count ---
                 if any(o.get("numeric_complete") for o in extracted.get("outcomes", [])):
@@ -182,13 +192,13 @@ class Agent5Extraction(BaseAgent):
                 q = extracted["extraction_quality"]
                 if q == "complete":
                     n_complete += 1
-                    print(f"    -> complete extraction")
+                    print("    -> complete extraction")
                 elif q == "partial":
                     n_partial += 1
-                    print(f"    -> partial extraction")
+                    print("    -> partial extraction")
                 else:
                     n_failed += 1
-                    print(f"    -> failed extraction")
+                    print("    -> failed extraction")
 
                 conf = extracted.get("extraction_confidence", "")
                 if conf == "high":
@@ -261,19 +271,19 @@ class Agent5Extraction(BaseAgent):
             return result
 
         # --- Adaptive dual extraction ---
-        print(f"    [pass 1] temperature=0.1")
+        print("    [pass 1] temperature=0.1")
         result_a = self._extract_once(paper, protocol, temperature=0.1)
 
         # Evaluate pass 1 confidence heuristically
         needs_pass2 = self._needs_second_pass(result_a, paper)
 
         if not needs_pass2:
-            print(f"    [pass 2] SKIPPED — pass 1 confident enough")
+            print("    [pass 2] SKIPPED — pass 1 confident enough")
             result_a["extraction_confidence"] = "high"
             result_a["concordance"] = {"adaptive_skip": True, "reason": "pass1_confident"}
             return result_a
 
-        print(f"    [pass 2] temperature=0.3 (low confidence on pass 1)")
+        print("    [pass 2] temperature=0.3 (low confidence on pass 1)")
         result_b = self._extract_once(paper, protocol, temperature=0.3)
 
         final = self._reconcile(result_a, result_b, paper, protocol)
@@ -344,7 +354,6 @@ class Agent5Extraction(BaseAgent):
         # Determine quality
         has_chars = study_chars is not None
         has_outcomes = outcomes is not None and len(outcomes) > 0
-        has_intervention = intervention is not None
 
         if has_chars and has_outcomes:
             quality = "complete"
@@ -629,7 +638,7 @@ class Agent5Extraction(BaseAgent):
         if not methods_text:
             methods_text = self._get_section_text(paper, "full_text", max_chars=4000)
 
-        framework = protocol.get("framework", "PICO")
+        protocol.get("framework", "PICO")
 
         prompt = f"""You are a systematic review data extractor. Extract study characteristics from this paper's methods section.
 

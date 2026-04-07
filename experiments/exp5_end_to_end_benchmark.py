@@ -1,9 +1,10 @@
 """
-Exp 5 — End-to-End Pipeline Benchmark (A1→A2→A3→A4)
-Mide: PRISMA flow, retrieval rates, timing breakdown para MÚLTIPLES queries.
-Demuestra que el sistema generaliza a cualquier pregunta de investigación.
+Exp 5 — End-to-End Pipeline Benchmark (A1->A2->A3->A4)
+Mide: PRISMA flow, retrieval rates, timing breakdown para MULTIPLES queries.
+Demuestra que el sistema generaliza a cualquier pregunta de investigacion.
+Includes VRAM profiling per agent (torch.cuda.memory_allocated).
 """
-import sys, json, gc, time, torch
+import sys, json, gc, time, torch, argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -40,6 +41,13 @@ VOTE_THR = 0.60
 RESULTS_DIR = Path("experiments/results")
 
 
+def get_vram_mb():
+    """Return current GPU memory allocated in MB, or 0 if no GPU."""
+    if torch.cuda.is_available():
+        return round(torch.cuda.memory_allocated() / (1024 * 1024), 1)
+    return 0
+
+
 def free_vram(agent):
     if hasattr(agent, "model") and agent.model is not None:
         del agent.model
@@ -52,55 +60,74 @@ def free_vram(agent):
 
 
 def run_single_query(query_cfg):
-    """Run the full pipeline for one query, return metrics."""
+    """Run the full pipeline for one query, return metrics with VRAM profiling."""
     user_query = query_cfg["query"]
     print(f"\n  Query: {user_query}")
     timings = {}
+    vram_profile = {}
 
     # A1
+    vram_before = get_vram_mb()
     t0 = time.time()
     a1 = Agent1Protocol()
     protocol = a1.generate_protocol(user_query)
     pubmed_query = a1.generate_pubmed_query(user_query, protocol)
+    vram_peak = get_vram_mb()
     free_vram(a1)
+    vram_after = get_vram_mb()
     timings["a1_s"] = round(time.time() - t0, 1)
-    print(f"    A1: framework={protocol.get('framework', '?')}, query='{pubmed_query[:60]}'")
+    vram_profile["a1"] = {"vram_before_mb": vram_before, "vram_peak_mb": vram_peak, "vram_after_free_mb": vram_after}
+    print(f"    A1: framework={protocol.get('framework', '?')}, query='{pubmed_query[:60]}' "
+          f"[VRAM peak={vram_peak}MB]")
 
-    # A2
+    # A2 (CPU only)
+    vram_before = get_vram_mb()
     t0 = time.time()
     a2 = Agent2Search()
     papers = a2.search_pubmed(pubmed_query, max_results=MAX_RESULTS)
     papers = a2.deduplicate(papers, threshold=DEDUP_THR)
     timings["a2_s"] = round(time.time() - t0, 1)
+    vram_profile["a2"] = {"vram_before_mb": vram_before, "vram_peak_mb": get_vram_mb(), "vram_after_free_mb": get_vram_mb()}
     print(f"    A2: {len(papers)} papers")
 
     if not papers:
-        return {"query": user_query, "error": "0 papers from PubMed", "timings": timings}
+        return {"query": user_query, "error": "0 papers from PubMed", "timings": timings, "vram_profile": vram_profile}
 
     # A3
+    vram_before = get_vram_mb()
     t0 = time.time()
     a3 = Agent3Screening(ensemble_size=ENSEMBLE_A3, voting_threshold=VOTE_THR)
     a3_results = a3.screen_batch(papers, protocol)
+    vram_peak = get_vram_mb()
     free_vram(a3)
+    vram_after = get_vram_mb()
     timings["a3_s"] = round(time.time() - t0, 1)
+    vram_profile["a3"] = {"vram_before_mb": vram_before, "vram_peak_mb": vram_peak, "vram_after_free_mb": vram_after}
     s3 = a3_results["stats"]
-    print(f"    A3: INC={s3['included']} EXC={s3['excluded']} UNC={s3['uncertain']} ({s3['elapsed_s']}s)")
+    print(f"    A3: INC={s3['included']} EXC={s3['excluded']} UNC={s3['uncertain']} ({s3['elapsed_s']}s) "
+          f"[VRAM peak={vram_peak}MB]")
 
     # A4
     included = a3_results["include"]
     a4_stats = None
     if included:
+        vram_before = get_vram_mb()
         t0 = time.time()
         a4 = Agent4FullText(ensemble_size=ENSEMBLE_A4, voting_threshold=VOTE_THR)
         a4_result = a4.run(included, papers, protocol)
+        vram_peak = get_vram_mb()
         free_vram(a4)
+        vram_after = get_vram_mb()
         timings["a4_s"] = round(time.time() - t0, 1)
+        vram_profile["a4"] = {"vram_before_mb": vram_before, "vram_peak_mb": vram_peak, "vram_after_free_mb": vram_after}
         a4_stats = a4_result["stats"]
         print(f"    A4: INC={a4_stats['fulltext_included']} EXC={a4_stats['fulltext_excluded']} "
-              f"(PMC={a4_stats['pmc_fulltext']}, UPW={a4_stats['unpaywall_pdf']}, ABS={a4_stats['abstract_only']})")
+              f"(PMC={a4_stats['pmc_fulltext']}, UPW={a4_stats['unpaywall_pdf']}, ABS={a4_stats['abstract_only']}) "
+              f"[VRAM peak={vram_peak}MB]")
     else:
         timings["a4_s"] = 0
-        print(f"    A4: skipped (0 papers from A3)")
+        vram_profile["a4"] = {"vram_before_mb": 0, "vram_peak_mb": 0, "vram_after_free_mb": 0}
+        print("    A4: skipped (0 papers from A3)")
 
     total_time = sum(timings.values())
 
@@ -126,16 +153,89 @@ def run_single_query(query_cfg):
         },
         "timings": timings,
         "total_time_s": round(total_time, 1),
+        "vram_profile": vram_profile,
     }
 
 
-def run():
+def generate_latex_table(results):
+    """Generate a LaTeX table from experiment results."""
+    lines = []
+    lines.append(r"\begin{table}[h]\centering")
+    lines.append(r"\begin{tabular}{lllrrrr}\hline")
+    lines.append(r"Query & Domain & FW & Identified & Included & Time (s) & VRAM Peak (MB) \\")
+    lines.append(r"\hline")
+    for r in results.get("results", []):
+        if "error" in r:
+            q = r["query"][:30].replace("&", r"\&").replace("%", r"\%")
+            lines.append(f"{q} & -- & -- & \\multicolumn{{4}}{{c}}{{ERROR}} \\\\")
+            continue
+        q = r["query"][:30].replace("&", r"\&").replace("%", r"\%")
+        domain = r.get("domain", "")
+        fw = r.get("detected_framework", "?")
+        p = r["prisma"]
+        vp = r.get("vram_profile", {})
+        max_vram = max((v.get("vram_peak_mb", 0) for v in vp.values()), default=0)
+        lines.append(
+            f"{q} & {domain} & {fw} & {p['identified']} & "
+            f"{p['included_final']} & {r['total_time_s']} & {max_vram} \\\\"
+        )
+    lines.append(r"\hline")
+    lines.append(r"\end{tabular}")
+    lines.append(r"\caption{Resultados Experimento 5 --- End-to-End Benchmark}\label{tab:exp5}")
+    lines.append(r"\end{table}")
+    return "\n".join(lines)
+
+
+def run(dry_run=False):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("\n[Exp 5] End-to-End Pipeline Benchmark")
     print("=" * 55)
     print(f"  Queries: {len(BENCHMARK_QUERIES)}")
     print(f"  Config : max_results={MAX_RESULTS}, ensemble_a3={ENSEMBLE_A3}, ensemble_a4={ENSEMBLE_A4}")
+
+    if dry_run:
+        print("  [DRY RUN] Generating mock results...")
+        all_results = []
+        for cfg in BENCHMARK_QUERIES:
+            all_results.append({
+                "query": cfg["query"],
+                "domain": cfg["domain"],
+                "expected_framework": cfg["expected_framework"],
+                "detected_framework": cfg["expected_framework"],
+                "framework_correct": True,
+                "pubmed_query": "mock query",
+                "prisma": {
+                    "identified": 20, "excluded_ta": 10, "uncertain": 2,
+                    "assessed_fulltext": 8, "excluded_fulltext": 3, "included_final": 5,
+                },
+                "retrieval": {"pmc_fulltext": 3, "unpaywall_pdf": 1, "abstract_only": 4},
+                "timings": {"a1_s": 0, "a2_s": 0, "a3_s": 0, "a4_s": 0},
+                "total_time_s": 0,
+                "vram_profile": {
+                    "a1": {"vram_before_mb": 0, "vram_peak_mb": 0, "vram_after_free_mb": 0},
+                    "a2": {"vram_before_mb": 0, "vram_peak_mb": 0, "vram_after_free_mb": 0},
+                    "a3": {"vram_before_mb": 0, "vram_peak_mb": 0, "vram_after_free_mb": 0},
+                    "a4": {"vram_before_mb": 0, "vram_peak_mb": 0, "vram_after_free_mb": 0},
+                },
+            })
+        output = {
+            "experiment": "exp5_end_to_end_benchmark",
+            "config": {
+                "max_results": MAX_RESULTS, "dedup_threshold": DEDUP_THR,
+                "ensemble_a3": ENSEMBLE_A3, "ensemble_a4": ENSEMBLE_A4,
+            },
+            "n_queries": len(BENCHMARK_QUERIES),
+            "results": all_results,
+        }
+        latex = generate_latex_table(output)
+        output["latex_table"] = latex
+        print(latex)
+        out_path = RESULTS_DIR / "exp5_results.json"
+        with open(out_path, "w") as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
+        print(f"\n  Results -> {out_path}")
+        return output
 
     all_results = []
     for cfg in BENCHMARK_QUERIES:
@@ -168,6 +268,11 @@ def run():
         "n_queries": len(BENCHMARK_QUERIES),
         "results": all_results,
     }
+
+    latex = generate_latex_table(output)
+    output["latex_table"] = latex
+    print(f"\n  LaTeX table:\n{latex}")
+
     out_path = RESULTS_DIR / "exp5_results.json"
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
@@ -176,4 +281,7 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Exp 5 - End-to-End Benchmark")
+    parser.add_argument("--dry-run", action="store_true", help="Mock run without GPU")
+    args = parser.parse_args()
+    run(dry_run=args.dry_run)

@@ -1997,6 +1997,13 @@ def run_pipeline(query, resume_dir=None):
     """
     st.session_state.pipeline_running = True
     st.session_state.pipeline_stop_requested = False
+
+    # ── Force-clear any leftover VRAM before starting ──────────
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
     max_results = st.session_state.max_results
     dedup_threshold = st.session_state.dedup_threshold
     a3_ensemble = st.session_state.a3_ensemble
@@ -2038,6 +2045,10 @@ def run_pipeline(query, resume_dir=None):
     else:
         with st.status("A1: Generating protocol...", expanded=True) as s1:
             try:
+                # Force VRAM cleanup before loading model
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 a1 = Agent1Protocol()
                 protocol = a1.generate_protocol(query)
                 if protocol.get("_fallback"):
@@ -2068,8 +2079,11 @@ def run_pipeline(query, resume_dir=None):
                 save_checkpoint(run_dir, "a1_protocol", {"query": query, "protocol": protocol, "pubmed_query": pubmed_query})
                 s1.update(label="A1: Protocol \u2714", state="complete", expanded=False)
             except Exception as e:
+                import traceback
                 s1.update(label=f"A1: Failed \u2014 {e}", state="error", expanded=True)
                 st.error(f"Agent 1 failed: {e}")
+                st.code(traceback.format_exc(), language="text")
+                free_vram(a1 if 'a1' in dir() else None)
                 return None
 
     if _check_stop("A1: Protocol"):
