@@ -19,13 +19,14 @@ class Agent3Screening(BaseAgent):
 
     def __init__(
         self,
-        ensemble_size: int = 3,
-        voting_threshold: float = 0.60,
+        ensemble_size: int = None,
+        voting_threshold: float = None,
         aggregation_method: str = "majority",
     ):
         super().__init__("agent3_screening")
-        self.ensemble_size = ensemble_size  # Nº votaciones por paper
-        self.voting_threshold = voting_threshold  # % mínimo para decisión firme
+        scr_cfg = self.config.get("screening", {})
+        self.ensemble_size = ensemble_size if ensemble_size is not None else scr_cfg.get("ensemble_size", 3)
+        self.voting_threshold = voting_threshold if voting_threshold is not None else scr_cfg.get("voting_threshold", 0.60)
         self.aggregation_method = aggregation_method  # "majority" | "weighted"
 
     # ------------------------------------------------------------------ #

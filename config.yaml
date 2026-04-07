@@ -66,7 +66,7 @@ search:
 
 # ── A3: Title/Abstract Screening ──────────────────────────────────
 screening:
-  ensemble_size: 3
+  ensemble_size: 1
   voting_threshold: 0.60
   abstract_max_chars: 800
   temperature: 0.2
@@ -260,7 +260,7 @@ groq:
   agent_models:
     agent1_protocol: "llama-3.1-8b-instant"       # simple: framework detection
     agent2_search: "llama-3.1-8b-instant"          # CPU only, no LLM
-    agent3_screening: "llama-3.3-70b-versatile"    # critical: precision matters
+    agent3_screening: "llama-3.1-8b-instant"        # 8B to save tokens (1 vote, no ensemble)
     agent4_validation: "llama-3.1-8b-instant"      # simple: fulltext screening
     agent5_extraction: "llama-3.3-70b-versatile"   # critical: data extraction
     agent6_quality: "llama-3.3-70b-versatile"      # critical: RoB assessment
