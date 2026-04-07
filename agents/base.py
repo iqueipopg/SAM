@@ -200,8 +200,12 @@ class BaseAgent:
         new_tokens = outputs[0][input_length:]
         return self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
+    def _is_groq(self):
+        """Check if using Groq cloud backend."""
+        return self._backend == "groq"
+
     def generate(self, prompt, max_new_tokens=512, temperature=0.7):
-        if self._backend == "groq":
+        if self._is_groq():
             return self._groq_provider.generate(prompt, max_new_tokens, temperature)
         inputs = self._tokenize_prompt(prompt)
         input_length = inputs["input_ids"].shape[1]

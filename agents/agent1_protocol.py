@@ -969,6 +969,8 @@ PROSPERO (https://www.crd.york.ac.uk/prospero/).
     # ------------------------------------------------------------------ #
 
     def _simple_generate(self, prompt, max_tokens=300):
+        if self._is_groq():
+            return self.generate(prompt, max_new_tokens=max_tokens, temperature=0.3)
         inputs = self._tokenize_prompt(prompt)
         input_length = inputs["input_ids"].shape[1]
         with torch.no_grad():

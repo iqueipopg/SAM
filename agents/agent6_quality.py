@@ -426,6 +426,8 @@ class Agent6Quality(BaseAgent):
     # ================================================================== #
 
     def _simple_generate(self, prompt: str, max_tokens: int = 500) -> str:
+        if self._is_groq():
+            return self.generate(prompt, max_new_tokens=max_tokens, temperature=self.temperature)
         inputs = self._tokenize_prompt(prompt)
         input_length = inputs["input_ids"].shape[1]
         with torch.no_grad():

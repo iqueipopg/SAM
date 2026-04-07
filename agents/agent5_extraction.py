@@ -1078,6 +1078,8 @@ Respond ONLY with valid JSON:
 
     def _simple_generate(self, prompt: str, max_tokens: int = 300,
                          temperature: float = 0.1) -> str:
+        if self._is_groq():
+            return self.generate(prompt, max_new_tokens=max_tokens, temperature=temperature)
         inputs = self._tokenize_prompt(prompt)
         input_length = inputs["input_ids"].shape[1]
         with torch.no_grad():

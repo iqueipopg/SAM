@@ -1256,6 +1256,8 @@ class Agent8Manuscript(BaseAgent):
 
     def _simple_generate(self, prompt: str, max_tokens: int = 1500, temperature: float = 0.7) -> str:
         """Generate text, truncating input if needed. Uses chat template when available."""
+        if self._is_groq():
+            return self.generate(prompt, max_new_tokens=max_tokens, temperature=temperature)
         if self._has_chat_template:
             messages = [{"role": "user", "content": prompt}]
             text = self.tokenizer.apply_chat_template(
