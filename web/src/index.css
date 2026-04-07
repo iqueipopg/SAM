@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #FAFAFA;
+  color: #18181B;
+  margin: 0;
+}
+
+::selection {
+  background: rgba(13, 148, 136, 0.15);
+  color: #134E4A;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D4D4D8;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #A1A1AA;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+
+@keyframes meshMove {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -50px) scale(1.1); }
+  50% { transform: translate(-20px, 20px) scale(0.9); }
+  75% { transform: translate(20px, 40px) scale(1.05); }
+}
+.mesh-blob {
+  animation: meshMove 20s ease-in-out infinite;
+}
+.mesh-blob-delay {
+  animation: meshMove 25s ease-in-out infinite;
+  animation-delay: -8s;
+}
+.mesh-blob-delay-2 {
+  animation: meshMove 22s ease-in-out infinite;
+  animation-delay: -15s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+.animate-float-delay {
+  animation: float 6s ease-in-out infinite;
+  animation-delay: -2s;
+}
+.animate-float-delay-2 {
+  animation: float 6s ease-in-out infinite;
+  animation-delay: -4s;
+}

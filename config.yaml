@@ -250,7 +250,7 @@ manuscript:
 # Switch provider to "groq" to use cloud inference instead of local GPU.
 # Switch back to "local" at any time to restore original behavior.
 groq:
-  provider: "groq"  # "local" or "groq"
+  provider: "local"  # "local" or "groq"
   model: "llama-3.3-70b-versatile"  # default model (fallback)
   api_key_env: "GROQ_API_KEY"
   max_retries: 3
