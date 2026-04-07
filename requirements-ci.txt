@@ -46,3 +46,6 @@ groq>=0.4.0
 
 # Plotting (needed for py_compile of agents that import matplotlib)
 matplotlib>=3.10.0
+
+# Testing
+pytest>=8.0.0
