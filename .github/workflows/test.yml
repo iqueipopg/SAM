@@ -19,15 +19,8 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install R
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq r-base r-base-dev libcurl4-openssl-dev
-
       - name: Install dependencies
-        env:
-          RPY2_CFFI_MODE: ABI
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-ci.txt
 
       - name: Syntax check
         run: python -m py_compile agents/*.py app.py

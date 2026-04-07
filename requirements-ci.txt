@@ -1,0 +1,48 @@
+# Lightweight requirements for CI testing (no GPU, no R, no Streamlit UI)
+# Tests use mocks for LLM, so heavy deps are still imported but not executed
+
+# Core ML / LLM
+torch>=2.5.0
+transformers>=5.0.0
+bitsandbytes>=0.49.0
+accelerate>=1.12.0
+safetensors>=0.7.0
+optimum>=2.1.0
+sentence-transformers>=5.2.0
+
+# RAG / LangChain
+langchain>=1.2.0
+langchain-community>=0.4.0
+faiss-cpu>=1.13.0
+
+# PubMed / Retrieval
+biopython>=1.86
+requests>=2.32.0
+beautifulsoup4>=4.14.0
+lxml>=6.0.0
+
+# PDF processing
+PyMuPDF>=1.27.0
+pdfplumber>=0.11.0
+pdfminer.six>=20251230
+pypdfium2>=5.5.0
+
+# Data / Science
+numpy>=2.4.0
+pandas>=2.3.0
+scipy>=1.17.0
+scikit-learn>=1.8.0
+
+# Streamlit (needed for py_compile of app.py)
+streamlit>=1.54.0
+
+# Utilities
+PyYAML>=6.0.0
+tqdm>=4.67.0
+pillow>=12.1.0
+python-dotenv>=1.2.0
+openpyxl>=3.1.0
+groq>=0.4.0
+
+# Plotting (needed for py_compile of agents that import matplotlib)
+matplotlib>=3.10.0
