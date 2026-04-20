@@ -66,7 +66,7 @@ def check_prompt_leakage(text, section_name):
     return True
 
 
-def test_manuscript():
+def run_manuscript():
     """Test A8 manuscript generation on real pipeline data."""
     print(f"\n{'='*60}")
     print("TEST: AGENT 8 MANUSCRIPT GENERATION")
@@ -218,5 +218,5 @@ def test_manuscript():
 
 
 if __name__ == "__main__":
-    success = test_manuscript()
+    success = run_manuscript()
     sys.exit(0 if success else 1)

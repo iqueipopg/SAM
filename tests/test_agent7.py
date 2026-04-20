@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents.agent7_synthesis import Agent7Synthesis
 
 
-def test_synthetic():
+def run_synthetic():
     """Test with synthetic data: 5 studies with known SMD values."""
     print(f"\n{'='*60}")
     print("TEST A: SYNTHETIC DATA")
@@ -170,7 +170,7 @@ def test_synthetic():
     return result
 
 
-def test_real_data():
+def run_real_data():
     """Test with real pipeline data if available."""
     print(f"\n{'='*60}")
     print("TEST B: REAL PIPELINE DATA")
@@ -236,7 +236,7 @@ def _remove_fit(obj):
 
 def main():
     # Test A: Synthetic
-    synth_result = test_synthetic()
+    synth_result = run_synthetic()
 
     # Save synthetic result
     if synth_result:
@@ -248,7 +248,7 @@ def main():
     print()
 
     # Test B: Real data
-    test_real_data()
+    run_real_data()
 
 
 if __name__ == "__main__":

@@ -505,6 +505,7 @@ class TestBaseAgentLocalMode:
         env = {k: v for k, v in os.environ.items() if "GROQ" not in k}
         with patch.dict(os.environ, env, clear=True):
             with patch("agents.groq_adapter.Groq"):
-                from agents.groq_adapter import GroqProvider
-                with pytest.raises(ValueError, match="Groq API key not found"):
-                    GroqProvider(_minimal_config())
+                with patch("dotenv.load_dotenv", return_value=None):
+                    from agents.groq_adapter import GroqProvider
+                    with pytest.raises(ValueError, match="Groq API key not found"):
+                        GroqProvider(_minimal_config())
