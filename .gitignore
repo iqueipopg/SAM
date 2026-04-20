@@ -36,7 +36,13 @@ experiments/__pycache__/
 *.synctex.gz
 *.fls
 *.fdb_latexmk
-presentacion_sam.pdf
+
+# ── Docs (PDFs, data, presentations — not tracked) ──────
+docs/presentaciones/
+docs/congreso/
+docs/datos-paula/
+docs/descripcion_tfg.txt
+docs/groq_integration_guide.txt
 
 # ── IDE / Editor ──────────────────────────────────────────
 .vscode/
@@ -53,6 +59,16 @@ Thumbs.db
 .pytest_cache/
 
 .claude/
+
+# ── Linting cache ─────────────────────────────────────────
+.ruff_cache/
+
+# ── Gold standard data ───────────────────────────────────
+data/
+
+# ── NTFS stream artifacts ────────────────────────────────
+*:Zone.Identifier
+*:mshield
 
 # ── Misc ──────────────────────────────────────────────────
 *.bak
