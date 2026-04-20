@@ -440,8 +440,8 @@ class ReviewReportGenerator:
                 )
 
             # Flag Egger's test significance (publication bias)
-            egger = pub_bias.get("egger_test", {})
-            if not egger.get("skipped", False):
+            egger = pub_bias.get("egger_test") or {}
+            if egger and not egger.get("skipped", False):
                 egger_p = egger.get("p_value")
                 if egger_p is not None and egger_p < self.EGGER_P_THRESHOLD:
                     flags_for_analysis.append(
@@ -450,7 +450,7 @@ class ReviewReportGenerator:
                     )
 
             # Flag trim-and-fill adjustment
-            tf = pub_bias.get("trim_and_fill", {})
+            tf = pub_bias.get("trim_and_fill") or {}
             n_missing = tf.get("n_missing", 0)
             if n_missing and n_missing > 0:
                 flags_for_analysis.append(

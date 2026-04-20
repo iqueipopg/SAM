@@ -274,6 +274,12 @@ class Agent7Synthesis:
             },
         }
 
+        # Export reproducible R script
+        r_script_path = self._export_r_script(groups, analyses, output_dir)
+        if r_script_path:
+            result["r_script_path"] = r_script_path
+            print(f"  R script exported: {r_script_path}")
+
         self._print_summary(result)
         return result
 
@@ -1142,10 +1148,12 @@ class Agent7Synthesis:
             if k >= min_egger:
                 try:
                     reg = self.metafor.regtest(fit)
+                    p_val = float(reg.rx2("pval")[0])
                     result["egger_test"] = {
-                        "z_value": round(float(reg.rx2("zval")[0]), 4),
-                        "p_value": round(float(reg.rx2("pval")[0]), 6),
-                        "significant": float(reg.rx2("pval")[0]) < 0.10,
+                        "intercept": round(float(reg.rx2("est")[0]), 4),
+                        "se": round(float(reg.rx2("se")[0]), 4),
+                        "p_value": round(p_val, 6),
+                        "significant": p_val < 0.10,
                     }
                 except Exception as e:
                     result["egger_test"] = {"error": str(e)}
@@ -1163,13 +1171,26 @@ class Agent7Synthesis:
                 tf_ci_ub = float(tf.rx2("ci.ub")[0])
                 tf_k0 = int(tf.rx2("k0")[0])
                 result["trim_and_fill"] = {
-                    "estimated_missing": tf_k0,
+                    "k_missing": tf_k0,
                     "adjusted_estimate": round(tf_b, 4),
                     "adjusted_ci_lower": round(tf_ci_lb, 4),
                     "adjusted_ci_upper": round(tf_ci_ub, 4),
                 }
             except Exception as e:
                 result["trim_and_fill"] = {"error": str(e)}
+
+            # Rosenthal's Fail-Safe N
+            try:
+                fsn_result = self.metafor.fsn(yi=yi_r, vi=vi_r, type="Rosenthal")
+                fsn_val = int(fsn_result.rx2("fsnum")[0])
+                result["failsafe_n"] = {
+                    "n": fsn_val,
+                    "alpha": 0.05,
+                    "method": "Rosenthal",
+                    "interpretation": f"{fsn_val} null studies needed to make result non-significant",
+                }
+            except Exception as e:
+                result["failsafe_n"] = {"error": str(e)}
 
         except Exception as e:
             result["error"] = str(e)
@@ -1884,12 +1905,17 @@ class Agent7Synthesis:
         # ---- 5. Publication bias ----
         egger = pub_bias.get("egger_test", {})
         tf = pub_bias.get("trim_and_fill", {})
+        fsn = pub_bias.get("failsafe_n", {})
         egger_skipped = egger.get("skipped", False)
         egger_p = egger.get("p_value", 1.0) if not egger_skipped else None
 
         # Trim-and-fill: significant if missing > 0 and adjusted estimate differs meaningfully
-        tf_missing = tf.get("estimated_missing", 0) if isinstance(tf, dict) else 0
+        tf_missing = tf.get("k_missing", tf.get("estimated_missing", 0)) if isinstance(tf, dict) else 0
         tf_concern = tf_missing >= 2
+
+        # Fail-Safe N context (Rosenthal): how many null studies to nullify the result
+        fsn_value = fsn.get("n") if isinstance(fsn, dict) else None
+        fsn_suffix = f"; Fail-Safe N = {fsn_value}" if fsn_value is not None else ""
 
         if egger_skipped:
             # Cannot assess properly — note in reason
@@ -1897,7 +1923,8 @@ class Agent7Synthesis:
                 domains["publication_bias"] = {
                     "level": "serious", "downgrades": 1,
                     "reason": (f"Egger's test skipped (k<{self._config.get('min_studies_for_egger', 10)}), "
-                               f"but trim-and-fill suggests {tf_missing} missing studies"),
+                               f"but trim-and-fill suggests {tf_missing} missing studies"
+                               + fsn_suffix),
                 }
                 downgrades += 1
             else:
@@ -1905,30 +1932,31 @@ class Agent7Synthesis:
                     "level": "not serious", "downgrades": 0,
                     "reason": (f"Cannot fully assess: Egger's test skipped "
                                f"(k<{self._config.get('min_studies_for_egger', 10)}); "
-                               f"trim-and-fill suggests {tf_missing} missing studies"),
+                               f"trim-and-fill suggests {tf_missing} missing studies"
+                               + fsn_suffix),
                 }
         elif isinstance(egger_p, (int, float)) and egger_p < 0.05:
             domains["publication_bias"] = {
                 "level": "serious", "downgrades": 1,
-                "reason": f"Egger p = {egger_p:.4f} (significant asymmetry)",
+                "reason": f"Egger p = {egger_p:.4f} (significant asymmetry)" + fsn_suffix,
             }
             downgrades += 1
         elif isinstance(egger_p, (int, float)) and egger_p < 0.10:
             domains["publication_bias"] = {
                 "level": "serious", "downgrades": 1,
-                "reason": f"Egger p = {egger_p:.4f} (borderline asymmetry)",
+                "reason": f"Egger p = {egger_p:.4f} (borderline asymmetry)" + fsn_suffix,
             }
             downgrades += 1
         elif tf_concern:
             domains["publication_bias"] = {
                 "level": "serious", "downgrades": 1,
-                "reason": f"Trim-and-fill suggests {tf_missing} missing studies",
+                "reason": f"Trim-and-fill suggests {tf_missing} missing studies" + fsn_suffix,
             }
             downgrades += 1
         else:
             domains["publication_bias"] = {
                 "level": "not serious", "downgrades": 0,
-                "reason": "No evidence of publication bias",
+                "reason": "No evidence of publication bias" + fsn_suffix,
             }
 
         # Final level
@@ -2081,6 +2109,109 @@ class Agent7Synthesis:
                 "elapsed_s": 0,
             },
         }
+
+    def _export_r_script(self, groups: Dict, analyses: Dict, output_dir: str) -> Optional[str]:
+        """Generate a reproducible R script mirroring the analyses performed.
+
+        Saved to <output_dir>/meta_analysis.R. The script uses only metafor
+        and can be run in any R environment to reproduce all results.
+        """
+        lines = [
+            "# Reproducible R script generated by SAM Agent 7",
+            "# Run: Rscript meta_analysis.R",
+            "",
+            "library(metafor)",
+            "",
+        ]
+
+        min_egger = self._config.get("min_studies_for_egger", 10)
+
+        for group_key, data in groups.items():
+            if group_key not in analyses:
+                continue
+            k = len(data["yi"])
+            if k < 2:
+                continue
+
+            safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', group_key)
+            measure = data.get("_measure_type", group_key)
+
+            lines.append(f"# === Analysis: {group_key} (measure={measure}, k={k}) ===")
+            lines.append("")
+
+            # Data vectors
+            yi_str = ", ".join(f"{v:.6f}" for v in data["yi"])
+            vi_str = ", ".join(f"{v:.6f}" for v in data["vi"])
+            label_str = ", ".join(f'"{lbl}"' for lbl in data.get("labels", []))
+
+            lines.append(f"yi_{safe_key} <- c({yi_str})")
+            lines.append(f"vi_{safe_key} <- c({vi_str})")
+            if label_str:
+                lines.append(f"labels_{safe_key} <- c({label_str})")
+            lines.append("")
+
+            # Random-effects model
+            lines.append(f"# Random-effects model (REML)")
+            lines.append(f"fit_{safe_key} <- rma(yi = yi_{safe_key}, vi = vi_{safe_key}, method = \"REML\")")
+            lines.append(f"summary(fit_{safe_key})")
+            lines.append(f"predict(fit_{safe_key})")
+            lines.append("")
+
+            # Forest plot
+            lines.append(f"# Forest plot")
+            if label_str:
+                lines.append(f"forest(fit_{safe_key}, slab = labels_{safe_key})")
+            else:
+                lines.append(f"forest(fit_{safe_key})")
+            lines.append("")
+
+            # Funnel plot
+            lines.append(f"# Funnel plot")
+            lines.append(f"funnel(fit_{safe_key})")
+            lines.append("")
+
+            # Publication bias
+            if k >= min_egger:
+                lines.append(f"# Egger's regression test (k={k} >= {min_egger})")
+                lines.append(f"regtest(fit_{safe_key})")
+                lines.append("")
+
+            if k >= 3:
+                lines.append(f"# Trim-and-fill")
+                lines.append(f"trimfill(fit_{safe_key})")
+                lines.append("")
+                lines.append(f"# Rosenthal's Fail-Safe N")
+                lines.append(f"fsn(yi = yi_{safe_key}, vi = vi_{safe_key}, type = \"Rosenthal\")")
+                lines.append("")
+
+            # Leave-one-out
+            if k >= 3:
+                lines.append(f"# Leave-one-out sensitivity analysis")
+                lines.append(f"leave1out(fit_{safe_key})")
+                lines.append("")
+
+            # Quality weights
+            weights = data.get("quality_weights", [])
+            if weights:
+                w_str = ", ".join(f"{w:.2f}" for w in weights)
+                lines.append(f"# Quality-weighted sensitivity analysis")
+                lines.append(f"weights_{safe_key} <- c({w_str})")
+                lines.append(f"rma(yi = yi_{safe_key}, vi = vi_{safe_key} / weights_{safe_key}, method = \"REML\")")
+                lines.append("")
+
+            lines.append("")
+
+        script = "\n".join(lines)
+
+        try:
+            r_path = os.path.join(output_dir, "meta_analysis.R")
+            os.makedirs(output_dir, exist_ok=True)
+            with open(r_path, "w") as f:
+                f.write(script)
+            return r_path
+        except Exception as e:
+            self.logger.warning("Failed to export R script: %s", e)
+            return None
 
     def _print_summary(self, result: Dict):
         s = result["stats"]
