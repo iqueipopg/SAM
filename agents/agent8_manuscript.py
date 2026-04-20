@@ -128,6 +128,7 @@ class Agent8Manuscript(BaseAgent):
         # Pre-build data blocks for injection into prompts
         self._prisma_text = self._build_prisma_text()
         self._study_list_text = self._build_study_list_text()
+        self._population_summary = self._build_population_summary()
         self._methods_data_block = self._build_methods_data_block()
 
         # Load LLM
@@ -280,6 +281,80 @@ class Agent8Manuscript(BaseAgent):
             )
 
         return "\n".join(lines) if lines else "No detailed study data available."
+
+    def _build_population_summary(self) -> str:
+        """Build aggregated population descriptive from A5 study characteristics.
+
+        Summarizes: N studies, total participants, year range, countries,
+        mean age, female percentage. Only reports what A5 actually extracted.
+        """
+        ext = self._extraction
+        if not ext or not ext.get("papers"):
+            return ""
+
+        papers = ext["papers"]
+        n_studies = len(papers)
+        total_n = 0
+        years = []
+        countries = []
+        ages = []
+        female_pcts = []
+
+        for p in papers:
+            sc = p.get("study_characteristics") or {}
+            ss = sc.get("sample_size")
+            if ss is not None:
+                try:
+                    total_n += int(ss)
+                except (ValueError, TypeError):
+                    pass
+            yr = p.get("year")
+            if yr:
+                try:
+                    years.append(int(yr))
+                except (ValueError, TypeError):
+                    pass
+            country = sc.get("country")
+            if country and country not in ("null", "None", "NR", "not reported"):
+                countries.append(country)
+            age = sc.get("age_mean")
+            if age is not None:
+                try:
+                    ages.append(float(age))
+                except (ValueError, TypeError):
+                    pass
+            fpct = sc.get("female_pct")
+            if fpct is not None:
+                try:
+                    female_pcts.append(float(fpct))
+                except (ValueError, TypeError):
+                    pass
+
+        parts = [f"Number of included studies: {n_studies}."]
+
+        if total_n > 0:
+            parts.append(f"Total participants: {total_n}.")
+
+        if years:
+            yr_min, yr_max = min(years), max(years)
+            if yr_min == yr_max:
+                parts.append(f"Publication year: {yr_min}.")
+            else:
+                parts.append(f"Publication years: {yr_min} to {yr_max}.")
+
+        if countries:
+            unique_countries = list(dict.fromkeys(countries))
+            parts.append(f"Countries: {', '.join(unique_countries)}.")
+
+        if ages:
+            mean_age = sum(ages) / len(ages)
+            parts.append(f"Mean age across studies: {mean_age:.1f} years (k={len(ages)} studies reporting).")
+
+        if female_pcts:
+            mean_fpct = sum(female_pcts) / len(female_pcts)
+            parts.append(f"Mean female percentage: {mean_fpct:.1f}% (k={len(female_pcts)} studies reporting).")
+
+        return " ".join(parts) if len(parts) > 1 else ""
 
     def _build_methods_data_block(self) -> str:
         """Build a pre-written methods description from actual pipeline data."""
@@ -585,6 +660,7 @@ class Agent8Manuscript(BaseAgent):
             prisma_text=self._prisma_text,
             study_list_text=self._study_list_text,
             methods_data_block=self._methods_data_block,
+            population_summary=self._population_summary,
             language=self._language,
         )
 
@@ -1192,18 +1268,23 @@ class Agent8Manuscript(BaseAgent):
                 parts.append(f"GRADE certainty: {gl} ({dg} downgrade(s)).")
 
             egger = pub.get("egger_test", {}) if isinstance(pub, dict) else {}
-            if egger and not egger.get("error"):
-                ez = egger.get("z_value", "?")
+            if egger and not egger.get("error") and not egger.get("skipped"):
+                intercept = egger.get("intercept", egger.get("z_value", "?"))
                 ep = egger.get("p_value", "?")
                 sig = egger.get("significant", False)
                 sig_str = "significant" if sig else "not significant"
-                parts.append(f"Egger's test: z={ez}, p={ep} ({sig_str}).")
+                parts.append(f"Egger's test: intercept={intercept}, p={ep} ({sig_str}).")
 
             tf = pub.get("trim_and_fill", {}) if isinstance(pub, dict) else {}
             if tf and not tf.get("error"):
-                miss = tf.get("estimated_missing", 0)
+                miss = tf.get("k_missing", tf.get("estimated_missing", 0))
                 adj = tf.get("adjusted_estimate", "?")
                 parts.append(f"Trim-and-fill: {miss} missing studies estimated, adjusted estimate={adj}.")
+
+            fsn = pub.get("failsafe_n", {}) if isinstance(pub, dict) else {}
+            if fsn and not fsn.get("error"):
+                fsn_val = fsn.get("n", "?")
+                parts.append(f"Rosenthal's Fail-Safe N: {fsn_val} (number of null studies to nullify the result).")
 
             excl = sens.get("exclude_high_risk", {}) if isinstance(sens, dict) else {}
             if excl and not excl.get("error"):
@@ -1255,20 +1336,25 @@ class Agent8Manuscript(BaseAgent):
     # ================================================================== #
 
     def _simple_generate(self, prompt: str, max_tokens: int = 1500, temperature: float = 0.7) -> str:
-        """Generate text, truncating input if needed. Uses chat template when available."""
+        """Generate text, truncating input if needed. Uses chat template when available.
+
+        max_length for tokenizer truncation is read from config/agents.json
+        (agent8_manuscript.max_input_chars), falling back to 5000 tokens.
+        """
         if self._is_groq():
             return self.generate(prompt, max_new_tokens=max_tokens, temperature=temperature)
+        _max_len = self.get_agent_param("max_input_chars", 5000)
         if self._has_chat_template:
             messages = [{"role": "user", "content": prompt}]
             text = self.tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
             inputs = self.tokenizer(
-                text, return_tensors="pt", truncation=True, max_length=5000
+                text, return_tensors="pt", truncation=True, max_length=_max_len
             ).to(self.device)
         else:
             inputs = self.tokenizer(
-                prompt, return_tensors="pt", truncation=True, max_length=5000
+                prompt, return_tensors="pt", truncation=True, max_length=_max_len
             ).to(self.device)
 
         input_length = inputs["input_ids"].shape[1]
