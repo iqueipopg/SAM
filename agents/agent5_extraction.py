@@ -214,6 +214,9 @@ class Agent5Extraction(BaseAgent):
                 papers_extracted.append({
                     "pmid": paper.get("pmid", ""),
                     "title": paper.get("title", ""),
+                    "authors": paper.get("authors", []),
+                    "journal": paper.get("journal", ""),
+                    "year": paper.get("year", ""),
                     "study_characteristics": None,
                     "intervention_exposure": None,
                     "outcomes": [],
@@ -373,6 +376,9 @@ class Agent5Extraction(BaseAgent):
         return {
             "pmid": paper.get("pmid", ""),
             "title": paper.get("title", ""),
+            "authors": paper.get("authors", []),
+            "journal": paper.get("journal", ""),
+            "year": paper.get("year", ""),
             "study_characteristics": study_chars,
             "intervention_exposure": intervention,
             "outcomes": outcomes if outcomes else [],
@@ -634,9 +640,11 @@ class Agent5Extraction(BaseAgent):
 
     def _extract_study_characteristics(self, paper: Dict, protocol: Dict,
                                        temperature: float = 0.1) -> Optional[Dict]:
-        methods_text = self._get_section_text(paper, "methods", max_chars=4000)
+        _mic = self.get_agent_param("max_input_chars", {})
+        _chars = _mic.get("study_characteristics", 4000) if isinstance(_mic, dict) else 4000
+        methods_text = self._get_section_text(paper, "methods", max_chars=_chars)
         if not methods_text:
-            methods_text = self._get_section_text(paper, "full_text", max_chars=4000)
+            methods_text = self._get_section_text(paper, "full_text", max_chars=_chars)
 
         protocol.get("framework", "PICO")
 
@@ -670,9 +678,11 @@ Respond ONLY with valid JSON. Use null for values not reported in the text.
 
     def _extract_intervention_details(self, paper: Dict, protocol: Dict,
                                       temperature: float = 0.1) -> Optional[Dict]:
-        methods_text = self._get_section_text(paper, "methods", max_chars=3000)
+        _mic = self.get_agent_param("max_input_chars", {})
+        _chars = _mic.get("intervention", 3000) if isinstance(_mic, dict) else 3000
+        methods_text = self._get_section_text(paper, "methods", max_chars=_chars)
         if not methods_text:
-            methods_text = self._get_section_text(paper, "full_text", max_chars=3000)
+            methods_text = self._get_section_text(paper, "full_text", max_chars=_chars)
 
         framework = protocol.get("framework", "PICO")
 
@@ -720,7 +730,9 @@ Respond ONLY with valid JSON:
                           temperature: float = 0.1) -> Optional[List[Dict]]:
         from agents.prompts import AGENT5_OUTCOMES_TEMPLATE
 
-        _max_results = self.config.get("extraction", {}).get("max_chars", {}).get("outcomes", 6000)
+        _mic = self.get_agent_param("max_input_chars", {})
+        _yaml_fallback = self.config.get("extraction", {}).get("max_chars", {}).get("outcomes", 6000)
+        _max_results = _mic.get("outcomes", _yaml_fallback) if isinstance(_mic, dict) else _yaml_fallback
         results_text = self._get_section_text(paper, "results", max_chars=_max_results)
         if not results_text:
             results_text = self._get_section_text(paper, "full_text", max_chars=_max_results)
@@ -913,7 +925,9 @@ Respond ONLY with valid JSON:
         from agents.prompts import AGENT5_NUMERIC_RECOVERY_TEMPLATE
 
         # Use the best available text (generous limit — recovery is the last chance)
-        _max_results = self.config.get("extraction", {}).get("max_chars", {}).get("outcomes", 6000)
+        _mic = self.get_agent_param("max_input_chars", {})
+        _yaml_fallback = self.config.get("extraction", {}).get("max_chars", {}).get("outcomes", 6000)
+        _max_results = _mic.get("outcomes", _yaml_fallback) if isinstance(_mic, dict) else _yaml_fallback
         text = self._get_section_text(paper, "results", max_chars=_max_results)
         if not text or len(text) < 50:
             text = self._get_section_text(paper, "full_text", max_chars=_max_results + 1000)
