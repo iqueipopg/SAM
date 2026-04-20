@@ -1,6 +1,11 @@
-import yaml, torch
+import json, os, yaml, torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from agents.logger import get_logger
+
+# Default path for per-agent JSON config (relative to project root)
+_AGENTS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                  "config", "agents.json")
+
 
 class BaseAgent:
     """Base class for all LLM-powered pipeline agents.
@@ -20,6 +25,9 @@ class BaseAgent:
             raise ValueError(f"config.yaml has invalid YAML syntax: {e}")
         self.agent_name = agent_name
         self.logger = get_logger(self.__class__.__name__)
+
+        # Load per-agent config from config/agents.json (if it exists)
+        self.agent_params = self._load_agent_params(agent_name)
 
         # Determine backend: "local" (default) or "groq"
         groq_cfg = self.config.get("groq", {})
@@ -75,6 +83,36 @@ class BaseAgent:
         self.tokenizer = None
         self._loaded_path = None
         self._has_chat_template = None
+
+    @staticmethod
+    def _load_agent_params(agent_name):
+        """Load per-agent params from config/agents.json.
+
+        Returns a dict with agent-specific overrides merged over defaults.
+        If agents.json is missing, returns an empty dict (backward compat).
+        """
+        if not os.path.isfile(_AGENTS_JSON_PATH):
+            return {}
+        try:
+            with open(_AGENTS_JSON_PATH) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
+        defaults = data.get("defaults", {})
+        agent_cfg = data.get("agents", {}).get(agent_name, {})
+        merged = dict(defaults)
+        merged.update(agent_cfg)
+        return merged
+
+    def get_agent_param(self, key, fallback=None):
+        """Get a per-agent parameter from agents.json, with fallback.
+
+        Lookup order:
+        1. agents.json agent-specific value
+        2. agents.json defaults
+        3. Provided fallback value
+        """
+        return self.agent_params.get(key, fallback)
 
     def load_model(self, model_path=None):
         if self._backend == "groq":

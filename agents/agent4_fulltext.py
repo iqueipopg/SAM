@@ -1798,10 +1798,12 @@ Respond ONLY with valid JSON:
 {{"decision": "INCLUDE or EXCLUDE", "reasoning": "2-3 sentences", "exclusion_reason": "brief reason if EXCLUDE, empty string if INCLUDE"}}"""
 
     def _prepare_text_for_prompt(self, paper: Dict) -> str:
-        """Prepare and truncate text for the screening prompt."""
-        max_chars = (
-            6000  # ~1500 tokens, leaves room for prompt + response in 7B context
-        )
+        """Prepare and truncate text for the screening prompt.
+
+        max_input_chars is read from config/agents.json (agent4_validation),
+        falling back to 6000 (~1500 tokens for 7B context).
+        """
+        max_chars = self.get_agent_param("max_input_chars", 6000)
 
         sections = paper.get("sections") or {}
         if sections:

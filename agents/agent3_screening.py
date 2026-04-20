@@ -162,7 +162,10 @@ class Agent3Screening(BaseAgent):
             f"  - {c.replace('**', '')}" for c in protocol.get("exclusion_criteria", [])
         )
         title = paper.get("title", "")
-        _abs_max = self.config.get("screening", {}).get("abstract_max_chars", 800)
+        _abs_max = self.get_agent_param(
+            "max_input_chars",
+            self.config.get("screening", {}).get("abstract_max_chars", 800),
+        )
         abstract = str(paper.get("abstract", ""))[:_abs_max]
 
         # Build framework-aware screening rule

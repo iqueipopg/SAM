@@ -1,0 +1,75 @@
+{
+  "_comment": "Per-agent LLM parameters. Overrides defaults from config.yaml when present.",
+  "defaults": {
+    "temperature": 0.3,
+    "repetition_penalty": 1.3,
+    "max_tokens": 512,
+    "max_input_chars": 4000,
+    "model_name": null
+  },
+  "agents": {
+    "agent1_protocol": {
+      "temperature": 0.3,
+      "repetition_penalty": 1.3,
+      "max_tokens": 400,
+      "max_input_chars": 4000,
+      "model_name": null
+    },
+    "agent3_screening": {
+      "temperature": 0.2,
+      "repetition_penalty": 1.3,
+      "max_tokens": 150,
+      "max_input_chars": 800,
+      "model_name": null
+    },
+    "agent4_validation": {
+      "temperature": 0.2,
+      "repetition_penalty": 1.3,
+      "max_tokens": 150,
+      "max_input_chars": 6000,
+      "model_name": null
+    },
+    "agent5_extraction": {
+      "temperature": 0.1,
+      "repetition_penalty": 1.3,
+      "max_tokens": 600,
+      "max_input_chars": {
+        "study_characteristics": 4000,
+        "intervention": 3000,
+        "outcomes": 6000
+      },
+      "model_name": null
+    },
+    "agent6_quality": {
+      "temperature": 0.2,
+      "repetition_penalty": 1.3,
+      "max_tokens": 700,
+      "max_input_chars": {
+        "assessment": 5000,
+        "design_detection": 2000
+      },
+      "model_name": null
+    },
+    "agent8_manuscript": {
+      "temperature": {
+        "abstract": 0.3,
+        "introduction": 0.6,
+        "methods": 0.3,
+        "results": 0.3,
+        "discussion": 0.6,
+        "conclusion": 0.4
+      },
+      "repetition_penalty": 1.3,
+      "max_tokens": {
+        "abstract": 400,
+        "introduction": 800,
+        "methods": 1000,
+        "results": 1200,
+        "discussion": 1000,
+        "conclusion": 500
+      },
+      "max_input_chars": 5000,
+      "model_name": null
+    }
+  }
+}
