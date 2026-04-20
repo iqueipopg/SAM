@@ -9,7 +9,7 @@ Usage:
 Results are saved to outputs/batch_<timestamp>/
 """
 
-import gc, json, os, sys, time, traceback, yaml
+import argparse, gc, json, os, subprocess, sys, time, traceback, yaml
 from datetime import datetime
 
 import torch
@@ -179,6 +179,27 @@ def analyze_run(run_dir, result):
         report["verdict"] = "NEEDS REVIEW"
 
     return report
+
+
+# ── R Script Git Commit ──────────────────────────────────────────────────────
+
+def _commit_r_script(r_script_path, run_id):
+    """Git-add and commit the R script. Returns True on success."""
+    if not r_script_path or not os.path.isfile(r_script_path):
+        return False
+    try:
+        subprocess.run(
+            ["git", "add", r_script_path],
+            check=True, capture_output=True, text=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", f"chore(stats): R script {run_id}"],
+            check=True, capture_output=True, text=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"  WARNING: git commit R script failed: {e}")
+        return False
 
 
 # ── Pipeline Runner ─────────────────────────────────────────────────────────
@@ -568,6 +589,15 @@ def run_single_pipeline(query, run_dir, run_log):
 # ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
+    parser = argparse.ArgumentParser(description="SAM Batch Runner")
+    parser.add_argument(
+        "--commit-r-script",
+        action="store_true",
+        default=False,
+        help="Git-add and commit the exported R script after each run (default OFF)",
+    )
+    args = parser.parse_args()
+
     batch_ts = time.strftime("%Y%m%d_%H%M%S")
     batch_dir = os.path.join("outputs", f"batch_{batch_ts}")
     os.makedirs(batch_dir, exist_ok=True)
@@ -600,6 +630,13 @@ def main():
 
         elapsed = round(time.time() - start, 1)
         log(f"Run completed in {elapsed}s", run_log)
+
+        # Optional: git commit R script
+        if args.commit_r_script:
+            a7r = result.get("a7_result", {})
+            r_path = a7r.get("r_script_path") if isinstance(a7r, dict) else None
+            if r_path and _commit_r_script(r_path, run_name):
+                log(f"  R script committed: {r_path}", run_log)
 
         # Analyze
         report = analyze_run(run_dir, result)
