@@ -35,6 +35,9 @@ class Agent6Quality(BaseAgent):
     def __init__(self):
         super().__init__("agent6_quality")
         self.temperature = TEMPERATURE_CONFIG.get("agent6_quality", 0.2)
+        _mic = self.get_agent_param("max_input_chars", {})
+        self._assessment_max_chars = _mic.get("assessment", 5000) if isinstance(_mic, dict) else 5000
+        self._design_max_chars = _mic.get("design_detection", 2000) if isinstance(_mic, dict) else 2000
 
     # ================================================================== #
     #  PUBLIC API                                                          #
@@ -167,7 +170,7 @@ class Agent6Quality(BaseAgent):
             # If there's a design string but it didn't match, try LLM
             pass
 
-        prompt = format_agent6_design_prompt(paper)
+        prompt = format_agent6_design_prompt(paper, max_chars=self._design_max_chars)
         response = self._simple_generate(prompt, max_tokens=100)
         parsed = self._parse_json_response(response)
 
@@ -183,7 +186,7 @@ class Agent6Quality(BaseAgent):
 
     def _assess_rob2(self, paper: Dict, protocol: Dict) -> Dict:
         """Run RoB 2.0 assessment for an RCT."""
-        prompt = format_agent6_rob2_prompt(paper, protocol)
+        prompt = format_agent6_rob2_prompt(paper, protocol, max_chars=self._assessment_max_chars)
         response = self._simple_generate(prompt, max_tokens=600)
         parsed = self._parse_json_response(response)
 
@@ -260,7 +263,7 @@ class Agent6Quality(BaseAgent):
 
     def _assess_robins_i(self, paper: Dict, protocol: Dict) -> Dict:
         """Run ROBINS-I assessment for an observational study."""
-        prompt = format_agent6_robins_i_prompt(paper, protocol)
+        prompt = format_agent6_robins_i_prompt(paper, protocol, max_chars=self._assessment_max_chars)
         response = self._simple_generate(prompt, max_tokens=800)
         parsed = self._parse_json_response(response)
 
@@ -332,7 +335,7 @@ class Agent6Quality(BaseAgent):
 
     def _assess_jbi(self, paper: Dict, protocol: Dict) -> Dict:
         """Run JBI Critical Appraisal for a qualitative study."""
-        prompt = format_agent6_jbi_prompt(paper, protocol)
+        prompt = format_agent6_jbi_prompt(paper, protocol, max_chars=self._assessment_max_chars)
         response = self._simple_generate(prompt, max_tokens=800)
         parsed = self._parse_json_response(response)
 

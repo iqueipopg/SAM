@@ -1,4 +1,7 @@
 """Prompts Agent 1 - ENGLISH VERSION (Qwen funciona mejor en inglés)"""
+# REGLA DE IDIOMA: Nunca traducir outputs al inglés. Informes, logs, JSON,
+# explainability.md, descriptivos en manuscrito y mensajes al usuario: español.
+# Identificadores y comentarios de código: inglés.
 
 # Used by A1 (agent1_protocol.py). Temperature: 0.2.
 # Single-shot JSON generation prompt kept minimal to reduce hallucination in framework selection.
@@ -343,9 +346,9 @@ Respond ONLY with valid JSON:
 {{"study_design": "rct|observational|qualitative", "reasoning": "one sentence"}}"""
 
 
-def format_agent6_rob2_prompt(paper, protocol):
+def format_agent6_rob2_prompt(paper, protocol, max_chars=5000):
     """Format RoB 2 prompt for an RCT paper."""
-    study_text = _get_a6_study_text(paper)
+    study_text = _get_a6_study_text(paper, max_chars=max_chars)
     return AGENT6_ROB2_TEMPLATE.format(
         title=paper.get("title", ""),
         population=protocol.get("population", ""),
@@ -355,9 +358,9 @@ def format_agent6_rob2_prompt(paper, protocol):
     )
 
 
-def format_agent6_robins_i_prompt(paper, protocol):
+def format_agent6_robins_i_prompt(paper, protocol, max_chars=5000):
     """Format ROBINS-I prompt for an observational study."""
-    study_text = _get_a6_study_text(paper)
+    study_text = _get_a6_study_text(paper, max_chars=max_chars)
     return AGENT6_ROBINS_I_TEMPLATE.format(
         title=paper.get("title", ""),
         population=protocol.get("population", ""),
@@ -367,9 +370,9 @@ def format_agent6_robins_i_prompt(paper, protocol):
     )
 
 
-def format_agent6_jbi_prompt(paper, protocol):
+def format_agent6_jbi_prompt(paper, protocol, max_chars=5000):
     """Format JBI Critical Appraisal prompt for a qualitative study."""
-    study_text = _get_a6_study_text(paper)
+    study_text = _get_a6_study_text(paper, max_chars=max_chars)
     return AGENT6_JBI_TEMPLATE.format(
         title=paper.get("title", ""),
         population=protocol.get("population", ""),
@@ -379,9 +382,9 @@ def format_agent6_jbi_prompt(paper, protocol):
     )
 
 
-def format_agent6_design_prompt(paper):
+def format_agent6_design_prompt(paper, max_chars=2000):
     """Format study design detection prompt."""
-    study_text = _get_a6_study_text(paper, max_chars=2000)
+    study_text = _get_a6_study_text(paper, max_chars=max_chars)
     return AGENT6_DESIGN_DETECT_TEMPLATE.format(
         title=paper.get("title", ""),
         study_text=study_text,
@@ -505,18 +508,22 @@ STUDY SELECTION:
 INCLUDED STUDIES:
 {study_list_text}
 
+POPULATION CHARACTERISTICS:
+{population_summary}
+
 QUALITY:
 {quality_summary}
 
 META-ANALYSIS:
 {synthesis_summary}
 
-Write 4-5 paragraphs:
+Write 5-6 paragraphs:
 1. Study selection: state the PRISMA numbers exactly as given above.
 2. Study characteristics: briefly describe each included study. Cite as (Author, Year).
-3. Quality assessment: summarize the risk of bias findings.
-4. Meta-analysis results: report exact effect sizes and CIs from the data above.
-5. If sensitivity/publication bias data is available, report it. Otherwise skip this paragraph.
+3. Population characteristics: report the total participants, year range, countries, mean age, and female percentage from the POPULATION CHARACTERISTICS data above. Only report values that are provided.
+4. Quality assessment: summarize the risk of bias findings.
+5. Meta-analysis results: report exact effect sizes and CIs from the data above.
+6. If sensitivity/publication bias data is available, report Egger's test p-value, trim-and-fill adjusted estimate, and Rosenthal's Fail-Safe N. Otherwise skip this paragraph.
 
 RULES:
 - Maximum 20 words per sentence.
@@ -627,12 +634,13 @@ def get_a8_section_prompt(
     prisma_text: str = "",
     study_list_text: str = "",
     methods_data_block: str = "",
+    population_summary: str = "",
     **kwargs,
 ) -> str:
     """Build the full prompt for an A8 manuscript section.
 
     The caller (Agent8) pre-builds data blocks (prisma_text, study_list_text,
-    methods_data_block) so the LLM only writes connecting prose.
+    methods_data_block, population_summary) so the LLM only writes connecting prose.
     """
     template = A8_SECTION_PROMPTS.get(section_name, "")
     if not template:
@@ -655,6 +663,7 @@ def get_a8_section_prompt(
         prisma_text=prisma_text if prisma_text else "(PRISMA data not available)",
         study_list_text=study_list_text if study_list_text else "(Study list not available)",
         methods_data_block=methods_data_block if methods_data_block else "(Methods details not available)",
+        population_summary=population_summary if population_summary else "Population descriptive data not available.",
     )
 
     # Add language instruction if specified
@@ -868,6 +877,7 @@ def get_a8_section_prompt_localized(
     prisma_text: str = "",
     study_list_text: str = "",
     methods_data_block: str = "",
+    population_summary: str = "",
     language: str = "en",
 ) -> str:
     """Build a language-aware prompt for an A8 manuscript section.
@@ -888,16 +898,24 @@ def get_a8_section_prompt_localized(
         outc = protocol.get("outcome", "?")
         protocol_summary = rq if rq else f"{intv} vs {comp} for {outc} in {pop}"
 
-        return template.format(
-            protocol_summary=protocol_summary,
-            rag_context=rag_context if rag_context else "(No hay contexto adicional disponible)",
-            synthesis_summary=synthesis_summary if synthesis_summary else "No se realizó síntesis cuantitativa por datos insuficientes.",
-            quality_summary=quality_summary if quality_summary else "Datos de evaluación de calidad no disponibles.",
-            n_studies=n_studies,
-            prisma_text=prisma_text if prisma_text else "(Datos PRISMA no disponibles)",
-            study_list_text=study_list_text if study_list_text else "(Lista de estudios no disponible)",
-            methods_data_block=methods_data_block if methods_data_block else "(Detalles de métodos no disponibles)",
-        )
+        fmt_kwargs = {
+            "protocol_summary": protocol_summary,
+            "rag_context": rag_context if rag_context else "(No hay contexto adicional disponible)",
+            "synthesis_summary": synthesis_summary if synthesis_summary else "No se realizó síntesis cuantitativa por datos insuficientes.",
+            "quality_summary": quality_summary if quality_summary else "Datos de evaluación de calidad no disponibles.",
+            "n_studies": n_studies,
+            "prisma_text": prisma_text if prisma_text else "(Datos PRISMA no disponibles)",
+            "study_list_text": study_list_text if study_list_text else "(Lista de estudios no disponible)",
+            "methods_data_block": methods_data_block if methods_data_block else "(Detalles de métodos no disponibles)",
+            "population_summary": population_summary if population_summary else "(Datos descriptivos de población no disponibles)",
+        }
+        # Use safe formatting: only substitute keys the template actually uses
+        try:
+            return template.format(**fmt_kwargs)
+        except KeyError:
+            # Template doesn't have population_summary placeholder — use without it
+            fmt_kwargs.pop("population_summary", None)
+            return template.format(**fmt_kwargs)
     else:
         # Fall back to English prompt with language instruction
         return get_a8_section_prompt(
@@ -910,5 +928,6 @@ def get_a8_section_prompt_localized(
             prisma_text=prisma_text,
             study_list_text=study_list_text,
             methods_data_block=methods_data_block,
+            population_summary=population_summary,
             language=language,
         )
