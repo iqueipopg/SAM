@@ -76,9 +76,30 @@ async def _startup_validate_env():
     if os.environ.get("SAM_SKIP_ENV_VALIDATION") == "1" or "pytest" in sys.modules:
         return
     validate_env()
+
+
+def _get_cors_origins(env: Optional[dict] = None) -> list:
+    """Resolve the list of allowed CORS origins.
+
+    ARQ6: reads the ``CORS_ORIGINS`` environment variable (comma-separated).
+    In production set e.g. ``CORS_ORIGINS=https://sam.example.com``. For local
+    development the default allows Vite (5173) and CRA/React (3000).
+
+    Args:
+        env: optional env dict (defaults to ``os.environ`` — exposed for tests).
+
+    Returns:
+        List of origin strings with whitespace stripped.
+    """
+    source = env if env is not None else os.environ
+    raw = source.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_get_cors_origins(),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
