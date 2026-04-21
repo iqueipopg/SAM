@@ -201,6 +201,11 @@ run_tests() {
     "${VENV_DIR}/bin/pytest" tests/ -v --tb=short 2>&1 || true
 }
 
+run_gold_eval() {
+    log "Ejecutando evaluacion contra gold standard..."
+    "$PYTHON" experiments/exp8_gold_standard_eval.py "$@"
+}
+
 # ── Cambiar modelo (para Rudiger con más VRAM) ───────────────────
 
 configure_model() {
@@ -252,6 +257,7 @@ show_help() {
     echo "  single \"query\"   Ejecuta pipeline para una pregunta clínica"
     echo "  ui               Lanza interfaz web Streamlit"
     echo "  test             Ejecuta suite de tests"
+    echo "  gold-eval        Evalua A3/A3+A4 contra data/gold_standard.json (exp 8)"
     echo "  nutrition        Test local con PDFs de nutrición (A5→A8)"
     echo "  nutrition-a5     Solo extracción A5 (rápido, para diagnóstico)"
     echo "  model <ruta>     Cambia el modelo LLM en config.yaml"
@@ -294,6 +300,10 @@ case "$CMD" in
         ;;
     test)
         run_tests
+        ;;
+    gold-eval)
+        shift
+        run_gold_eval "$@"
         ;;
     nutrition)
         log "Ejecutando test local de nutrición (A5→A8)..."
