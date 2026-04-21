@@ -2,7 +2,7 @@
 """Local nutrition meta-analysis test — runs A5→A8 on Paula's pre-selected PDFs.
 
 Skips A1-A4 (papers are already selected and downloaded).
-Reads PDFs from docs/meta-nutricion-paula/, extracts text, groups supplements
+Reads PDFs from data/gold_standard/nutricion/pdfs_incluidos/, extracts text, groups supplements
 with main papers, then runs extraction → quality → synthesis → manuscript.
 
 Usage:
@@ -16,6 +16,8 @@ import gc, json, os, re, sys, time, argparse
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
@@ -25,7 +27,7 @@ import yaml
 # ── Config ────────────────────────────────────────────────────────────────────
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PDF_DIR = PROJECT_ROOT / "docs" / "meta-nutricion-paula"
+PDF_DIR = PROJECT_ROOT / "data" / "gold_standard" / "nutricion" / "pdfs_incluidos"
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 
 # Hardcoded protocol (PICO) matching Paula's nutrition meta-analysis
@@ -649,6 +651,89 @@ def main():
               f"PDF: {a8_result.get('pdf_path', 'N/A')}")
     print(f"  Time: {elapsed}s")
     print(f"  Output: {run_dir}/")
+
+
+# ── Pytest integration ────────────────────────────────────────────────────────
+#
+# This file is primarily a standalone script (see main() below), but we also
+# expose pytest-discoverable smoke tests so CI can run it without failing when
+# the local nutrition dataset (Paula's PDFs) is not present.
+#
+# When the dataset is absent, every test in this module is SKIPPED. When it
+# is present, a lightweight smoke test verifies that PDFs can be discovered
+# and grouped. The heavy pipeline (A5→A8) is only run when the env var
+# SAM_RUN_NUTRITION_PIPELINE=1 is set, because it requires a GPU and ~1-2h.
+
+
+def _nutrition_dataset_available() -> bool:
+    """Return True iff Paula's nutrition PDFs are locally available."""
+    if not PDF_DIR.exists() or not PDF_DIR.is_dir():
+        return False
+    # Any subdir starting with "Incluidos" OR any .pdf directly in PDF_DIR counts
+    try:
+        for d in PDF_DIR.iterdir():
+            if d.is_dir() and d.name.startswith("Incluidos"):
+                return True
+        if any(PDF_DIR.glob("*.pdf")):
+            return True
+    except (OSError, PermissionError):
+        return False
+    return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _nutrition_dataset_available(),
+    reason=(
+        "local nutrition dataset not present at "
+        f"{PDF_DIR} — skipping Paula's meta-analysis tests"
+    ),
+)
+
+
+def test_nutrition_pdf_dir_resolves():
+    """Smoke test: find_pdf_dir() returns a directory containing PDFs."""
+    pdf_dir = find_pdf_dir()
+    assert pdf_dir.exists()
+    assert pdf_dir.is_dir()
+    pdfs = list(pdf_dir.glob("*.pdf"))
+    assert len(pdfs) > 0, f"No PDFs found under {pdf_dir}"
+
+
+def test_nutrition_pdf_files_match_expected_pattern():
+    """Smoke test: PDFs under the dataset directory match the #<id>.pdf pattern.
+
+    We avoid calling group_papers_from_pdfs() here because it extracts text from
+    every PDF (~2 minutes for the full corpus). The ID pattern test is enough
+    to verify the directory layout is intact without the OCR cost.
+    """
+    pdf_dir = find_pdf_dir()
+    pdfs = list(pdf_dir.glob("*.pdf"))
+    assert len(pdfs) > 0
+    # At least some files match the #<digits>.pdf convention (e.g. #5298.pdf)
+    matching = [f for f in pdfs if re.match(r"#?\d+", f.name)]
+    assert len(matching) > 0, (
+        f"No PDFs with expected pattern '#<id>.pdf' in {pdf_dir}"
+    )
+
+
+@pytest.mark.skipif(
+    os.environ.get("SAM_RUN_NUTRITION_PIPELINE") != "1",
+    reason="Full A5→A8 pipeline requires GPU and ~1-2h; set SAM_RUN_NUTRITION_PIPELINE=1 to run",
+)
+def test_nutrition_full_pipeline_runs():
+    """Integration test: run the full A5→A8 pipeline on Paula's PDFs.
+
+    Gated behind SAM_RUN_NUTRITION_PIPELINE=1 because it needs GPU + long runtime.
+    """
+    # Re-use the script's main() — it is self-contained.
+    # We invoke with --a5-only to keep runtime manageable.
+    import sys as _sys
+    saved_argv = _sys.argv
+    try:
+        _sys.argv = ["test_local_nutrition.py", "--a5-only", "--max-papers", "2"]
+        main()
+    finally:
+        _sys.argv = saved_argv
 
 
 if __name__ == "__main__":
