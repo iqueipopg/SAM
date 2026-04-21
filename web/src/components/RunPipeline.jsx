@@ -318,7 +318,7 @@ export default function RunPipeline() {
                     value={settings.max_results}
                     min={40} max={200} step={10}
                     onChange={(v) => updateSetting('max_results', v)}
-                    tooltip="Con 4 bases de datos y floor 10 papers/DB, valores < 40 son subóptimos."
+                    tooltip="Recomendado ≥50. Menos de 40 papers produce meta-análisis estadísticamente débiles con heterogeneidad alta y pocos estudios por subgrupo."
                   />
                   <SettingSlider
                     label="Dedup threshold"
