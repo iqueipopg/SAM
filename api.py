@@ -79,7 +79,13 @@ _pipeline_state = {
     "running": False,
     "stop_requested": False,
     "kill_requested": False,
+    # ARQ8: cooperative cancellation flag checked by long-running agents
+    # between iterations so the pipeline can be stopped without killing
+    # the Python process.
+    "cancel_requested": False,
     "current_run_dir": None,
+    # ARQ7: tracks the run_id of the single pipeline currently active
+    "active_run_id": None,
 }
 
 
@@ -140,10 +146,52 @@ class PipelineRequest(BaseModel):
     a3_vote_threshold: float = 0.60
     a4_ensemble: int = 1
     a4_vote_threshold: float = 0.60
+    # ARQ1: resume from a previous run's checkpoints. If provided, the pipeline
+    # reads outputs/{resume_run_id}/checkpoint_*.json and skips any agent whose
+    # checkpoint is already present.
+    resume_run_id: Optional[str] = None
 
 
 class StopRequest(BaseModel):
     pass
+
+
+# ── ARQ1: checkpoint discovery/restoration helpers ──────────────────────────
+
+# Ordered list of per-agent checkpoint names used by the runner. Order must
+# mirror the A1->A8 pipeline sequence.
+_CHECKPOINT_AGENT_ORDER = [
+    "a1_protocol",
+    "a2_search",
+    "a3_screening",
+    "a4_fulltext",
+    "a5_extraction",
+    "a6_quality",
+    "a7_synthesis",
+    "a8_manuscript",
+]
+
+
+def _agent_label_for_checkpoint(cp_name: str) -> str:
+    """Return the short agent label (e.g. 'A5') for a checkpoint name like 'a5_extraction'."""
+    try:
+        return cp_name.split("_")[0].upper()
+    except Exception:
+        return cp_name
+
+
+def discover_checkpoints(run_dir: str) -> dict:
+    """Load all available checkpoint_*.json files from run_dir.
+
+    Returns a dict keyed by agent_name (e.g. 'a1_protocol') with the JSON
+    payload as value. Missing/corrupt checkpoints are silently skipped.
+    """
+    found = {}
+    for cp in _CHECKPOINT_AGENT_ORDER:
+        data = load_checkpoint(run_dir, cp)
+        if data is not None:
+            found[cp] = data
+    return found
 
 
 # ── SSE Pipeline Runner ─────────────────────────────────────────────────────
@@ -155,18 +203,38 @@ def _sse_event(event: str, data: dict) -> str:
 
 
 def run_pipeline_generator(req: PipelineRequest):
-    """Generator that yields SSE events as the pipeline progresses."""
+    """Generator that yields SSE events as the pipeline progresses.
+
+    If ``req.resume_run_id`` is set the runner reuses that existing run
+    directory, loads any checkpoint_*.json files it finds and skips the
+    corresponding agents, emitting a 'resumed' SSE event before continuing.
+    """
     _pipeline_state["running"] = True
     _pipeline_state["stop_requested"] = False
     _pipeline_state["kill_requested"] = False
+    _pipeline_state["cancel_requested"] = False
 
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
 
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    run_dir = str(OUTPUTS_DIR / f"run_{ts}")
+    # ARQ1: resume support -- reuse existing run_dir if resume_run_id provided
+    resume_state = {}
+    if req.resume_run_id:
+        run_dir = str(OUTPUTS_DIR / req.resume_run_id)
+        if not os.path.isdir(run_dir):
+            _pipeline_state["running"] = False
+            yield _sse_event("pipeline_error", {
+                "error": f"resume_run_id '{req.resume_run_id}' not found",
+            })
+            return
+        resume_state = discover_checkpoints(run_dir)
+        ts = req.resume_run_id.replace("run_", "")
+    else:
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        run_dir = str(OUTPUTS_DIR / f"run_{ts}")
+
     os.makedirs(run_dir, exist_ok=True)
     _pipeline_state["current_run_dir"] = run_dir
 
@@ -186,45 +254,91 @@ def run_pipeline_generator(req: PipelineRequest):
     a6_result = None
     a7_result = None
     a8_result = None
+    included_papers = []
+
+    # Restore state from checkpoints (if resuming)
+    if resume_state:
+        if "a1_protocol" in resume_state:
+            cp1 = resume_state["a1_protocol"]
+            protocol = cp1.get("protocol")
+            pubmed_query = cp1.get("pubmed_query")
+        if "a2_search" in resume_state:
+            cp2 = resume_state["a2_search"]
+            papers = cp2.get("papers")
+            a2_stats = cp2.get("stats")
+        if "a3_screening" in resume_state:
+            a3_results = resume_state["a3_screening"]
+        if "a4_fulltext" in resume_state:
+            a4_result = resume_state["a4_fulltext"]
+            included_papers = a4_result.get("include", []) or []
+        if "a5_extraction" in resume_state:
+            a5_result = resume_state["a5_extraction"]
+        if "a6_quality" in resume_state:
+            a6_result = resume_state["a6_quality"]
+        if "a7_synthesis" in resume_state:
+            a7_result = resume_state["a7_synthesis"]
+        if "a8_manuscript" in resume_state:
+            a8_result = resume_state["a8_manuscript"]
+
+        # Identify the first agent that still needs to run
+        completed = [cp for cp in _CHECKPOINT_AGENT_ORDER if cp in resume_state]
+        next_idx = len(completed)
+        from_agent = (
+            _agent_label_for_checkpoint(_CHECKPOINT_AGENT_ORDER[next_idx])
+            if next_idx < len(_CHECKPOINT_AGENT_ORDER)
+            else "done"
+        )
+        yield _sse_event("resumed", {
+            "run_dir": run_dir,
+            "from_agent": from_agent,
+            "completed_agents": [_agent_label_for_checkpoint(c) for c in completed],
+        })
 
     def check_stop():
-        return _pipeline_state["stop_requested"] or _pipeline_state["kill_requested"]
+        return (
+            _pipeline_state["stop_requested"]
+            or _pipeline_state["kill_requested"]
+            or _pipeline_state.get("cancel_requested", False)
+        )
 
     # ── A1: Protocol ─────────────────────────────────────────
-    yield _sse_event("agent_start", {"agent": "A1", "name": "Protocol"})
-    try:
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        a1 = Agent1Protocol()
-        protocol = a1.generate_protocol(req.query)
-        pubmed_query = a1.generate_pubmed_query(req.query, protocol)
-        # PROSPERO draft (non-critical)
+    if "a1_protocol" in resume_state:
+        yield _sse_event("agent_skipped", {"agent": "A1", "name": "Protocol", "reason": "resumed"})
+    else:
+        yield _sse_event("agent_start", {"agent": "A1", "name": "Protocol"})
         try:
-            cfg = load_config()
-            prospero = a1.generate_prospero_draft(protocol, config=cfg)
-            protocol["prospero_draft"] = prospero
-            with open(os.path.join(run_dir, "prospero_draft.txt"), "w") as pf:
-                pf.write(prospero)
-        except Exception:
-            pass
-        free_vram(a1)
-        save_checkpoint(run_dir, "a1_protocol", {
-            "query": req.query, "protocol": protocol, "pubmed_query": pubmed_query
-        })
-        yield _sse_event("agent_done", {
-            "agent": "A1", "name": "Protocol",
-            "summary": {
-                "framework": protocol.get("framework", "?"),
-                "pubmed_query": pubmed_query,
-                "population": protocol.get("population", "?"),
-            }
-        })
-    except Exception as e:
-        yield _sse_event("agent_error", {"agent": "A1", "error": str(e)})
-        _pipeline_state["running"] = False
-        yield _sse_event("pipeline_error", {"error": f"A1 failed: {e}"})
-        return
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            a1 = Agent1Protocol()
+            protocol = a1.generate_protocol(req.query)
+            pubmed_query = a1.generate_pubmed_query(req.query, protocol)
+            # PROSPERO draft (non-critical)
+            try:
+                cfg = load_config()
+                prospero = a1.generate_prospero_draft(protocol, config=cfg)
+                protocol["prospero_draft"] = prospero
+                with open(os.path.join(run_dir, "prospero_draft.txt"), "w") as pf:
+                    pf.write(prospero)
+            except Exception:
+                pass
+            free_vram(a1)
+            save_checkpoint(run_dir, "a1_protocol", {
+                "query": req.query, "protocol": protocol, "pubmed_query": pubmed_query
+            })
+            yield _sse_event("agent_done", {
+                "agent": "A1", "name": "Protocol",
+                "summary": {
+                    "framework": protocol.get("framework", "?"),
+                    "pubmed_query": pubmed_query,
+                    "population": protocol.get("population", "?"),
+                }
+            })
+        except Exception as e:
+            yield _sse_event("agent_error", {"agent": "A1", "error": str(e)})
+            _pipeline_state["running"] = False
+            yield _sse_event("pipeline_error", {"error": f"A1 failed: {e}"})
+            return
 
     if check_stop():
         yield _sse_event("pipeline_stopped", {"last_agent": "A1"})
@@ -232,30 +346,33 @@ def run_pipeline_generator(req: PipelineRequest):
         return
 
     # ── A2: Search ───────────────────────────────────────────
-    yield _sse_event("agent_start", {"agent": "A2", "name": "Search"})
-    try:
-        a2 = Agent2Search()
-        a2_result = a2.search(protocol, pubmed_query, max_results=req.max_results)
-        papers = a2_result["papers"]
-        a2_stats = a2_result["stats"]
-        save_checkpoint(run_dir, "a2_search", {"papers": papers, "stats": a2_stats})
-        yield _sse_event("agent_done", {
-            "agent": "A2", "name": "Search",
-            "summary": {
-                "total_found": a2_stats.get("total_before_dedup", 0),
-                "after_dedup": a2_stats.get("total_after_dedup", len(papers)),
-                "per_db": {
-                    "pubmed": a2_stats.get("pubmed", 0),
-                    "europepmc": a2_stats.get("europepmc", 0),
-                    "semantic_scholar": a2_stats.get("semantic_scholar", 0),
+    if "a2_search" in resume_state:
+        yield _sse_event("agent_skipped", {"agent": "A2", "name": "Search", "reason": "resumed"})
+    else:
+        yield _sse_event("agent_start", {"agent": "A2", "name": "Search"})
+        try:
+            a2 = Agent2Search()
+            a2_result = a2.search(protocol, pubmed_query, max_results=req.max_results)
+            papers = a2_result["papers"]
+            a2_stats = a2_result["stats"]
+            save_checkpoint(run_dir, "a2_search", {"papers": papers, "stats": a2_stats})
+            yield _sse_event("agent_done", {
+                "agent": "A2", "name": "Search",
+                "summary": {
+                    "total_found": a2_stats.get("total_before_dedup", 0),
+                    "after_dedup": a2_stats.get("total_after_dedup", len(papers)),
+                    "per_db": {
+                        "pubmed": a2_stats.get("pubmed", 0),
+                        "europepmc": a2_stats.get("europepmc", 0),
+                        "semantic_scholar": a2_stats.get("semantic_scholar", 0),
+                    }
                 }
-            }
-        })
-    except Exception as e:
-        yield _sse_event("agent_error", {"agent": "A2", "error": str(e)})
-        _pipeline_state["running"] = False
-        yield _sse_event("pipeline_error", {"error": f"A2 failed: {e}"})
-        return
+            })
+        except Exception as e:
+            yield _sse_event("agent_error", {"agent": "A2", "error": str(e)})
+            _pipeline_state["running"] = False
+            yield _sse_event("pipeline_error", {"error": f"A2 failed: {e}"})
+            return
 
     if check_stop():
         yield _sse_event("pipeline_stopped", {"last_agent": "A2"})
@@ -263,30 +380,33 @@ def run_pipeline_generator(req: PipelineRequest):
         return
 
     # ── A3: Screening ────────────────────────────────────────
-    yield _sse_event("agent_start", {"agent": "A3", "name": "Screening"})
-    try:
-        a3 = Agent3Screening(
-            ensemble_size=req.a3_ensemble,
-            voting_threshold=req.a3_vote_threshold,
-        )
-        a3_results = a3.screen_batch(papers, protocol)
-        free_vram(a3)
-        save_checkpoint(run_dir, "a3_screening", a3_results)
-        stats3 = a3_results.get("stats", {})
-        yield _sse_event("agent_done", {
-            "agent": "A3", "name": "Screening",
-            "summary": {
-                "included": stats3.get("included", 0),
-                "excluded": stats3.get("excluded", 0),
-                "uncertain": stats3.get("uncertain", 0),
-            }
-        })
-    except Exception as e:
-        yield _sse_event("agent_error", {"agent": "A3", "error": str(e)})
-        free_vram(None)
-        _pipeline_state["running"] = False
-        yield _sse_event("pipeline_error", {"error": f"A3 failed: {e}"})
-        return
+    if "a3_screening" in resume_state:
+        yield _sse_event("agent_skipped", {"agent": "A3", "name": "Screening", "reason": "resumed"})
+    else:
+        yield _sse_event("agent_start", {"agent": "A3", "name": "Screening"})
+        try:
+            a3 = Agent3Screening(
+                ensemble_size=req.a3_ensemble,
+                voting_threshold=req.a3_vote_threshold,
+            )
+            a3_results = a3.screen_batch(papers, protocol)
+            free_vram(a3)
+            save_checkpoint(run_dir, "a3_screening", a3_results)
+            stats3 = a3_results.get("stats", {})
+            yield _sse_event("agent_done", {
+                "agent": "A3", "name": "Screening",
+                "summary": {
+                    "included": stats3.get("included", 0),
+                    "excluded": stats3.get("excluded", 0),
+                    "uncertain": stats3.get("uncertain", 0),
+                }
+            })
+        except Exception as e:
+            yield _sse_event("agent_error", {"agent": "A3", "error": str(e)})
+            free_vram(None)
+            _pipeline_state["running"] = False
+            yield _sse_event("pipeline_error", {"error": f"A3 failed: {e}"})
+            return
 
     if check_stop():
         yield _sse_event("pipeline_stopped", {"last_agent": "A3"})
@@ -294,34 +414,38 @@ def run_pipeline_generator(req: PipelineRequest):
         return
 
     # ── A4: Full-text ────────────────────────────────────────
-    yield _sse_event("agent_start", {"agent": "A4", "name": "Full-text"})
-    try:
-        a3_included = a3_results.get("include", [])
-        a3_uncertain = a3_results.get("uncertain", [])
-        ft_papers = a3_included + a3_uncertain
+    if "a4_fulltext" in resume_state:
+        yield _sse_event("agent_skipped", {"agent": "A4", "name": "Full-text", "reason": "resumed"})
+    else:
+        yield _sse_event("agent_start", {"agent": "A4", "name": "Full-text"})
+        try:
+            a3_included = a3_results.get("include", [])
+            a3_uncertain = a3_results.get("uncertain", [])
+            ft_papers = a3_included + a3_uncertain
 
-        a4 = Agent4FullText(
-            ensemble_size=req.a4_ensemble,
-            voting_threshold=req.a4_vote_threshold,
-        )
-        a4_result = a4.run(ft_papers, papers, protocol)
-        free_vram(a4)
-        save_checkpoint(run_dir, "a4_fulltext", a4_result)
-        stats4 = a4_result.get("stats", {})
-        yield _sse_event("agent_done", {
-            "agent": "A4", "name": "Full-text",
-            "summary": {
-                "fulltext_included": stats4.get("fulltext_included", 0),
-                "fulltext_excluded": stats4.get("fulltext_excluded", 0),
-                "retrieval_rate": stats4.get("retrieval_rate", "?"),
-            }
-        })
-    except Exception as e:
-        yield _sse_event("agent_error", {"agent": "A4", "error": str(e)})
-        free_vram(None)
-        _pipeline_state["running"] = False
-        yield _sse_event("pipeline_error", {"error": f"A4 failed: {e}"})
-        return
+            a4 = Agent4FullText(
+                ensemble_size=req.a4_ensemble,
+                voting_threshold=req.a4_vote_threshold,
+            )
+            a4_result = a4.run(ft_papers, papers, protocol)
+            free_vram(a4)
+            save_checkpoint(run_dir, "a4_fulltext", a4_result)
+            included_papers = a4_result.get("include", []) or []
+            stats4 = a4_result.get("stats", {})
+            yield _sse_event("agent_done", {
+                "agent": "A4", "name": "Full-text",
+                "summary": {
+                    "fulltext_included": stats4.get("fulltext_included", 0),
+                    "fulltext_excluded": stats4.get("fulltext_excluded", 0),
+                    "retrieval_rate": stats4.get("retrieval_rate", "?"),
+                }
+            })
+        except Exception as e:
+            yield _sse_event("agent_error", {"agent": "A4", "error": str(e)})
+            free_vram(None)
+            _pipeline_state["running"] = False
+            yield _sse_event("pipeline_error", {"error": f"A4 failed: {e}"})
+            return
 
     if check_stop():
         yield _sse_event("pipeline_stopped", {"last_agent": "A4"})
@@ -329,28 +453,31 @@ def run_pipeline_generator(req: PipelineRequest):
         return
 
     # ── A5: Extraction ───────────────────────────────────────
-    yield _sse_event("agent_start", {"agent": "A5", "name": "Extraction"})
-    try:
-        included_papers = a4_result.get("include", [])
-        a5 = Agent5Extraction()
-        a5_result = a5.extract_all(included_papers, protocol)
-        free_vram(a5)
-        save_checkpoint(run_dir, "a5_extraction", a5_result)
-        stats5 = a5_result.get("stats", {})
-        yield _sse_event("agent_done", {
-            "agent": "A5", "name": "Extraction",
-            "summary": {
-                "complete": stats5.get("complete_extraction", 0),
-                "partial": stats5.get("partial_extraction", 0),
-                "failed": stats5.get("failed_extraction", 0),
-            }
-        })
-    except Exception as e:
-        yield _sse_event("agent_error", {"agent": "A5", "error": str(e)})
-        free_vram(None)
-        # Non-fatal: continue with A4 data
-        a5_result = None
-        yield _sse_event("agent_warning", {"agent": "A5", "warning": str(e)})
+    if "a5_extraction" in resume_state:
+        yield _sse_event("agent_skipped", {"agent": "A5", "name": "Extraction", "reason": "resumed"})
+    else:
+        yield _sse_event("agent_start", {"agent": "A5", "name": "Extraction"})
+        try:
+            included_papers = a4_result.get("include", []) if a4_result else included_papers
+            a5 = Agent5Extraction()
+            a5_result = a5.extract_all(included_papers, protocol)
+            free_vram(a5)
+            save_checkpoint(run_dir, "a5_extraction", a5_result)
+            stats5 = a5_result.get("stats", {})
+            yield _sse_event("agent_done", {
+                "agent": "A5", "name": "Extraction",
+                "summary": {
+                    "complete": stats5.get("complete_extraction", 0),
+                    "partial": stats5.get("partial_extraction", 0),
+                    "failed": stats5.get("failed_extraction", 0),
+                }
+            })
+        except Exception as e:
+            yield _sse_event("agent_error", {"agent": "A5", "error": str(e)})
+            free_vram(None)
+            # Non-fatal: continue with A4 data
+            a5_result = None
+            yield _sse_event("agent_warning", {"agent": "A5", "warning": str(e)})
 
     if check_stop():
         yield _sse_event("pipeline_stopped", {"last_agent": "A5"})
@@ -358,36 +485,39 @@ def run_pipeline_generator(req: PipelineRequest):
         return
 
     # ── A6: Quality ──────────────────────────────────────────
-    yield _sse_event("agent_start", {"agent": "A6", "name": "Quality"})
-    try:
-        quality_papers = (a5_result or {}).get("papers", included_papers)
-        a6 = Agent6Quality()
-        a6_result = a6.assess_all(quality_papers, protocol)
-        free_vram(a6)
-        save_checkpoint(run_dir, "a6_quality", a6_result)
-        stats6 = a6_result.get("stats", {})
-
-        # Generate RoB plots
+    if "a6_quality" in resume_state:
+        yield _sse_event("agent_skipped", {"agent": "A6", "name": "Quality", "reason": "resumed"})
+    else:
+        yield _sse_event("agent_start", {"agent": "A6", "name": "Quality"})
         try:
-            rob_papers = a6_result.get("papers", [])
-            generate_rob_traffic_light(rob_papers, os.path.join(plots_dir, "rob_traffic_light.png"))
-            generate_rob_summary(rob_papers, os.path.join(plots_dir, "rob_summary.png"))
-        except Exception as e:
-            get_logger("api").warning("RoB plot generation failed: %s", e, exc_info=True)
+            quality_papers = (a5_result or {}).get("papers", included_papers)
+            a6 = Agent6Quality()
+            a6_result = a6.assess_all(quality_papers, protocol)
+            free_vram(a6)
+            save_checkpoint(run_dir, "a6_quality", a6_result)
+            stats6 = a6_result.get("stats", {})
 
-        yield _sse_event("agent_done", {
-            "agent": "A6", "name": "Quality",
-            "summary": {
-                "rob2": stats6.get("rob2_assessed", 0),
-                "robins_i": stats6.get("robins_i_assessed", 0),
-                "jbi": stats6.get("jbi_assessed", 0),
-            }
-        })
-    except Exception as e:
-        yield _sse_event("agent_error", {"agent": "A6", "error": str(e)})
-        free_vram(None)
-        a6_result = None
-        yield _sse_event("agent_warning", {"agent": "A6", "warning": str(e)})
+            # Generate RoB plots
+            try:
+                rob_papers = a6_result.get("papers", [])
+                generate_rob_traffic_light(rob_papers, os.path.join(plots_dir, "rob_traffic_light.png"))
+                generate_rob_summary(rob_papers, os.path.join(plots_dir, "rob_summary.png"))
+            except Exception as e:
+                get_logger("api").warning("RoB plot generation failed: %s", e, exc_info=True)
+
+            yield _sse_event("agent_done", {
+                "agent": "A6", "name": "Quality",
+                "summary": {
+                    "rob2": stats6.get("rob2_assessed", 0),
+                    "robins_i": stats6.get("robins_i_assessed", 0),
+                    "jbi": stats6.get("jbi_assessed", 0),
+                }
+            })
+        except Exception as e:
+            yield _sse_event("agent_error", {"agent": "A6", "error": str(e)})
+            free_vram(None)
+            a6_result = None
+            yield _sse_event("agent_warning", {"agent": "A6", "warning": str(e)})
 
     if check_stop():
         yield _sse_event("pipeline_stopped", {"last_agent": "A6"})
@@ -395,25 +525,28 @@ def run_pipeline_generator(req: PipelineRequest):
         return
 
     # ── A7: Synthesis ────────────────────────────────────────
-    yield _sse_event("agent_start", {"agent": "A7", "name": "Synthesis"})
-    try:
-        a7 = Agent7Synthesis()
-        a7_input = a6_result if a6_result else {"papers": included_papers}
-        a7_result = a7.synthesize(a7_input, protocol, output_dir=run_dir)
-        save_checkpoint(run_dir, "a7_synthesis", _clean_r_objects(a7_result) if a7_result else {})
-        stats7 = (a7_result or {}).get("stats", {})
-        yield _sse_event("agent_done", {
-            "agent": "A7", "name": "Synthesis",
-            "summary": {
-                "papers_analyzed": stats7.get("papers_with_usable_data", 0),
-                "pooled_effect": stats7.get("pooled_estimate", "?"),
-                "i_squared": stats7.get("i_squared", "?"),
-            }
-        })
-    except Exception as e:
-        yield _sse_event("agent_error", {"agent": "A7", "error": str(e)})
-        a7_result = None
-        yield _sse_event("agent_warning", {"agent": "A7", "warning": str(e)})
+    if "a7_synthesis" in resume_state:
+        yield _sse_event("agent_skipped", {"agent": "A7", "name": "Synthesis", "reason": "resumed"})
+    else:
+        yield _sse_event("agent_start", {"agent": "A7", "name": "Synthesis"})
+        try:
+            a7 = Agent7Synthesis()
+            a7_input = a6_result if a6_result else {"papers": included_papers}
+            a7_result = a7.synthesize(a7_input, protocol, output_dir=run_dir)
+            save_checkpoint(run_dir, "a7_synthesis", _clean_r_objects(a7_result) if a7_result else {})
+            stats7 = (a7_result or {}).get("stats", {})
+            yield _sse_event("agent_done", {
+                "agent": "A7", "name": "Synthesis",
+                "summary": {
+                    "papers_analyzed": stats7.get("papers_with_usable_data", 0),
+                    "pooled_effect": stats7.get("pooled_estimate", "?"),
+                    "i_squared": stats7.get("i_squared", "?"),
+                }
+            })
+        except Exception as e:
+            yield _sse_event("agent_error", {"agent": "A7", "error": str(e)})
+            a7_result = None
+            yield _sse_event("agent_warning", {"agent": "A7", "warning": str(e)})
 
     if check_stop():
         yield _sse_event("pipeline_stopped", {"last_agent": "A7"})
@@ -421,33 +554,36 @@ def run_pipeline_generator(req: PipelineRequest):
         return
 
     # ── A8: Manuscript ───────────────────────────────────────
-    yield _sse_event("agent_start", {"agent": "A8", "name": "Manuscript"})
-    try:
-        a8 = Agent8Manuscript()
-        a8_result = a8.generate_manuscript(
-            protocol=protocol,
-            included_papers=included_papers,
-            extraction=a5_result,
-            quality=a6_result,
-            synthesis=_clean_r_objects(a7_result) if a7_result else None,
-            output_dir=run_dir,
-        )
-        free_vram(a8)
-        save_checkpoint(run_dir, "a8_manuscript", a8_result)
-        stats8 = a8_result.get("stats", {})
-        yield _sse_event("agent_done", {
-            "agent": "A8", "name": "Manuscript",
-            "summary": {
-                "sections": stats8.get("sections_generated", 0),
-                "papers_cited": stats8.get("total_papers_cited", 0),
-                "pdf": bool(a8_result.get("pdf_path")),
-            }
-        })
-    except Exception as e:
-        yield _sse_event("agent_error", {"agent": "A8", "error": str(e)})
-        free_vram(None)
-        a8_result = None
-        yield _sse_event("agent_warning", {"agent": "A8", "warning": str(e)})
+    if "a8_manuscript" in resume_state:
+        yield _sse_event("agent_skipped", {"agent": "A8", "name": "Manuscript", "reason": "resumed"})
+    else:
+        yield _sse_event("agent_start", {"agent": "A8", "name": "Manuscript"})
+        try:
+            a8 = Agent8Manuscript()
+            a8_result = a8.generate_manuscript(
+                protocol=protocol,
+                included_papers=included_papers,
+                extraction=a5_result,
+                quality=a6_result,
+                synthesis=_clean_r_objects(a7_result) if a7_result else None,
+                output_dir=run_dir,
+            )
+            free_vram(a8)
+            save_checkpoint(run_dir, "a8_manuscript", a8_result)
+            stats8 = a8_result.get("stats", {})
+            yield _sse_event("agent_done", {
+                "agent": "A8", "name": "Manuscript",
+                "summary": {
+                    "sections": stats8.get("sections_generated", 0),
+                    "papers_cited": stats8.get("total_papers_cited", 0),
+                    "pdf": bool(a8_result.get("pdf_path")),
+                }
+            })
+        except Exception as e:
+            yield _sse_event("agent_error", {"agent": "A8", "error": str(e)})
+            free_vram(None)
+            a8_result = None
+            yield _sse_event("agent_warning", {"agent": "A8", "warning": str(e)})
 
     # ── Finalize: PRISMA, exports ────────────────────────────
     yield _sse_event("finalizing", {"message": "Building outputs..."})
@@ -652,9 +788,24 @@ def run_pipeline_generator(req: PipelineRequest):
 
 @app.post("/api/run")
 async def run(req: PipelineRequest):
-    """Start the pipeline. Returns an SSE stream."""
+    """Start the pipeline. Returns an SSE stream.
+
+    If ``resume_run_id`` is provided, the pipeline reuses that run's
+    directory and restores state from its checkpoint files (skipping
+    already-completed agents). Returns 404 if the directory does not
+    exist.
+    """
     if _pipeline_state["running"]:
         raise HTTPException(409, "A pipeline is already running")
+    # ARQ1: validate resume_run_id before streaming so the client gets
+    # a clean HTTP 404 rather than an SSE error event
+    if req.resume_run_id:
+        resume_dir = OUTPUTS_DIR / req.resume_run_id
+        if not resume_dir.is_dir():
+            raise HTTPException(
+                404,
+                f"resume_run_id '{req.resume_run_id}' not found in outputs/",
+            )
     return StreamingResponse(
         run_pipeline_generator(req),
         media_type="text/event-stream",
