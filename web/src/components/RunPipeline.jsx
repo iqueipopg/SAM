@@ -58,6 +58,7 @@ export default function RunPipeline() {
     a4_vote_threshold: 0.60,
   })
 
+  const [manuscriptLanguage, setManuscriptLanguage] = useState('es')
   const [running, setRunning] = useState(false)
   const [agents, setAgents] = useState({}) // { A1: { status, summary, error } }
   const [currentAgent, setCurrentAgent] = useState(null)
@@ -99,7 +100,11 @@ export default function RunPipeline() {
       const response = await fetch(`${API_URL}/api/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query.trim(), ...settings }),
+        body: JSON.stringify({
+          query: query.trim(),
+          ...settings,
+          language: manuscriptLanguage,
+        }),
         signal: controller.signal,
       })
 
@@ -348,6 +353,22 @@ export default function RunPipeline() {
                     onChange={(v) => updateSetting('a4_vote_threshold', v)}
                     format={(v) => v.toFixed(2)}
                   />
+                  <div>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1.5">
+                      Idioma del manuscrito (A8)
+                    </label>
+                    <select
+                      value={manuscriptLanguage}
+                      onChange={(e) => setManuscriptLanguage(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm text-zinc-700 focus:outline-none focus:border-sam-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                    >
+                      <option value="es">Español</option>
+                      <option value="en">English</option>
+                    </select>
+                    <p className="mt-1 text-[10px] text-zinc-400 leading-snug">
+                      Por defecto Español. Selecciona English para publicación internacional.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
