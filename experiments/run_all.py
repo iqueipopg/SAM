@@ -1,15 +1,23 @@
 """
-run_all.py — Ejecuta los 7 toy experiments en secuencia.
-Uso: python experiments/run_all.py [--dry-run]
+run_all.py — Orquestador de experimentos SAM.
+
+Ejecuta todos los experimentos en experiments/ en secuencia, captura fallos
+individuales sin abortar el runner y genera un resumen JSON + tabla LaTeX.
+
+Uso:
+    python experiments/run_all.py              # ejecucion completa
+    python experiments/run_all.py --dry-run    # pasa --dry-run a cada experimento
 
 Nota: E4 (model comparison) solo ejecuta Qwen-7B en local.
       En Rudiger, descomentar los modelos adicionales en exp4_model_comparison.py.
+      E8 requiere data/gold_standard.json (ver project_t5_gold_standard.md).
 
 Tiempo estimado local (RTX 4060):
-  E1 ~10 min  | E2 ~15 min  | E3 ~45 min  | E4 ~15 min  | E5 ~30 min  | E6 ~20 min  | E7 ~25 min
-  Total: ~3h
+  E1 ~10 min | E2 ~15 min | E3 ~45 min | E4 ~15 min |
+  E5 ~30 min | E6 ~20 min | E7 ~25 min | E8 ~20 min
+  Total: ~3h 20m
 """
-import json, os, time, argparse
+import json, os, time, argparse, traceback
 from pathlib import Path
 
 RESULTS_DIR = Path("experiments/results")
@@ -23,18 +31,33 @@ EXPERIMENTS = [
     ("E5 -- End-to-End Benchmark (A1-A4)", "experiments/exp5_end_to_end_benchmark.py"),
     ("E6 -- Full-text Impact (A4)", "experiments/exp6_fulltext_impact.py"),
     ("E7 -- VRAM Profiling (A1-A8)", "experiments/exp7_vram_profiling.py"),
+    ("E8 -- Gold Standard Eval (A3/A3+A4)", "experiments/exp8_gold_standard_eval.py"),
 ]
 
 
 def run_experiment(name, module_path, dry_run=False):
+    """Ejecuta un experimento aislando excepciones para no matar el runner."""
     print(f"\n{'='*60}\n  {name}\n{'='*60}")
     t0 = time.time()
-    flag = " --dry-run" if dry_run else ""
-    exit_code = os.system(f"python {module_path}{flag}")
+    status = "ERROR"
+    error_msg = None
+    try:
+        if not Path(module_path).exists():
+            raise FileNotFoundError(f"No existe {module_path}")
+        flag = " --dry-run" if dry_run else ""
+        exit_code = os.system(f"python {module_path}{flag}")
+        status = "OK" if exit_code == 0 else "ERROR"
+        if exit_code != 0:
+            error_msg = f"exit_code={exit_code}"
+    except Exception as e:
+        error_msg = f"{type(e).__name__}: {e}"
+        traceback.print_exc()
     elapsed = round(time.time() - t0, 1)
-    status = "OK" if exit_code == 0 else "ERROR"
-    print(f"  -> {status}  ({elapsed}s)")
-    return {"name": name, "status": status, "elapsed_s": elapsed}
+    print(f"  -> {status}  ({elapsed}s)" + (f"  [{error_msg}]" if error_msg else ""))
+    result = {"name": name, "status": status, "elapsed_s": elapsed}
+    if error_msg:
+        result["error"] = error_msg
+    return result
 
 
 def generate_latex_table(results):
