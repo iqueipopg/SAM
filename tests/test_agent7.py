@@ -253,3 +253,78 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pytest tests for BUG2: forest plot study-label fallback cascade.
+# These are pure-function tests — no R, no plotting, CPU-only.
+# ──────────────────────────────────────────────────────────────────────────────
+
+import pytest  # noqa: E402
+
+
+def test_build_study_label_prefers_pmid():
+    label = Agent7Synthesis._build_study_label(
+        {"pmid": "12345678", "authors": ["Smith J"], "year": "2020"}, 1
+    )
+    assert label == "12345678"
+
+
+def test_build_study_label_pmid_plus_outcome_name():
+    label = Agent7Synthesis._build_study_label(
+        {"pmid": "42", "authors": ["X"]}, 1, outcome_name="Anxiety (BAI)"
+    )
+    assert label == "42: Anxiety (BAI)"
+
+
+def test_build_study_label_fallback_to_first_author_and_year():
+    label = Agent7Synthesis._build_study_label(
+        {"pmid": "", "first_author": "Smith J", "year": "2021"}, 1
+    )
+    assert label == "Smith J (2021)"
+
+
+def test_build_study_label_fallback_to_first_author_alone():
+    label = Agent7Synthesis._build_study_label(
+        {"pmid": "", "first_author": "Smith J"}, 2
+    )
+    assert label == "Smith J"
+
+
+def test_build_study_label_fallback_to_authors_list_first():
+    label = Agent7Synthesis._build_study_label(
+        {"pmid": "", "authors": ["García-López R", "Müller K"]}, 3
+    )
+    assert label == "García-López R"
+
+
+def test_build_study_label_fallback_to_title():
+    paper = {"pmid": "", "authors": [], "title": "Effects of CBT on anxiety in adults"}
+    label = Agent7Synthesis._build_study_label(paper, 4)
+    assert label.startswith("Effects of CBT")
+    # Must NOT begin with a colon (the original BUG2 symptom).
+    assert not label.startswith(":")
+
+
+def test_build_study_label_last_resort_study_n():
+    label = Agent7Synthesis._build_study_label({}, 7)
+    assert label == "Study 7"
+
+
+def test_build_study_label_never_starts_with_colon_even_with_outcome_name():
+    # This is the exact BUG2 regression scenario: empty pmid, outcome present.
+    label = Agent7Synthesis._build_study_label(
+        {"pmid": "", "authors": [], "title": ""},
+        5,
+        outcome_name="Reduction in anxiety",
+    )
+    assert not label.startswith(":"), f"label started with colon: {label!r}"
+    assert "Study 5" in label or "Reduction in anxiety" in label
+
+
+def test_build_study_label_handles_missing_everything():
+    # Dict with None values must not raise.
+    label = Agent7Synthesis._build_study_label(
+        {"pmid": None, "authors": None, "title": None, "year": None}, 9
+    )
+    assert label == "Study 9"

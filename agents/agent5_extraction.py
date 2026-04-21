@@ -292,6 +292,50 @@ class Agent5Extraction(BaseAgent):
         final = self._reconcile(result_a, result_b, paper, protocol)
         return final
 
+    # Regex patterns for statistical markers commonly found in results sections.
+    # If two or more of these appear in the paper's text but no effect sizes were
+    # extracted, the heuristic triggers a second pass.
+    _NUMERIC_STAT_PATTERNS = [
+        # Cohen's d: "d = 0.45", "d=0.45", "Cohen's d", "Cohen d"
+        re.compile(r"\bd\s*=\s*[-−]?\d+\.?\d*", re.IGNORECASE),
+        re.compile(r"\bCohen'?s?\s+d\b", re.IGNORECASE),
+        # Eta squared: η²=, eta²=, eta2=, partial eta squared
+        re.compile(r"(?:η|eta)\s*(?:\^?2|²|\s*squared)?\s*=\s*[-−]?\d+\.?\d*", re.IGNORECASE),
+        # Hedges' g
+        re.compile(r"\bHedges'?\s*g\b", re.IGNORECASE),
+        re.compile(r"\bg\s*=\s*[-−]?\d+\.?\d*", re.IGNORECASE),
+        # Mean (SD) and M ± SD table patterns
+        re.compile(r"\b(?:mean|M)\s*\(\s*[-−]?\d+\.?\d*\s*\)", re.IGNORECASE),
+        re.compile(r"\bSD\b", re.IGNORECASE),
+        re.compile(r"[-−]?\d+\.?\d*\s*[±]\s*\d+\.?\d*"),
+        # Correlation: r = 0.23 / r=.23
+        re.compile(r"\br\s*=\s*[-−]?\.?\d+\.?\d*", re.IGNORECASE),
+        # Effect measures: OR =, RR =, HR =
+        re.compile(r"\bOR\s*=\s*[-−]?\d+\.?\d*"),
+        re.compile(r"\bRR\s*=\s*[-−]?\d+\.?\d*"),
+        re.compile(r"\bHR\s*=\s*[-−]?\d+\.?\d*"),
+        # Additional table markers: SMD = ..., β = ..., MD = ...
+        re.compile(r"\bSMD\s*=\s*[-−]?\d+\.?\d*"),
+        re.compile(r"\bMD\s*=\s*[-−]?\d+\.?\d*"),
+        re.compile(r"\b(?:beta|β)\s*=\s*[-−]?\d+\.?\d*", re.IGNORECASE),
+    ]
+
+    @classmethod
+    def _count_statistical_markers(cls, text: str) -> int:
+        """Count how many distinct statistical markers appear in the text.
+
+        Used to decide whether a paper is statistically rich enough that a
+        second extraction pass is warranted when the first pass returns no
+        effect sizes.
+        """
+        if not text:
+            return 0
+        hits = 0
+        for pattern in cls._NUMERIC_STAT_PATTERNS:
+            if pattern.search(text):
+                hits += 1
+        return hits
+
     def _needs_second_pass(self, result: Dict, paper: Dict) -> bool:
         """Decide if pass 1 results need verification via a second extraction.
 
@@ -328,6 +372,20 @@ class Agent5Extraction(BaseAgent):
         # Study characteristics missing → verify
         if result.get("study_characteristics") is None:
             return True
+
+        # --- Extended statistical-marker heuristic (BUG5) ---
+        # If the paper's full text contains multiple statistical signals
+        # (Cohen's d, η², M ± SD, OR=, etc.) but none of the current outcomes
+        # have a populated effect_size/value, trigger a second pass to recover
+        # the numbers the first pass missed.
+        has_effect_size = any(
+            (o.get("effect_size_value") is not None) or (o.get("value") is not None)
+            for o in outcomes
+        )
+        if not has_effect_size:
+            scan_text = full_text or paper.get("abstract", "") or ""
+            if self._count_statistical_markers(scan_text) >= 2:
+                return True
 
         # Passed all checks → confident enough
         return False

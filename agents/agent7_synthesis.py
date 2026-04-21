@@ -369,7 +369,7 @@ class Agent7Synthesis:
         # so we can record _measure_type after all outcomes are added.
         group_measure_counts: Dict[str, Dict[str, int]] = {}
 
-        for paper in papers:
+        for paper_idx, paper in enumerate(papers, start=1):
             pmid = paper.get("pmid", "unknown")
             weight = paper.get("quality_weight", 0.5)
             outcomes = paper.get("outcomes", [])
@@ -426,12 +426,10 @@ class Agent7Synthesis:
                     # No name → backward-compat: group by measure type
                     group_key = measure
 
-                # Build label from outcome name (truncated) rather than paper title
-                if outcome_name:
-                    label = f"{pmid}: {outcome_name[:50]}"
-                else:
-                    title = paper.get("title", "")[:40]
-                    label = f"{pmid}: {title}"
+                # Build label with a cascade of fallbacks (BUG2 fix):
+                # prefer pmid, then "first_author (year)", then first author,
+                # then a truncated title, finally "Study N".
+                label = self._build_study_label(paper, paper_idx, outcome_name)
 
                 if group_key not in groups:
                     groups[group_key] = {
@@ -889,6 +887,62 @@ class Agent7Synthesis:
             else:
                 new[key] = vals
         return new
+
+    @staticmethod
+    def _build_study_label(paper: Dict, idx: int, outcome_name: str = "") -> str:
+        """Build a forest-plot-friendly label for a study (BUG2 fix).
+
+        Cascade of fallbacks — returns the first populated option:
+        1. ``pmid`` if available
+        2. ``first_author (year)`` if both present
+        3. first author alone
+        4. first entry of ``authors`` list
+        5. truncated ``title``
+        6. ``"Study {idx}"`` as last resort
+
+        The returned label is further stripped so nothing starts with ":" or
+        extra whitespace, and if ``outcome_name`` is provided we append it
+        after the base identifier so the forest plot keeps per-outcome context.
+        """
+        def _coerce(v):
+            if v is None:
+                return ""
+            return str(v).strip()
+
+        pmid = _coerce(paper.get("pmid"))
+        first_author = _coerce(paper.get("first_author"))
+        if not first_author:
+            authors = paper.get("authors") or []
+            if isinstance(authors, list) and authors:
+                first_author = _coerce(authors[0])
+            elif isinstance(authors, str):
+                # Handle comma-separated string
+                parts = [a.strip() for a in authors.split(",") if a.strip()]
+                first_author = parts[0] if parts else ""
+        year = _coerce(paper.get("year"))
+        title = _coerce(paper.get("title"))
+
+        if pmid:
+            base = pmid
+        elif first_author and year:
+            base = f"{first_author} ({year})"
+        elif first_author:
+            base = first_author
+        elif title:
+            trimmed = title[:40].rstrip()
+            base = trimmed + ("..." if len(title) > 40 else "")
+        else:
+            base = f"Study {idx}"
+
+        outcome_name = _coerce(outcome_name)
+        if outcome_name:
+            label = f"{base}: {outcome_name[:50]}"
+        else:
+            label = base
+
+        # Belt-and-braces: strip leading ":" or whitespace left by any upstream bug.
+        label = label.lstrip(": \t").strip()
+        return label or f"Study {idx}"
 
     def _classify_rob_level(self, paper: Dict) -> str:
         """Classify a paper's risk-of-bias into 'low', 'some_concerns', or 'high'
