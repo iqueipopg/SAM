@@ -107,6 +107,11 @@ class Agent2Search:
         share, the remaining DBs get a higher cap to reach max_results total.
         Requests ~20% extra to compensate for deduplication losses.
         """
+        # CFG1: be defensive if callers instantiated Agent2Search bypassing
+        # __init__ (e.g. some older tests patch __init__ to a no-op).
+        if not hasattr(self, "min_per_db"):
+            self.min_per_db = 10
+
         search_terms = self._build_search_terms(protocol)
 
         # Request 20% extra to compensate for deduplication losses
