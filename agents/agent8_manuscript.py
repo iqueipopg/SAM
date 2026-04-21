@@ -596,8 +596,9 @@ class Agent8Manuscript(BaseAgent):
     #  SECTION GENERATION                                                  #
     # ================================================================== #
 
-    # Section-specific temperatures: lower for fact-heavy, higher for narrative
-    _SECTION_TEMPS = {
+    # Section-specific temperatures: lower for fact-heavy, higher for narrative.
+    # Defaults used as fallback when config/agents.json has no override.
+    _SECTION_TEMPS_DEFAULTS = {
         "abstract": 0.2,
         "methods": 0.2,
         "results": 0.2,
@@ -605,6 +606,8 @@ class Agent8Manuscript(BaseAgent):
         "introduction": 0.3,
         "discussion": 0.3,
     }
+    # Backward-compat alias for any external reference to the previous attr.
+    _SECTION_TEMPS = _SECTION_TEMPS_DEFAULTS
 
     # Max new tokens per section
     _SECTION_MAX_TOKENS = {
@@ -664,8 +667,12 @@ class Agent8Manuscript(BaseAgent):
             language=self._language,
         )
 
-        # Generate with section-specific temperature and token limit
-        temp = self._SECTION_TEMPS.get(section_name, 0.5)
+        # Generate with section-specific temperature and token limit.
+        # Temperatures pulled from config/agents.json (regla #9), fallback to defaults.
+        section_temps = self.get_agent_param("section_temps", self._SECTION_TEMPS_DEFAULTS)
+        if not isinstance(section_temps, dict):
+            section_temps = self._SECTION_TEMPS_DEFAULTS
+        temp = section_temps.get(section_name, 0.5)
         max_tok = self._SECTION_MAX_TOKENS.get(section_name, 1000)
         text = self._simple_generate(prompt, max_tokens=max_tok, temperature=temp)
 
