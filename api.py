@@ -299,17 +299,33 @@ def _sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
+def _release_pipeline_slot():
+    """ARQ7 helper: clear the 'running' / 'active_run_id' flags together.
+
+    Called whenever the pipeline generator exits (success, error, cancel)
+    so /api/run can accept the next request.
+    """
+    _pipeline_state["running"] = False
+    _pipeline_state["active_run_id"] = None
+
+
 def run_pipeline_generator(req: PipelineRequest):
     """Generator that yields SSE events as the pipeline progresses.
 
     If ``req.resume_run_id`` is set the runner reuses that existing run
     directory, loads any checkpoint_*.json files it finds and skips the
     corresponding agents, emitting a 'resumed' SSE event before continuing.
+
+    ARQ7: the generator maintains ``_pipeline_state["active_run_id"]`` so
+    that the /api/run endpoint can reject concurrent requests with 429.
+    The flag is always cleared when the generator returns (success, error
+    or early cancel) so a failed run never locks out the API.
     """
     _pipeline_state["running"] = True
     _pipeline_state["stop_requested"] = False
     _pipeline_state["kill_requested"] = False
     _pipeline_state["cancel_requested"] = False
+    _pipeline_state["active_run_id"] = None
 
     gc.collect()
     if torch.cuda.is_available():
@@ -334,6 +350,8 @@ def run_pipeline_generator(req: PipelineRequest):
 
     os.makedirs(run_dir, exist_ok=True)
     _pipeline_state["current_run_dir"] = run_dir
+    # ARQ7: record the active run_id so /api/run can reject collisions
+    _pipeline_state["active_run_id"] = os.path.basename(run_dir)
 
     setup_logger("SAM", log_dir=run_dir)
     plots_dir = os.path.join(run_dir, "plots")
@@ -871,7 +889,7 @@ def run_pipeline_generator(req: PipelineRequest):
         if os.path.exists(ppath):
             downloads[pname.replace(".png", "").replace("_", " ").title()] = f"plots/{pname}"
 
-    _pipeline_state["running"] = False
+    _release_pipeline_slot()
     _pipeline_state["current_run_dir"] = run_dir
 
     yield _sse_event("pipeline_done", {
@@ -879,6 +897,20 @@ def run_pipeline_generator(req: PipelineRequest):
         "prisma": prisma,
         "downloads": downloads,
     })
+
+
+def _guarded_pipeline_generator(req: PipelineRequest):
+    """ARQ7 wrapper: always releases the pipeline slot on exit.
+
+    Wraps :func:`run_pipeline_generator` in a try/finally so that even
+    if a streaming client disconnects or an exception bubbles up, the
+    ``running`` / ``active_run_id`` flags are cleared and the next
+    /api/run call is not blocked by stale state.
+    """
+    try:
+        yield from run_pipeline_generator(req)
+    finally:
+        _release_pipeline_slot()
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -891,9 +923,21 @@ async def run(req: PipelineRequest):
     directory and restores state from its checkpoint files (skipping
     already-completed agents). Returns 404 if the directory does not
     exist.
+
+    ARQ7: at most one pipeline can run concurrently. If another one is
+    already active the endpoint returns HTTP 429 with the ``active_run_id``
+    of the in-flight pipeline so the client can subscribe or retry later.
     """
+    # ARQ7: single-concurrent-pipeline rate limit
     if _pipeline_state["running"]:
-        raise HTTPException(409, "A pipeline is already running")
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "Pipeline already running",
+                "active_run_id": _pipeline_state.get("active_run_id"),
+            },
+        )
     # ARQ1: validate resume_run_id before streaming so the client gets
     # a clean HTTP 404 rather than an SSE error event
     if req.resume_run_id:
@@ -904,7 +948,7 @@ async def run(req: PipelineRequest):
                 f"resume_run_id '{req.resume_run_id}' not found in outputs/",
             )
     return StreamingResponse(
-        run_pipeline_generator(req),
+        _guarded_pipeline_generator(req),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -936,10 +980,16 @@ async def kill():
 
 @app.get("/api/status")
 async def status():
-    """Check pipeline status."""
+    """Check pipeline status.
+
+    ARQ7: the response now includes ``active_run_id`` so the UI can show
+    which run is currently in flight when a 429 is returned by /api/run.
+    """
     return {
         "running": _pipeline_state["running"],
         "run_dir": _pipeline_state["current_run_dir"],
+        "active_run_id": _pipeline_state.get("active_run_id"),
+        "cancel_requested": _pipeline_state.get("cancel_requested", False),
     }
 
 
