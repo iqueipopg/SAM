@@ -1,8 +1,11 @@
 """Agent 4: Full-Text Retrieval + PRISMA Full-Text Screening (Qwen2.5-7B)
 
 Two phases:
-  Phase A — Retrieve full text: PMC XML → Unpaywall PDF → Europe PMC → Semantic Scholar
-            → OpenAlex → CrossRef → DOAJ → The Lens → CORE → Sci-Hub → abstract fallback
+  Phase A — Retrieve full text. Cascade (first hit wins):
+            PMC XML → Unpaywall PDF → Europe PMC → Semantic Scholar (v1) →
+            OpenAlex → CrossRef → DOAJ → The Lens → CORE → preprints
+            (ArXiv/bioRxiv/medRxiv) → Semantic Scholar v2 openAccessPdf →
+            Google Scholar → Sci-Hub → abstract fallback.
   Phase B — Full-text PRISMA screening via LLM (ensemble voting, configurable)
 """
 
@@ -85,6 +88,9 @@ class Agent4FullText(BaseAgent):
         self.scihub_enabled = retrieval_cfg.get("scihub_enabled", True)
         self.scihub_domain = retrieval_cfg.get("scihub_domain", "sci-hub.se")
         self.google_scholar_enabled = retrieval_cfg.get("google_scholar_enabled", True)
+        # New sources for BUG6: preprint servers + Semantic Scholar v2 open-access
+        self.preprints_enabled = retrieval_cfg.get("preprints_enabled", True)
+        self.semanticscholar_v2_enabled = retrieval_cfg.get("semanticscholar_v2_enabled", True)
 
         # API keys for token-gated sources (env var takes priority)
         self._lens_api_token = os.environ.get("LENS_API_TOKEN") or retrieval_cfg.get("lens_api_token", "")
@@ -153,7 +159,13 @@ class Agent4FullText(BaseAgent):
         print("\n--- Phase A: Full-Text Retrieval ---")
 
         # Build lookup: pmid → a2 paper (has abstract, authors, etc.)
-        a2_lookup = {str(p.get("pmid", "")): p for p in a2_papers}
+        # Only index papers with a real pmid; empty-pmid papers would collide on '' (BUG1).
+        a2_lookup = {str(p.get("pmid", "")): p for p in a2_papers if p.get("pmid")}
+        # Secondary lookup by normalized title for papers without pmid (Google Scholar, etc.)
+        a2_title_lookup = {
+            (p.get("title") or "").strip().lower(): p
+            for p in a2_papers if not p.get("pmid") and p.get("title")
+        }
 
         # Collect PMIDs
         pmids = [str(p.get("pmid", "")) for p in included_papers if p.get("pmid")]
@@ -173,7 +185,12 @@ class Agent4FullText(BaseAgent):
 
         for paper in included_papers:
             pmid = str(paper.get("pmid", ""))
-            a2 = a2_lookup.get(pmid, {})
+            if pmid:
+                a2 = a2_lookup.get(pmid, {})
+            else:
+                # Fallback: match by title when pmid is empty (e.g., Google Scholar papers)
+                title_key = (paper.get("title") or "").strip().lower()
+                a2 = a2_title_lookup.get(title_key, {})
 
             # Merge A3 screening data with A2 paper data
             enriched_paper = {
@@ -228,7 +245,13 @@ class Agent4FullText(BaseAgent):
         return enriched
 
     def _retrieve_single(self, paper: Dict, stats: Dict):
-        """Try PMC → Unpaywall → abstract fallback for a single paper."""
+        """Cascade full-text retrieval for a single paper.
+
+        Order (first hit wins; see module docstring for full cascade):
+            PMC → Unpaywall → Europe PMC → S2 (v1) → OpenAlex → CrossRef →
+            DOAJ → The Lens → CORE → preprints (ArXiv/bioRxiv/medRxiv) →
+            S2 v2 openAccessPdf → Google Scholar → Sci-Hub → abstract.
+        """
         pmid = paper["pmid"]
         paper["title"][:60]
 
@@ -363,7 +386,37 @@ class Agent4FullText(BaseAgent):
             else:
                 print("not available")
 
-        # 10. Try Google Scholar (search by title → find PDF link)
+        # 10. Try preprint servers (ArXiv / bioRxiv / medRxiv) — title/DOI lookup
+        if self.preprints_enabled:
+            print(f"  [{pmid}] Trying preprints (ArXiv/bioRxiv/medRxiv)... ", end="", flush=True)
+            full_text, preprint_src = self._try_preprints(paper)
+            if full_text:
+                paper["full_text"] = full_text
+                paper["text_source"] = f"preprint_{preprint_src}"
+                paper["full_text_length"] = len(full_text)
+                stats.setdefault("preprint_pdf", 0)
+                stats["preprint_pdf"] += 1
+                print(f"OK ({len(full_text)} chars, src={preprint_src})")
+                return
+            else:
+                print("not available")
+
+        # 11. Semantic Scholar v2 open-access PDF (DOI / paperId lookup)
+        if self.semanticscholar_v2_enabled:
+            print(f"  [{pmid}] Trying Semantic Scholar v2 openAccessPdf... ", end="", flush=True)
+            full_text = self._try_semanticscholar_v2(paper)
+            if full_text:
+                paper["full_text"] = full_text
+                paper["text_source"] = "semanticscholar_v2_pdf"
+                paper["full_text_length"] = len(full_text)
+                stats.setdefault("semanticscholar_v2_pdf", 0)
+                stats["semanticscholar_v2_pdf"] += 1
+                print(f"OK ({len(full_text)} chars)")
+                return
+            else:
+                print("not available")
+
+        # 12. Try Google Scholar (search by title → find PDF link)
         if self.google_scholar_enabled:
             print(f"  [{pmid}] Trying Google Scholar... ", end="", flush=True)
             full_text = self._try_google_scholar(paper)
@@ -1384,6 +1437,209 @@ class Agent4FullText(BaseAgent):
 
             return None
         except Exception:
+            return None
+
+    # ------------------------------------------------------------------ #
+    #  Preprint servers (ArXiv / bioRxiv / medRxiv)                        #
+    # ------------------------------------------------------------------ #
+
+    def _try_preprints(self, paper: Dict) -> Tuple[Optional[str], str]:
+        """Try ArXiv, bioRxiv, medRxiv for an open preprint PDF.
+
+        Returns (full_text, source_name) where source_name is one of
+        "arxiv" / "biorxiv" / "medrxiv" on success, or (None, "") on failure.
+
+        Strategy per server:
+          - ArXiv: Atom XML search by title (ti:"..."), parse for a link
+            with type="application/pdf"; else construct from arxiv_id.
+          - bioRxiv / medRxiv: JSON API details by DOI when available,
+            else fall back to search by title via the site search endpoint.
+
+        Each request uses a 10 s timeout and the shared retry helper. Failures
+        are silent — the cascade moves on.
+        """
+        title = paper.get("title", "")
+        doi = paper.get("doi", "")
+
+        # --- ArXiv: title search via Atom export API --------------------
+        full_text = self._try_arxiv(title)
+        if full_text:
+            return full_text, "arxiv"
+
+        # --- bioRxiv --------------------------------------------------
+        full_text = self._try_rxiv(doi, title, server="biorxiv")
+        if full_text:
+            return full_text, "biorxiv"
+
+        # --- medRxiv --------------------------------------------------
+        full_text = self._try_rxiv(doi, title, server="medrxiv")
+        if full_text:
+            return full_text, "medrxiv"
+
+        return None, ""
+
+    def _try_arxiv(self, title: str) -> Optional[str]:
+        """Query ArXiv Atom API by title and download the PDF if found."""
+        if not title:
+            return None
+        try:
+            from urllib.parse import quote_plus
+            query = quote_plus(f'ti:"{title[:120]}"')
+            url = f"http://export.arxiv.org/api/query?search_query={query}&max_results=1"
+
+            def _arxiv_query():
+                r = requests.get(url, timeout=10, headers={
+                    "User-Agent": "meta-analysis-bot/1.0 (mailto:meta-analysis@example.com)",
+                })
+                r.raise_for_status()
+                return r.text
+
+            atom = retry_with_backoff(
+                _arxiv_query,
+                retryable_exceptions=(requests.exceptions.RequestException,),
+                on_retry=lambda a, e, d: print(f"ArXiv retry {a+1}: {e} "),
+            )
+            if not atom:
+                return None
+
+            # Parse namespace-flexible Atom XML
+            pdf_url = None
+            try:
+                root = ET.fromstring(atom)
+                # Atom namespace is http://www.w3.org/2005/Atom
+                ns = {"a": "http://www.w3.org/2005/Atom"}
+                entry = root.find("a:entry", ns)
+                if entry is not None:
+                    for link in entry.findall("a:link", ns):
+                        if link.attrib.get("title") == "pdf" or \
+                           link.attrib.get("type") == "application/pdf":
+                            pdf_url = link.attrib.get("href")
+                            break
+                    if not pdf_url:
+                        # Fall back to arxiv_id in <id>.../<arxiv_id>
+                        id_elem = entry.find("a:id", ns)
+                        if id_elem is not None and id_elem.text:
+                            m = re.search(r"arxiv\.org/abs/([^\s]+)", id_elem.text)
+                            if m:
+                                pdf_url = f"https://arxiv.org/pdf/{m.group(1)}.pdf"
+            except ET.ParseError:
+                return None
+
+            if not pdf_url:
+                return None
+
+            dl = requests.get(pdf_url, timeout=30, headers={
+                "User-Agent": "meta-analysis-bot/1.0 (mailto:meta-analysis@example.com)",
+            })
+            if dl.status_code != 200:
+                return None
+            return self._extract_pdf_text(dl.content)
+        except Exception as e:
+            print(f"ArXiv error: {e} ", end="", flush=True)
+            return None
+
+    def _try_rxiv(self, doi: str, title: str, server: str = "biorxiv") -> Optional[str]:
+        """Query bioRxiv / medRxiv JSON details API and download the PDF.
+
+        bioRxiv/medRxiv share the same endpoint shape — the `server` kwarg
+        selects which collection to query.  DOI lookup is preferred; a
+        title-based fallback is left as a TODO (see BUG6 note) because the
+        site search endpoint requires HTML parsing.
+        """
+        if server not in ("biorxiv", "medrxiv"):
+            return None
+        if not doi:
+            # TODO(BUG6): add title-search HTML scraping for bioRxiv/medRxiv.
+            return None
+        try:
+            url = f"https://api.biorxiv.org/details/{server}/{doi}"
+
+            def _rxiv_query():
+                r = requests.get(url, timeout=10, headers={
+                    "User-Agent": "meta-analysis-bot/1.0",
+                    "Accept": "application/json",
+                })
+                r.raise_for_status()
+                return r.json()
+
+            data = retry_with_backoff(
+                _rxiv_query,
+                retryable_exceptions=(requests.exceptions.RequestException,),
+                on_retry=lambda a, e, d: print(f"{server} retry {a+1}: {e} "),
+            )
+            collection = data.get("collection") or []
+            if not collection:
+                return None
+            # Pick the most recent entry
+            entry = collection[-1]
+            entry_doi = entry.get("doi")
+            if not entry_doi:
+                return None
+            # Official PDF URL pattern: https://www.{server}.org/content/{doi}.full.pdf
+            pdf_url = f"https://www.{server}.org/content/{entry_doi}.full.pdf"
+            dl = requests.get(pdf_url, timeout=30, headers={
+                "User-Agent": "meta-analysis-bot/1.0 (mailto:meta-analysis@example.com)",
+            })
+            if dl.status_code != 200:
+                return None
+            return self._extract_pdf_text(dl.content)
+        except Exception as e:
+            print(f"{server} error: {e} ", end="", flush=True)
+            return None
+
+    # ------------------------------------------------------------------ #
+    #  Semantic Scholar v2 open-access PDF                                 #
+    # ------------------------------------------------------------------ #
+
+    def _try_semanticscholar_v2(self, paper: Dict) -> Optional[str]:
+        """Hit the Semantic Scholar Graph v1/v2 endpoint by DOI / paperId
+        and download the open-access PDF if available.
+
+        Unlike :meth:`_fetch_semanticscholar_pdf`, which looks up by PMID,
+        this variant tries DOI first (broader coverage: many papers have DOIs
+        but no PMID) and falls back to a provided ``semanticScholarId`` /
+        ``paperId`` field when present on the paper dict.
+
+        Note: full v2 rollout may eventually require an API key; we silently
+        fall back on HTTP errors. TODO(BUG6): limitaciones open-access —
+        preprints integrados, SS v2 pendiente auth-key.
+        """
+        self._rate_limit_semanticscholar()
+        doi = paper.get("doi", "")
+        paper_id = paper.get("semanticScholarId") or paper.get("paperId") or ""
+
+        def _fetch_by(lookup: str) -> Optional[Dict]:
+            url = f"https://api.semanticscholar.org/graph/v1/paper/{lookup}?fields=openAccessPdf,externalIds"
+            headers = {"User-Agent": "meta-analysis-bot/1.0"}
+            try:
+                r = requests.get(url, timeout=10, headers=headers)
+                r.raise_for_status()
+                return r.json()
+            except requests.exceptions.RequestException:
+                return None
+
+        data = None
+        if doi:
+            data = _fetch_by(f"DOI:{doi}")
+        if not data and paper_id:
+            data = _fetch_by(paper_id)
+        if not data:
+            return None
+
+        oa = data.get("openAccessPdf") or {}
+        pdf_url = oa.get("url")
+        if not pdf_url:
+            return None
+
+        try:
+            dl = requests.get(pdf_url, timeout=30, headers={
+                "User-Agent": "meta-analysis-bot/1.0 (mailto:meta-analysis@example.com)",
+            })
+            if dl.status_code != 200:
+                return None
+            return self._extract_pdf_text(dl.content)
+        except Exception as e:
+            print(f"S2 v2 error: {e} ", end="", flush=True)
             return None
 
     # ------------------------------------------------------------------ #

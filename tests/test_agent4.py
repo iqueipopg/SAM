@@ -145,3 +145,166 @@ if __name__ == "__main__":
     print(f"\n  Guardado: {out_path}")
     print(f"  Tiempo total: {elapsed}s")
     print("  Test Agent 4 completado.")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pytest tests for BUG6: preprint + S2 v2 cascade additions.
+# Mock all HTTP — no GPU, no network.
+# ──────────────────────────────────────────────────────────────────────────────
+
+import pytest  # noqa: E402
+from unittest.mock import patch, MagicMock  # noqa: E402
+
+
+def _make_a4():
+    """Build an Agent4FullText stub without BaseAgent init (no GPU/config load)."""
+    from agents.agent4_fulltext import Agent4FullText
+    with patch.object(Agent4FullText, "__init__", lambda self: None):
+        a4 = Agent4FullText()
+    # Minimal attrs used by tested methods
+    a4._last_semanticscholar_call = 0.0
+    a4._rate_limit_semanticscholar = lambda: None
+    # Stub PDF extractor so we can assert the path was taken without real PDFs
+    a4._extract_pdf_text = lambda content: ("TEXT-" + str(len(content))) if content else None
+    return a4
+
+
+ARXIV_ATOM_OK = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2301.00001</id>
+    <title>Some Paper</title>
+    <link title="pdf" href="https://arxiv.org/pdf/2301.00001.pdf" rel="related" type="application/pdf"/>
+  </entry>
+</feed>"""
+
+
+def test_try_arxiv_finds_pdf_and_downloads():
+    a4 = _make_a4()
+
+    def fake_get(url, timeout=None, headers=None):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "export.arxiv.org" in url:
+            resp.text = ARXIV_ATOM_OK
+        else:
+            resp.content = b"%PDF-fakebytes"
+        return resp
+
+    with patch("agents.agent4_fulltext.requests.get", side_effect=fake_get) as mock_get:
+        result = a4._try_arxiv("some paper title")
+
+    assert result is not None
+    assert mock_get.call_count >= 1
+    # At least one call hit the arxiv Atom endpoint
+    assert any("export.arxiv.org" in str(c.args[0]) for c in mock_get.call_args_list)
+
+
+def test_try_arxiv_returns_none_when_no_match():
+    a4 = _make_a4()
+    empty_atom = '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>'
+
+    def fake_get(url, timeout=None, headers=None):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        resp.text = empty_atom
+        return resp
+
+    with patch("agents.agent4_fulltext.requests.get", side_effect=fake_get):
+        assert a4._try_arxiv("nonexistent title xyz") is None
+
+
+def test_try_rxiv_uses_doi_when_available():
+    a4 = _make_a4()
+
+    def fake_get(url, timeout=None, headers=None):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "api.biorxiv.org" in url:
+            resp.json = MagicMock(return_value={
+                "collection": [{"doi": "10.1101/2023.01.01.000000"}]
+            })
+        else:
+            resp.content = b"%PDF-pretend"
+        return resp
+
+    with patch("agents.agent4_fulltext.requests.get", side_effect=fake_get):
+        result = a4._try_rxiv("10.1101/2023.01.01.000000", "title", server="biorxiv")
+
+    assert result is not None
+
+
+def test_try_rxiv_returns_none_without_doi():
+    """BUG6 TODO: title-only lookup not implemented — must not crash."""
+    a4 = _make_a4()
+    assert a4._try_rxiv("", "some title", server="biorxiv") is None
+    assert a4._try_rxiv("", "some title", server="medrxiv") is None
+
+
+def test_try_preprints_cascade_order():
+    """Preprints helper must return (text, source_name) tuple."""
+    a4 = _make_a4()
+    # ArXiv wins
+    with patch.object(a4, "_try_arxiv", return_value="arxiv-text"), \
+         patch.object(a4, "_try_rxiv", return_value=None):
+        text, src = a4._try_preprints({"title": "t", "doi": "10.x/y"})
+    assert text == "arxiv-text" and src == "arxiv"
+
+    # ArXiv fails, bioRxiv wins
+    def fake_rxiv(doi, title, server="biorxiv"):
+        return "biorxiv-text" if server == "biorxiv" else None
+    with patch.object(a4, "_try_arxiv", return_value=None), \
+         patch.object(a4, "_try_rxiv", side_effect=fake_rxiv):
+        text, src = a4._try_preprints({"title": "t", "doi": "10.x/y"})
+    assert text == "biorxiv-text" and src == "biorxiv"
+
+    # Both ArXiv and bioRxiv fail; medRxiv wins
+    def fake_rxiv2(doi, title, server="biorxiv"):
+        return "medrxiv-text" if server == "medrxiv" else None
+    with patch.object(a4, "_try_arxiv", return_value=None), \
+         patch.object(a4, "_try_rxiv", side_effect=fake_rxiv2):
+        text, src = a4._try_preprints({"title": "t", "doi": "10.x/y"})
+    assert text == "medrxiv-text" and src == "medrxiv"
+
+    # Nothing works
+    with patch.object(a4, "_try_arxiv", return_value=None), \
+         patch.object(a4, "_try_rxiv", return_value=None):
+        text, src = a4._try_preprints({"title": "t", "doi": "10.x/y"})
+    assert text is None and src == ""
+
+
+def test_try_semanticscholar_v2_uses_doi_lookup():
+    a4 = _make_a4()
+
+    def fake_get(url, timeout=None, headers=None):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "api.semanticscholar.org" in url:
+            resp.json = MagicMock(return_value={
+                "openAccessPdf": {"url": "https://example.org/oa.pdf"},
+            })
+        else:
+            resp.content = b"%PDF-bytes"
+        return resp
+
+    with patch("agents.agent4_fulltext.requests.get", side_effect=fake_get):
+        result = a4._try_semanticscholar_v2({"doi": "10.1/xyz", "pmid": ""})
+    assert result is not None
+
+
+def test_try_semanticscholar_v2_returns_none_without_pdf():
+    a4 = _make_a4()
+
+    def fake_get(url, timeout=None, headers=None):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        resp.json = MagicMock(return_value={"openAccessPdf": None})
+        return resp
+
+    with patch("agents.agent4_fulltext.requests.get", side_effect=fake_get):
+        assert a4._try_semanticscholar_v2({"doi": "10.1/none"}) is None
