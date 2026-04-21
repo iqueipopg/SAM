@@ -242,6 +242,47 @@ class BaseAgent:
         """Check if using Groq cloud backend."""
         return self._backend == "groq"
 
+    # ── ARQ8: cooperative cancellation ─────────────────────────────────────
+    # The API layer (api.py) may inject a ``_cancel_flag`` callable on each
+    # agent instance right before launching a long loop (A3 screening batch,
+    # A5 extraction, A8 per-section generation). The callable returns True
+    # when the user has clicked /api/kill. Agents are expected to call
+    # :meth:`check_cancel` at the top of every iteration; if it raises the
+    # loop unwinds cleanly and the API emits an SSE "cancelled" event.
+
+    def set_cancel_flag(self, flag):
+        """Install a cancellation flag (callable or bool-like) on this agent.
+
+        Args:
+            flag: either a callable returning True/False, or any object
+                evaluable as a bool. ``None`` removes a previously set flag.
+        """
+        self._cancel_flag = flag
+
+    def check_cancel(self):
+        """Raise :class:`CancelledError` if the injected cancel flag is truthy.
+
+        Agents with internal loops should call this at the top of each
+        iteration. The cost is a single attribute/callable lookup so it is
+        safe to call hundreds of times per run.
+
+        Raises:
+            CancelledError (asyncio): standard cancellation exception so
+                callers can catch it uniformly with other async cancels.
+        """
+        flag = getattr(self, "_cancel_flag", None)
+        if flag is None:
+            return False
+        try:
+            triggered = bool(flag()) if callable(flag) else bool(flag)
+        except Exception:
+            return False
+        if triggered:
+            # Use asyncio.CancelledError for consistency with FastAPI/Starlette
+            import asyncio
+            raise asyncio.CancelledError("pipeline cancelled by /api/kill")
+        return False
+
     def generate(self, prompt, max_new_tokens=512, temperature=0.7):
         if self._is_groq():
             return self._groq_provider.generate(prompt, max_new_tokens, temperature)

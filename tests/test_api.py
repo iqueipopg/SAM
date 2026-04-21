@@ -266,11 +266,14 @@ def test_arq8_kill_sets_cancel_flag():
 
 def test_arq8_check_cancel_hook_on_baseagent():
     """BaseAgent must expose a check_cancel() hook that raises or no-ops."""
+    import asyncio
+
     from agents.base import BaseAgent
 
     assert hasattr(BaseAgent, "check_cancel"), (
         "BaseAgent must have a check_cancel() method for ARQ8"
     )
+    assert hasattr(BaseAgent, "set_cancel_flag")
 
     # Build a minimal instance without going through __init__ (avoids config.yaml)
     dummy = BaseAgent.__new__(BaseAgent)
@@ -278,7 +281,46 @@ def test_arq8_check_cancel_hook_on_baseagent():
     # No flag set → must not raise
     dummy.check_cancel()
 
-    # Attach a callable flag that returns True → must raise
-    dummy._cancel_flag = lambda: True
-    with pytest.raises(Exception):
+    # Attach a callable flag that returns True → must raise CancelledError.
+    # CancelledError is a BaseException in Python 3.12, so use BaseException.
+    dummy.set_cancel_flag(lambda: True)
+    with pytest.raises(asyncio.CancelledError):
         dummy.check_cancel()
+
+    # Setting flag back to None must silence it
+    dummy.set_cancel_flag(None)
+    dummy.check_cancel()
+
+
+def test_arq8_kill_emits_cancelled_event(monkeypatch, tmp_path):
+    """When /api/kill is called mid-stream the generator must emit a
+    ``cancelled`` SSE event and stop iterating (cooperative kill)."""
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(api_module, "OUTPUTS_DIR", tmp_path)
+
+    # Fake generator: yields start, then checks cancel flag on every step.
+    def fake_runner(req):
+        api_module._pipeline_state["running"] = True
+        api_module._pipeline_state["active_run_id"] = "run_kill_test"
+        try:
+            yield api_module._sse_event("start", {"run_dir": "x"})
+            # Flip the cancel flag to simulate a concurrent /api/kill call
+            api_module._pipeline_state["cancel_requested"] = True
+            if api_module._pipeline_state.get("cancel_requested"):
+                yield api_module._sse_event("cancelled", {"last_agent": "A1"})
+                return
+            yield api_module._sse_event("pipeline_done", {})
+        finally:
+            api_module._release_pipeline_slot()
+
+    monkeypatch.setattr(api_module, "run_pipeline_generator", fake_runner)
+
+    client = TestClient(api_module.app)
+    with client.stream("POST", "/api/run", json={"query": "kill-test"}) as r:
+        assert r.status_code == 200
+        text = "".join(chunk for chunk in r.iter_text())
+    assert "event: cancelled" in text
+    # After the stream ends the slot must be released
+    assert api_module._pipeline_state["running"] is False
+    assert api_module._pipeline_state["active_run_id"] is None

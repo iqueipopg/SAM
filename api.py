@@ -416,6 +416,10 @@ def run_pipeline_generator(req: PipelineRequest):
             or _pipeline_state.get("cancel_requested", False)
         )
 
+    def cancel_cb():
+        # ARQ8: cheap callable passed to LLM agents; True -> raise CancelledError
+        return bool(_pipeline_state.get("cancel_requested", False))
+
     # ── A1: Protocol ─────────────────────────────────────────
     if "a1_protocol" in resume_state:
         yield _sse_event("agent_skipped", {"agent": "A1", "name": "Protocol", "reason": "resumed"})
@@ -426,6 +430,8 @@ def run_pipeline_generator(req: PipelineRequest):
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             a1 = Agent1Protocol()
+            if hasattr(a1, "set_cancel_flag"):
+                a1.set_cancel_flag(cancel_cb)  # ARQ8
             protocol = a1.generate_protocol(req.query)
             pubmed_query = a1.generate_pubmed_query(req.query, protocol)
             # PROSPERO draft (non-critical)
@@ -456,8 +462,9 @@ def run_pipeline_generator(req: PipelineRequest):
             return
 
     if check_stop():
-        yield _sse_event("pipeline_stopped", {"last_agent": "A1"})
-        _pipeline_state["running"] = False
+        evt = "cancelled" if _pipeline_state.get("cancel_requested") else "pipeline_stopped"
+        yield _sse_event(evt, {"last_agent": "A1"})
+        _release_pipeline_slot()
         return
 
     # ── A2: Search ───────────────────────────────────────────
@@ -467,6 +474,8 @@ def run_pipeline_generator(req: PipelineRequest):
         yield _sse_event("agent_start", {"agent": "A2", "name": "Search"})
         try:
             a2 = Agent2Search()
+            if hasattr(a2, "set_cancel_flag"):
+                a2.set_cancel_flag(cancel_cb)  # ARQ8
             a2_result = a2.search(protocol, pubmed_query, max_results=req.max_results)
             papers = a2_result["papers"]
             a2_stats = a2_result["stats"]
@@ -490,8 +499,9 @@ def run_pipeline_generator(req: PipelineRequest):
             return
 
     if check_stop():
-        yield _sse_event("pipeline_stopped", {"last_agent": "A2"})
-        _pipeline_state["running"] = False
+        evt = "cancelled" if _pipeline_state.get("cancel_requested") else "pipeline_stopped"
+        yield _sse_event(evt, {"last_agent": "A2"})
+        _release_pipeline_slot()
         return
 
     # ── A3: Screening ────────────────────────────────────────
@@ -504,6 +514,8 @@ def run_pipeline_generator(req: PipelineRequest):
                 ensemble_size=req.a3_ensemble,
                 voting_threshold=req.a3_vote_threshold,
             )
+            if hasattr(a3, "set_cancel_flag"):
+                a3.set_cancel_flag(cancel_cb)  # ARQ8
             a3_results = a3.screen_batch(papers, protocol)
             free_vram(a3)
             save_checkpoint(run_dir, "a3_screening", a3_results)
@@ -524,8 +536,9 @@ def run_pipeline_generator(req: PipelineRequest):
             return
 
     if check_stop():
-        yield _sse_event("pipeline_stopped", {"last_agent": "A3"})
-        _pipeline_state["running"] = False
+        evt = "cancelled" if _pipeline_state.get("cancel_requested") else "pipeline_stopped"
+        yield _sse_event(evt, {"last_agent": "A3"})
+        _release_pipeline_slot()
         return
 
     # ── A4: Full-text ────────────────────────────────────────
@@ -542,6 +555,8 @@ def run_pipeline_generator(req: PipelineRequest):
                 ensemble_size=req.a4_ensemble,
                 voting_threshold=req.a4_vote_threshold,
             )
+            if hasattr(a4, "set_cancel_flag"):
+                a4.set_cancel_flag(cancel_cb)  # ARQ8
             a4_result = a4.run(ft_papers, papers, protocol)
             free_vram(a4)
             save_checkpoint(run_dir, "a4_fulltext", a4_result)
@@ -563,8 +578,9 @@ def run_pipeline_generator(req: PipelineRequest):
             return
 
     if check_stop():
-        yield _sse_event("pipeline_stopped", {"last_agent": "A4"})
-        _pipeline_state["running"] = False
+        evt = "cancelled" if _pipeline_state.get("cancel_requested") else "pipeline_stopped"
+        yield _sse_event(evt, {"last_agent": "A4"})
+        _release_pipeline_slot()
         return
 
     # ── A5: Extraction ───────────────────────────────────────
@@ -575,6 +591,8 @@ def run_pipeline_generator(req: PipelineRequest):
         try:
             included_papers = a4_result.get("include", []) if a4_result else included_papers
             a5 = Agent5Extraction()
+            if hasattr(a5, "set_cancel_flag"):
+                a5.set_cancel_flag(cancel_cb)  # ARQ8
             a5_result = a5.extract_all(included_papers, protocol)
             free_vram(a5)
             save_checkpoint(run_dir, "a5_extraction", a5_result)
@@ -595,8 +613,9 @@ def run_pipeline_generator(req: PipelineRequest):
             yield _sse_event("agent_warning", {"agent": "A5", "warning": str(e)})
 
     if check_stop():
-        yield _sse_event("pipeline_stopped", {"last_agent": "A5"})
-        _pipeline_state["running"] = False
+        evt = "cancelled" if _pipeline_state.get("cancel_requested") else "pipeline_stopped"
+        yield _sse_event(evt, {"last_agent": "A5"})
+        _release_pipeline_slot()
         return
 
     # ── A6: Quality ──────────────────────────────────────────
@@ -607,6 +626,8 @@ def run_pipeline_generator(req: PipelineRequest):
         try:
             quality_papers = (a5_result or {}).get("papers", included_papers)
             a6 = Agent6Quality()
+            if hasattr(a6, "set_cancel_flag"):
+                a6.set_cancel_flag(cancel_cb)  # ARQ8
             a6_result = a6.assess_all(quality_papers, protocol)
             free_vram(a6)
             save_checkpoint(run_dir, "a6_quality", a6_result)
@@ -635,8 +656,9 @@ def run_pipeline_generator(req: PipelineRequest):
             yield _sse_event("agent_warning", {"agent": "A6", "warning": str(e)})
 
     if check_stop():
-        yield _sse_event("pipeline_stopped", {"last_agent": "A6"})
-        _pipeline_state["running"] = False
+        evt = "cancelled" if _pipeline_state.get("cancel_requested") else "pipeline_stopped"
+        yield _sse_event(evt, {"last_agent": "A6"})
+        _release_pipeline_slot()
         return
 
     # ── A7: Synthesis ────────────────────────────────────────
@@ -646,6 +668,8 @@ def run_pipeline_generator(req: PipelineRequest):
         yield _sse_event("agent_start", {"agent": "A7", "name": "Synthesis"})
         try:
             a7 = Agent7Synthesis()
+            if hasattr(a7, "set_cancel_flag"):
+                a7.set_cancel_flag(cancel_cb)  # ARQ8
             a7_input = a6_result if a6_result else {"papers": included_papers}
             a7_result = a7.synthesize(a7_input, protocol, output_dir=run_dir)
             save_checkpoint(run_dir, "a7_synthesis", _clean_r_objects(a7_result) if a7_result else {})
@@ -664,8 +688,9 @@ def run_pipeline_generator(req: PipelineRequest):
             yield _sse_event("agent_warning", {"agent": "A7", "warning": str(e)})
 
     if check_stop():
-        yield _sse_event("pipeline_stopped", {"last_agent": "A7"})
-        _pipeline_state["running"] = False
+        evt = "cancelled" if _pipeline_state.get("cancel_requested") else "pipeline_stopped"
+        yield _sse_event(evt, {"last_agent": "A7"})
+        _release_pipeline_slot()
         return
 
     # ── A8: Manuscript ───────────────────────────────────────
@@ -675,6 +700,8 @@ def run_pipeline_generator(req: PipelineRequest):
         yield _sse_event("agent_start", {"agent": "A8", "name": "Manuscript"})
         try:
             a8 = Agent8Manuscript()
+            if hasattr(a8, "set_cancel_flag"):
+                a8.set_cancel_flag(cancel_cb)  # ARQ8
             a8_result = a8.generate_manuscript(
                 protocol=protocol,
                 included_papers=included_papers,
@@ -967,14 +994,22 @@ async def stop():
 
 @app.post("/api/kill")
 async def kill():
-    """Force-kill the pipeline immediately. Frees VRAM and resets state."""
+    """Force-kill the pipeline immediately. Frees VRAM and resets state.
+
+    ARQ8: also sets ``_cancel_requested`` so long-running LLM loops inside
+    the agents (A3 screening batch, A5 extraction, A8 manuscript per-section)
+    can cooperatively break out between iterations via
+    :meth:`agents.base.BaseAgent.check_cancel`.
+    """
     _pipeline_state["stop_requested"] = True
     _pipeline_state["kill_requested"] = True
+    # ARQ8: cooperative cancel flag (agents poll this between iterations)
+    _pipeline_state["cancel_requested"] = True
     # Force-free any GPU memory
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-    _pipeline_state["running"] = False
+    _release_pipeline_slot()
     return {"status": "killed"}
 
 
