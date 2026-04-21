@@ -139,9 +139,9 @@ def run(dry_run=False):
         from agents.agent5_extraction import Agent5Extraction
         def run_a5():
             if not included_papers:
-                return []
+                return {"papers": [], "stats": {}}
             a5 = Agent5Extraction()
-            result = a5.extract_batch(included_papers)
+            result = a5.extract_all(included_papers, protocol)
             free_vram(a5)
             return result
 
@@ -153,10 +153,10 @@ def run(dry_run=False):
         # A6 - Quality
         from agents.agent6_quality import Agent6Quality
         def run_a6():
-            if not extractions:
-                return []
+            if not extractions or not extractions.get("papers"):
+                return {"papers": [], "stats": {}}
             a6 = Agent6Quality()
-            result = a6.assess_batch(extractions)
+            result = a6.assess_all(extractions, protocol)
             free_vram(a6)
             return result
 
@@ -168,10 +168,10 @@ def run(dry_run=False):
         # A7 - Synthesis (R, no GPU)
         from agents.agent7_synthesis import Agent7Synthesis
         def run_a7():
-            if not extractions:
+            if not quality or not quality.get("papers"):
                 return {}
             a7 = Agent7Synthesis()
-            result = a7.synthesize(extractions, quality if quality else [])
+            result = a7.synthesize(quality, protocol)
             return result
 
         synthesis, a7_profile = profile_agent("A7", run_a7)
@@ -190,13 +190,15 @@ def run(dry_run=False):
                 "fulltext_assessed": len(included_a3),
                 "excluded_ft": len(included_a3) - len(included_papers),
                 "included": len(included_papers),
-                "quality_assessed": len(quality) if quality else 0,
+                "quality_assessed": len(quality.get("papers", [])) if quality else 0,
             }
-            result = a8.generate(
-                QUERY, protocol, extractions,
-                quality if quality else [],
-                synthesis if synthesis else {},
-                prisma,
+            result = a8.generate_manuscript(
+                protocol=protocol,
+                included_papers=included_papers,
+                extraction=extractions if extractions else None,
+                quality=quality if quality else None,
+                synthesis=synthesis if synthesis else None,
+                prisma=prisma,
             )
             free_vram(a8)
             return result
