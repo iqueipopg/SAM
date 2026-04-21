@@ -64,6 +64,14 @@ DECISION RULES:
 - EXCLUDE   : clearly fails inclusion OR triggers exclusion
 - UNCERTAIN : insufficient info in title/abstract to decide
 
+MANDATORY EXCLUSION (secondary studies):
+If the title or abstract contains any of the following terms, this paper is a secondary
+study (review/meta-analysis) and MUST be EXCLUDED with high confidence:
+"meta-analysis", "meta analysis", "systematic review", "scoping review",
+"narrative review", "literature review", "umbrella review".
+In that case respond with:
+{{"vote": "EXCLUDE", "reasoning": "Study design is a review/meta-analysis"}}
+
 Respond ONLY with valid JSON:
 {{"vote": "INCLUDE or EXCLUDE or UNCERTAIN", "reasoning": "one sentence"}}"""
 
@@ -122,6 +130,32 @@ EXAMPLE 2 (multi-arm, table data):
 [{{"name": "Weight change at 12m - clinic vs control", "effect_size_type": "MD", "effect_size_value": -2.42, "ci_lower": null, "ci_upper": null, "p_value": 0.01, "se": null, "n_intervention": 37, "n_control": 58, "n_total": 95, "mean_intervention": -1.21, "sd_intervention": null, "mean_control": 1.21, "sd_control": null}}, {{"name": "Weight change at 12m - behavioral vs control", "effect_size_type": "MD", "effect_size_value": -3.03, "ci_lower": null, "ci_upper": null, "p_value": 0.01, "se": null, "n_intervention": 38, "n_control": 58, "n_total": 96, "mean_intervention": -1.82, "sd_intervention": null, "mean_control": 1.21, "sd_control": null}}]
 
 Respond ONLY with a valid JSON array:"""
+
+# Used by A5 (agent5_extraction.py) as an LLM arbiter when two extraction passes
+# disagree by >=10% on a numeric value or differ on a string field. Temperature: 0.1.
+# The prompt is deliberately minimal so the arbiter focuses on deciding between
+# two candidate values using the surrounding paper context.
+AGENT5_ARBITER_TEMPLATE = """You are a systematic review data-extraction arbiter.
+
+Two independent extractions disagree on the same field. Using the paper context below, decide which value is correct.
+
+FIELD: {field}
+OUTCOME: {outcome_name}
+VALUE A (pass 1, temperature 0.1): {a}
+VALUE B (pass 2, temperature 0.3): {b}
+
+PAPER CONTEXT:
+{context}
+
+INSTRUCTIONS:
+- Prefer the value that the context directly supports with an exact numeric match or an unambiguous textual match.
+- If neither value matches the context but one is clearly more plausible (e.g. correct sign, plausible magnitude), pick it.
+- If the context supports a different value altogether, return source="NEW" with the corrected value.
+- If you cannot decide confidently, return source="UNKNOWN" with value=null.
+
+Respond ONLY with valid JSON (no prose, no markdown fence):
+{{"value": <number-or-string-or-null>, "source": "A|B|NEW|UNKNOWN", "rationale": "one short sentence"}}"""
+
 
 # Used by A5 (agent5_extraction.py) as a 4th-pass recovery for missing effect sizes. Temperature: 0.1.
 # Pattern-matching hints (d=, OR=, etc.) guide the LLM to find numbers missed by the main prompt.
@@ -338,9 +372,14 @@ TEXT: {study_text}
 Classify as ONE of: "rct", "observational", "qualitative"
 
 Rules:
-- "rct" if: randomized controlled trial, randomized clinical trial, cluster-randomized trial, crossover RCT
-- "observational" if: cohort, case-control, cross-sectional, retrospective, prospective observational, case series
+- "rct" if: randomized controlled trial, randomized clinical trial, cluster-randomized trial, crossover RCT, double-blind trial, parallel-group randomized trial, controlled clinical trial with random allocation
+- "observational" if: cohort, case-control, cross-sectional, retrospective, prospective observational, case series, registry study, ecological, natural history
 - "qualitative" if: qualitative research, phenomenological study, grounded theory, ethnographic study, narrative inquiry, thematic analysis, focus groups, qualitative interviews, interpretive description, content analysis (qualitative)
+
+Examples:
+1. "Effect of drug X vs placebo: a randomized double-blind controlled trial in 240 patients (1:1 allocation)." -> {{"study_design": "rct", "reasoning": "Explicit randomized double-blind controlled trial."}}
+2. "Association between coffee intake and mortality: a prospective cohort study of 50,000 adults followed 10 years." -> {{"study_design": "observational", "reasoning": "Prospective cohort, no randomization."}}
+3. "Lived experiences of caregivers of dementia patients: a phenomenological study based on semi-structured interviews." -> {{"study_design": "qualitative", "reasoning": "Phenomenological qualitative design with interviews."}}
 
 Respond ONLY with valid JSON:
 {{"study_design": "rct|observational|qualitative", "reasoning": "one sentence"}}"""
@@ -469,9 +508,15 @@ STUDIES FOR CONTEXT:
 {rag_context}
 
 Paragraph 1: What is the condition? How common is it? Why does treatment matter?
-Paragraph 2: What treatments exist? Mention studies from CONTEXT as (Author, Year). Do not invent names.
+Paragraph 2: What treatments exist? Mention studies from CONTEXT as (Author, Year) or (Author et al., Year). Do not invent names.
 Paragraph 3: What is the gap? Why is a new review needed?
 Paragraph 4: State the aim of this review in one clear sentence.
+
+CITATION FORMAT (mandatory when referring to a study):
+- Use parentheses: (Smith, 2020), (Smith et al., 2020), or (Smith & Jones, 2020).
+- If the year is not available in CONTEXT, write (Author et al.) — still in parentheses.
+- NEVER write bare narrative names like "Peter's work" or "Smith tested"; always wrap as (Peter et al., Year).
+- NEVER write PMID, DOI, URLs, or the word "PMID" inside a citation.
 
 RULES:
 - Maximum 20 words per sentence. Use simple sentence structure: subject, verb, object.
@@ -519,11 +564,17 @@ META-ANALYSIS:
 
 Write 5-6 paragraphs:
 1. Study selection: state the PRISMA numbers exactly as given above.
-2. Study characteristics: briefly describe each included study. Cite as (Author, Year).
+2. Study characteristics: briefly describe each included study. Cite as (Author, Year) or (Author et al., Year).
 3. Population characteristics: report the total participants, year range, countries, mean age, and female percentage from the POPULATION CHARACTERISTICS data above. Only report values that are provided.
 4. Quality assessment: summarize the risk of bias findings.
 5. Meta-analysis results: report exact effect sizes and CIs from the data above.
 6. If sensitivity/publication bias data is available, report Egger's test p-value, trim-and-fill adjusted estimate, and Rosenthal's Fail-Safe N. Otherwise skip this paragraph.
+
+CITATION FORMAT (mandatory):
+- Wrap every citation in parentheses: (Smith, 2020), (Smith et al., 2020), (Smith & Jones, 2020).
+- If the year is unavailable, use (Author et al.) — still in parentheses.
+- NEVER write "PMID", DOI, URLs, or numeric identifiers inside a citation.
+- NEVER nest brackets inside parentheses like "[(Author), PMID]".
 
 RULES:
 - Maximum 20 words per sentence.
@@ -546,10 +597,16 @@ LITERATURE:
 {rag_context}
 
 Paragraph 1: Summarize the main findings using exact numbers from RESULTS above.
-Paragraph 2: Compare with existing evidence. Cite studies from LITERATURE as (Author, Year).
+Paragraph 2: Compare with existing evidence. Cite studies from LITERATURE as (Author, Year) or (Author et al., Year).
 Paragraph 3: Strengths — systematic search, quality assessment, pre-specified protocol.
 Paragraph 4: Limitations — small number of studies, heterogeneity, abstract-only screening, missing data.
 Paragraph 5: Clinical implications and future research directions.
+
+CITATION FORMAT (mandatory):
+- Always wrap citations in parentheses: (Smith, 2020), (Smith et al., 2020), (Smith & Jones, 2020).
+- If the year is unknown, use (Author et al.) — still in parentheses.
+- NEVER write bare author names as narrative (e.g., "Smith tested" → "(Smith, 2020) tested").
+- NEVER write PMID, DOI, or numeric identifiers inside a citation.
 
 RULES:
 - Maximum 20 words per sentence. Write short, clear sentences.

@@ -85,12 +85,19 @@ class Agent5Extraction(BaseAgent):
     GPU: yes -- uses LLM for extraction prompts and optional numeric recovery pass.
     """
 
+    # Relative-difference threshold for BUG3 arbiter:
+    # numeric disagreement at or above this value triggers the LLM arbiter.
+    ARBITER_REL_DIFF_THRESHOLD = 0.10
+
     def __init__(self):
         super().__init__("agent5_extraction")
         ext_cfg = self.config.get("extraction", {})
         self.dual_extraction = ext_cfg.get("dual_extraction", False)
         self.threshold_numeric = ext_cfg.get("concordance_threshold_numeric", 0.15)
         self.threshold_sample = ext_cfg.get("concordance_threshold_sample", 0.10)
+        # Arbiter context (populated by _reconcile for current paper/protocol)
+        self._arbiter_paper: Optional[Dict] = None
+        self._arbiter_protocol: Optional[Dict] = None
 
     # ================================================================== #
     #  PUBLIC API                                                          #
@@ -453,6 +460,10 @@ class Agent5Extraction(BaseAgent):
     def _reconcile(self, result_a: Dict, result_b: Dict, paper: Dict, protocol: Dict) -> Dict:
         """Compare two extraction passes and reconcile into a single result."""
         flags: List[str] = []
+        # Cache paper/protocol so _merge_single_outcome can invoke the arbiter
+        # (which needs paper context). Cleared at the end of this method.
+        self._arbiter_paper = paper
+        self._arbiter_protocol = protocol
 
         # --- Study characteristics ---
         chars_a = result_a.get("study_characteristics")
@@ -511,6 +522,10 @@ class Agent5Extraction(BaseAgent):
         final["outcomes"] = final_outcomes
         final["extraction_confidence"] = confidence
         final["concordance"] = concordance
+
+        # Clear arbiter context
+        self._arbiter_paper = None
+        self._arbiter_protocol = None
         return final
 
     # ------------------------------------------------------------------ #
@@ -577,55 +592,306 @@ class Agent5Extraction(BaseAgent):
     def _merge_single_outcome(
         self, oa: Dict, ob: Dict
     ) -> Tuple[Dict, List[str]]:
-        """Merge a single matched outcome pair. Returns (merged, flags)."""
+        """Merge a single matched outcome pair. Returns (merged, flags).
+
+        Discrepancy handling (BUG3):
+        - Numeric fields: if relative diff < 10% → average. Otherwise invoke LLM
+          arbiter; if arbiter fails, flag needs_manual_review=True and keep the
+          more conservative (smaller-magnitude) value.
+        - String fields (measure_type): compare lowercase/trim; if differ, invoke
+          arbiter or flag needs_manual_review.
+        - If one side is None, keep the other.
+        """
         flags: List[str] = []
         name_a = oa.get("name", "")
         merged = dict(oa)  # start from pass 1
 
-        # measure_type / effect_size_type must match
+        # -------- measure_type / effect_size_type (string field) --------
         mt_a = (oa.get("measure_type") or oa.get("effect_size_type") or "").strip().upper()
         mt_b = (ob.get("measure_type") or ob.get("effect_size_type") or "").strip().upper()
-        if mt_a and mt_b and mt_a != mt_b:
-            flags.append(f"effect_size_type mismatch in '{name_a}': {mt_a} vs {mt_b} — REVIEW NEEDED")
+        reconciled_mt = self._reconcile_field(
+            "measure_type", mt_a or None, mt_b or None, outcome_name=name_a
+        )
+        if reconciled_mt["value"] is not None:
+            merged["measure_type"] = reconciled_mt["value"]
+            if "effect_size_type" in merged:
+                merged["effect_size_type"] = reconciled_mt["value"]
+        if reconciled_mt.get("flag"):
+            flags.append(reconciled_mt["flag"])
+        if reconciled_mt.get("needs_manual_review"):
+            merged.setdefault("_reconciliation", {})["measure_type"] = {
+                "needs_manual_review": True,
+                "a": mt_a, "b": mt_b,
+                "method": reconciled_mt.get("method"),
+            }
 
-        # Numeric fields: effect_size (value / effect_size_value), ci_lower, ci_upper
-        for field in ("value", "effect_size_value", "ci_lower", "ci_upper"):
+        # -------- Numeric fields: value, effect_size_value, ci_lower, ci_upper, se --------
+        for field in ("value", "effect_size_value", "ci_lower", "ci_upper", "se"):
             va = self._to_num(oa.get(field))
             vb = self._to_num(ob.get(field))
-            if va is not None and vb is not None:
-                if self._numeric_agree(va, vb, self.threshold_numeric):
-                    # Agree: average them
-                    merged[field] = round((va + vb) / 2, 6)
-                else:
-                    flags.append(
-                        f"{field} discrepancy in '{name_a}': {va} vs {vb}"
-                    )
-                    merged[field] = va  # keep pass 1
+            reconciled = self._reconcile_field(field, va, vb, outcome_name=name_a)
+            if reconciled["value"] is not None:
+                merged[field] = reconciled["value"]
+            if reconciled.get("flag"):
+                flags.append(reconciled["flag"])
+            if reconciled.get("needs_manual_review"):
+                merged.setdefault("_reconciliation", {})[field] = {
+                    "needs_manual_review": True,
+                    "a": va, "b": vb,
+                    "method": reconciled.get("method"),
+                    "value_conservative": reconciled.get("value_conservative"),
+                }
 
-        # p_value: same sign check
+        # -------- p_value: significance (same-sign at 0.05) check, keep pass 1 --------
         pa = self._to_num(oa.get("p_value"))
         pb = self._to_num(ob.get("p_value"))
         if pa is not None and pb is not None:
-            # "same sign" = both significant or both not at 0.05
             sig_a = pa < 0.05
             sig_b = pb < 0.05
             if sig_a != sig_b:
                 flags.append(
                     f"p_value significance mismatch in '{name_a}': {pa} vs {pb}"
                 )
-            merged["p_value"] = pa  # keep pass 1
-
-        # SE concordance
-        se_a = self._to_num(oa.get("se"))
-        se_b = self._to_num(ob.get("se"))
-        if se_a is not None and se_b is not None:
-            if self._numeric_agree(se_a, se_b, self.threshold_numeric):
-                merged["se"] = round((se_a + se_b) / 2, 6)
-            else:
-                flags.append(f"se discrepancy in '{name_a}': {se_a} vs {se_b}")
-                merged["se"] = se_a
+            merged["p_value"] = pa
+        elif pa is None and pb is not None:
+            merged["p_value"] = pb
+        elif pa is not None and pb is None:
+            merged["p_value"] = pa
 
         return merged, flags
+
+    # ------------------------------------------------------------------ #
+    #  Field reconciliation helpers (BUG3)                                 #
+    # ------------------------------------------------------------------ #
+
+    def _reconcile_field(
+        self,
+        field: str,
+        a,
+        b,
+        outcome_name: str = "",
+    ) -> Dict:
+        """Reconcile a single field value between two passes.
+
+        Returns a dict with keys:
+          - value: final reconciled value (or None if both were None)
+          - method: "average" | "llm_arbiter" | "pass1" | "pass2" |
+                    "agree" | "conservative"
+          - reconciled: True when successfully reconciled
+          - needs_manual_review: True when the arbiter failed or not available
+          - flag: optional human-readable flag string for the concordance log
+          - value_conservative: when using conservative fallback, the value chosen
+        """
+        # One side None: prefer the other
+        if a is None and b is None:
+            return {"value": None, "method": "agree", "reconciled": True,
+                    "needs_manual_review": False}
+        if a is None:
+            return {"value": b, "method": "pass2", "reconciled": True,
+                    "needs_manual_review": False}
+        if b is None:
+            return {"value": a, "method": "pass1", "reconciled": True,
+                    "needs_manual_review": False}
+
+        # Numeric branch
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            return self._reconcile_numeric_field(field, float(a), float(b), outcome_name)
+
+        # String branch
+        if isinstance(a, str) or isinstance(b, str):
+            return self._reconcile_string_field(field, a, b, outcome_name)
+
+        # Fallback: treat as equal if identical, else defer to arbiter
+        if a == b:
+            return {"value": a, "method": "agree", "reconciled": True,
+                    "needs_manual_review": False}
+        return self._run_arbiter_or_fallback(field, a, b, outcome_name)
+
+    def _reconcile_numeric_field(
+        self, field: str, a: float, b: float, outcome_name: str
+    ) -> Dict:
+        """Reconcile two numeric values with <10% / >=10% rule."""
+        denom = max(abs(a), abs(b), 1e-9)
+        rel_diff = abs(a - b) / denom
+
+        if rel_diff < self.ARBITER_REL_DIFF_THRESHOLD:
+            # Agreement — average them
+            return {
+                "value": round((a + b) / 2, 6),
+                "method": "average",
+                "reconciled": True,
+                "needs_manual_review": False,
+            }
+
+        # Disagreement ≥10% → arbiter
+        arbiter_out = self._invoke_arbiter(field, a, b, outcome_name)
+        conservative = a if abs(a) <= abs(b) else b
+
+        if arbiter_out is not None:
+            picked = arbiter_out.get("value")
+            if isinstance(picked, (int, float)):
+                return {
+                    "value": round(float(picked), 6),
+                    "method": "llm_arbiter",
+                    "reconciled": True,
+                    "needs_manual_review": False,
+                    "arbiter_source": arbiter_out.get("source"),
+                    "arbiter_rationale": arbiter_out.get("rationale"),
+                    "flag": f"{field} reconciled by arbiter in '{outcome_name}': {a} vs {b} → {picked}",
+                }
+
+        # Arbiter failed → conservative fallback
+        return {
+            "value": conservative,
+            "method": "conservative",
+            "reconciled": False,
+            "needs_manual_review": True,
+            "value_conservative": conservative,
+            "flag": (
+                f"{field} discrepancy in '{outcome_name}': {a} vs {b} "
+                f"— arbiter unavailable, kept conservative {conservative}"
+            ),
+        }
+
+    def _reconcile_string_field(
+        self, field: str, a, b, outcome_name: str
+    ) -> Dict:
+        """Reconcile two string values: lowercase/trim equality, else arbiter."""
+        sa = str(a).strip().lower() if a is not None else ""
+        sb = str(b).strip().lower() if b is not None else ""
+
+        if sa == sb:
+            return {"value": a, "method": "agree", "reconciled": True,
+                    "needs_manual_review": False}
+
+        # Significantly different strings → arbiter
+        arbiter_out = self._invoke_arbiter(field, a, b, outcome_name)
+        if arbiter_out is not None:
+            picked = arbiter_out.get("value")
+            if picked is not None:
+                return {
+                    "value": picked,
+                    "method": "llm_arbiter",
+                    "reconciled": True,
+                    "needs_manual_review": False,
+                    "arbiter_source": arbiter_out.get("source"),
+                    "arbiter_rationale": arbiter_out.get("rationale"),
+                    "flag": f"{field} reconciled by arbiter in '{outcome_name}': {a} vs {b} → {picked}",
+                }
+
+        # Arbiter unavailable → keep pass 1, flag needs_manual_review
+        return {
+            "value": a,
+            "method": "conservative",
+            "reconciled": False,
+            "needs_manual_review": True,
+            "value_conservative": a,
+            "flag": f"{field} string mismatch in '{outcome_name}': '{a}' vs '{b}' — REVIEW NEEDED",
+        }
+
+    def _run_arbiter_or_fallback(
+        self, field: str, a, b, outcome_name: str
+    ) -> Dict:
+        """Generic fallback arbiter call for non-numeric/non-string fields."""
+        arbiter_out = self._invoke_arbiter(field, a, b, outcome_name)
+        if arbiter_out is not None and arbiter_out.get("value") is not None:
+            return {
+                "value": arbiter_out["value"],
+                "method": "llm_arbiter",
+                "reconciled": True,
+                "needs_manual_review": False,
+                "arbiter_source": arbiter_out.get("source"),
+            }
+        return {
+            "value": a,
+            "method": "conservative",
+            "reconciled": False,
+            "needs_manual_review": True,
+            "value_conservative": a,
+            "flag": f"{field} mismatch in '{outcome_name}': {a} vs {b} — REVIEW NEEDED",
+        }
+
+    def _invoke_arbiter(
+        self, field: str, a, b, outcome_name: str
+    ) -> Optional[Dict]:
+        """Call the LLM arbiter for a single disagreement.
+
+        Returns the parsed arbiter JSON {value, source, rationale} or None if
+        the LLM is unavailable (dry-run) or output cannot be parsed.
+
+        VRAM note: assumes the extraction model is already loaded. Never reloads.
+        """
+        # If the model isn't loaded (e.g. dry-run / unit tests), bail out.
+        if getattr(self, "model", None) is None and not self._is_groq():
+            return None
+
+        paper = self._arbiter_paper or {}
+        protocol = self._arbiter_protocol or {}
+        context = self._build_arbiter_context(paper, protocol, outcome_name)
+
+        try:
+            from agents.prompts import AGENT5_ARBITER_TEMPLATE
+        except Exception:
+            return None
+
+        prompt = AGENT5_ARBITER_TEMPLATE.format(
+            field=field,
+            outcome_name=outcome_name or "(unnamed)",
+            a=a,
+            b=b,
+            context=context,
+        )
+
+        try:
+            response = self._simple_generate(prompt, max_tokens=200, temperature=0.1)
+        except Exception as exc:
+            print(f"    [arbiter] LLM call failed for {field}: {exc}")
+            return None
+
+        parsed = self._parse_json_response(response)
+        if not parsed:
+            return None
+
+        source = parsed.get("source", "UNKNOWN")
+        value = parsed.get("value")
+        if source == "UNKNOWN" or value is None:
+            return None
+        # Coerce numeric strings to float when possible
+        if isinstance(value, str):
+            maybe = self._to_num(value)
+            if maybe is not None:
+                value = maybe
+        parsed["value"] = value
+        return parsed
+
+    @staticmethod
+    def _build_arbiter_context(paper: Dict, protocol: Dict, outcome_name: str) -> str:
+        """Pull a focused text slice around the outcome name for the arbiter."""
+        title = paper.get("title", "")
+        pop = protocol.get("population", "")
+        intv = protocol.get("intervention", protocol.get("exposure", ""))
+        outc = protocol.get("outcome", "")
+
+        header = (
+            f"Paper: {title}\n"
+            f"Population: {pop}\n"
+            f"Intervention/Exposure: {intv}\n"
+            f"Primary outcome: {outc}\n"
+        )
+
+        # Prefer the results section, falling back to the abstract.
+        sections = paper.get("sections") or {}
+        body = sections.get("results") or paper.get("full_text") or paper.get("abstract") or ""
+
+        # If the outcome name appears in the body, take a ~800-char window around it.
+        if outcome_name and body:
+            idx = body.lower().find(outcome_name.lower()[:30])
+            if idx >= 0:
+                start = max(0, idx - 300)
+                end = min(len(body), idx + 500)
+                return header + "\nExcerpt:\n" + body[start:end]
+
+        return header + "\nExcerpt:\n" + (body[:1200] if body else "(no body available)")
 
     # ------------------------------------------------------------------ #
     #  Confidence classification                                           #
