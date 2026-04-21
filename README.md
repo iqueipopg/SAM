@@ -346,6 +346,39 @@ python experiments/run_all.py
 
 ---
 
+## Utilities
+
+Helper scripts live in `scripts/` and are intended for manual, operator-driven use (no cron, no CI).
+
+### `scripts/cleanup_old_runs.sh`
+
+Removes old pipeline runs from `outputs/` (directories named `run_*`). Useful when `outputs/` grows over time on a shared server.
+
+```bash
+# Preview what would be deleted (default: runs older than 30 days)
+scripts/cleanup_old_runs.sh --dry-run
+
+# Custom retention window
+scripts/cleanup_old_runs.sh --days 60 --dry-run
+
+# Actually delete runs older than 30 days
+scripts/cleanup_old_runs.sh
+
+# Delete runs older than 7 days
+scripts/cleanup_old_runs.sh --days 7
+```
+
+Flags:
+
+| Flag | Description |
+|------|-------------|
+| `--days N` | Retention threshold in days (default: `30`). Only directories with mtime older than N days are targeted. |
+| `--dry-run` | Print the directories that would be deleted without removing them. Recommended before a real run. |
+
+The script only touches `outputs/run_*` directories directly under the project root and never follows into subdirectories. It is intentionally not scheduled in CI or cron — always run it manually after confirming with `--dry-run`.
+
+---
+
 ## Limitations
 
 - **Single-GPU constraint**: Only one LLM fits in VRAM at a time (8 GB). Ensemble votes are sequential with the same model. Multi-model ensemble supported but adds latency.
