@@ -64,6 +64,18 @@ def _read_version() -> str:
 
 
 app = FastAPI(title="SAM API", version=_read_version())
+
+
+@app.on_event("startup")
+async def _startup_validate_env():
+    """ARQ3: check required env vars when the server boots.
+
+    Skips validation when running under pytest so individual tests can
+    control the environment without the API refusing to load.
+    """
+    if os.environ.get("SAM_SKIP_ENV_VALIDATION") == "1" or "pytest" in sys.modules:
+        return
+    validate_env()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -160,6 +172,44 @@ def load_config():
     cfg_path = PROJECT_ROOT / "config.yaml"
     with open(cfg_path) as f:
         return yaml.safe_load(f) or {}
+
+
+# ── ARQ3: startup environment validation ────────────────────────────────────
+
+# Required env vars — missing any of these is fatal: the API refuses to start.
+_REQUIRED_ENV_VARS = ("ENTREZ_EMAIL", "UNPAYWALL_EMAIL")
+
+# Optional env vars — only logged (warning) if absent. The pipeline can still
+# run without them, but some features (Groq backend, extra full-text sources)
+# will be disabled.
+_OPTIONAL_ENV_VARS = ("GROQ_API_KEY", "SEMANTIC_SCHOLAR_API_KEY", "CORE_API_KEY")
+
+
+def validate_env():
+    """Verify required environment variables are present at API startup.
+
+    Raises:
+        RuntimeError: in Spanish if any required variable is missing. Message
+        includes the list of missing keys so the operator can fix ``.env``.
+
+    Optional variables only emit a logger warning — their absence is not fatal.
+    """
+    missing = [v for v in _REQUIRED_ENV_VARS if not os.environ.get(v)]
+    if missing:
+        raise RuntimeError(
+            "Faltan variables de entorno requeridas: "
+            + ", ".join(missing)
+            + ". Defínelas en .env antes de arrancar la API."
+        )
+    absent_optional = [v for v in _OPTIONAL_ENV_VARS if not os.environ.get(v)]
+    if absent_optional:
+        try:
+            get_logger("api").warning(
+                "Variables opcionales no definidas (la API arranca igualmente): %s",
+                ", ".join(absent_optional),
+            )
+        except Exception:
+            pass
 
 
 # ── Models ───────────────────────────────────────────────────────────────────
