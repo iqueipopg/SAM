@@ -535,6 +535,13 @@ def run_pipeline_generator(req: PipelineRequest):
     except Exception:
         pass
 
+    # Propagate which databases A2 actually used (for A9 explainability §6).
+    # Falls back to deriving from per-DB counts if A2 didn't populate the list.
+    _a2_sources = _a2s.get("search_sources") or [
+        db for db in ("pubmed", "europepmc", "semantic_scholar", "google_scholar")
+        if _a2s.get(db, 0) > 0
+    ]
+
     output = {
         "query": req.query,
         "protocol": protocol,
@@ -543,6 +550,7 @@ def run_pipeline_generator(req: PipelineRequest):
         "system_info": _sys,
         "prisma": prisma,
         "search_stats": _a2s,
+        "a2_sources": _a2_sources,
         "screening": a3_results,
         "fulltext_retrieval": a4_result,
         "data_extraction": a5_result,

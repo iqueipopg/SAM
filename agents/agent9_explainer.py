@@ -608,6 +608,25 @@ class Agent9Explainer:
         extraction_map = self._build_extraction_map(data)
         quality_map = self._build_quality_map(data)
 
+        # Databases A2 actually queried, propagated by the orchestrator
+        # (api.py::run_pipeline_generator). Falls back to deriving from
+        # search_stats if missing, and finally to "(no disponible)".
+        a2_sources = data.get("a2_sources") or []
+        if not a2_sources:
+            search_stats = data.get("search_stats") or {}
+            a2_sources = [
+                db for db in ("pubmed", "europepmc", "semantic_scholar", "google_scholar")
+                if search_stats.get(db, 0) > 0
+            ]
+        if a2_sources:
+            lines.append(
+                "**Bases de datos consultadas por A2:** "
+                + ", ".join(a2_sources)
+            )
+        else:
+            lines.append("**Bases de datos consultadas por A2:** (no disponible)")
+        lines.append("")
+
         if not included:
             lines.append("No hay papers incluidos.")
             lines.append("")
@@ -620,9 +639,15 @@ class Agent9Explainer:
             lines.append(f"**{title}**")
             lines.append("")
 
-            # Source
-            lines.append(f"- Fuente de busqueda: {p.get('source', '?')}")
-            lines.append(f"- Texto completo: {p.get('text_source', '?')}")
+            # Source — per-paper `source` (singular) or merged `sources` list.
+            # If both are absent we surface "(no disponible)" instead of "?".
+            src = p.get("source")
+            if not src:
+                src_list = p.get("sources") or []
+                if isinstance(src_list, list) and src_list:
+                    src = ", ".join(src_list)
+            lines.append(f"- Fuente de busqueda: {src or '(no disponible)'}")
+            lines.append(f"- Texto completo: {p.get('text_source', '(no disponible)')}")
 
             # Extraction
             ext = extraction_map.get(pmid, {})

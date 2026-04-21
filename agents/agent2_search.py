@@ -183,6 +183,14 @@ class Agent2Search:
 
         stats["total_before_dedup"] = len(all_papers)
 
+        # Record which databases actively contributed at least one result.
+        # Consumed by A9 (explainability report §6 "procedencia de datos").
+        search_sources = [
+            db for db in ("pubmed", "europepmc", "semantic_scholar", "google_scholar")
+            if stats.get(db, 0) > 0
+        ]
+        stats["search_sources"] = search_sources
+
         # 4. Deduplicate (3-tier)
         unique = self.deduplicate(all_papers, threshold=self.dedup_threshold)
         stats["total_after_dedup"] = len(unique)
