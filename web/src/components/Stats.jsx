@@ -3,11 +3,11 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 const stats = [
-  { value: 8, suffix: '', label: 'Specialized agents' },
+  { value: 9, suffix: '', label: 'Specialized agents' },
   { value: 4, suffix: '', label: 'Database sources' },
   { value: 10, suffix: '', label: 'Full-text sources' },
   { value: 30, suffix: 'min', label: 'Average completion' },
-  { value: 44, suffix: '', label: 'Automated tests' },
+  { value: 154, suffix: '', label: 'Automated tests' }, // actualizar cuando crezca
   { value: 3, suffix: '', label: 'Quality tools (RoB2, ROBINS-I, JBI)' },
 ]
 
