@@ -49,10 +49,17 @@ class Agent2Search:
 
         # CFG1: floor of papers per DB. Precedence:
         #   1. constructor kwarg (min_per_db, for tests / programmatic override)
-        #   2. config/agents.json -> agents.agent2_search.min_per_db
-        #   3. hardcoded default 10 (backward compat)
+        #   2. config.yaml -> search.min_per_db (root config, e.g. rudiger/config_rudiger.yaml)
+        #   3. config/agents.json -> agents.agent2_search.min_per_db (legacy per-agent override)
+        #   4. hardcoded default 10 (backward compat)
+        # Configurable via config.yaml -> search.min_per_db (default: 10)
         if min_per_db is not None:
             self.min_per_db = int(min_per_db)
+        elif "min_per_db" in search_cfg:
+            try:
+                self.min_per_db = int(search_cfg["min_per_db"])
+            except (TypeError, ValueError):
+                self.min_per_db = int(self._load_min_per_db_from_agents_json(default=10))
         else:
             self.min_per_db = int(self._load_min_per_db_from_agents_json(default=10))
 
