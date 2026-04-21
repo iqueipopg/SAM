@@ -124,3 +124,42 @@ A9  ->  explainability: {excel_path, report_path, stats: {total_papers,
 
 `agents.json` overrides `config.yaml` defaults when present. Supports per-prompt
 granularity for A5 (3 prompt types) and A8 (6 sections).
+
+## User Interfaces
+
+SAM ships with two front-ends that invoke the same pipeline:
+
+| UI | Entrypoint | Stack | Purpose |
+|----|------------|-------|---------|
+| Streamlit | `app.py` | Streamlit (teal/white/slate theme, light/dark mode) | Local desktop UI, chat-like pipeline progress, history, compare mode |
+| Web | `web/` | React + Vite + Tailwind | Modern web UI; talks to the FastAPI backend |
+
+Both UIs render the same agent outputs (A1-A9), PRISMA flow, RoB plots, forest
+and funnel plots, and the generated LaTeX/PDF manuscript.
+
+## FastAPI Backend
+
+`api.py` exposes the A1-A9 pipeline over HTTP for the React web UI:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/run` | POST | Starts a pipeline run and streams progress as Server-Sent Events (SSE) |
+| `/api/stop` | POST | Requests a graceful stop after the current agent finishes |
+| `/api/kill` | POST | Force-kills the run and frees VRAM |
+| `/api/status` | GET | Returns `{running, run_dir}` |
+| `/api/runs` | GET | Lists past pipeline runs stored under `outputs/` |
+| `/api/download/{run_id}/{filepath}` | GET | Downloads a file from a run directory |
+| `/api/health` | GET | GPU/CPU health check |
+
+SSE events emitted per agent: `agent_start`, `agent_done`, `agent_warning`,
+`agent_error`, plus pipeline-level `start`, `finalizing`, `pipeline_done`,
+`pipeline_stopped`, `pipeline_error`. The React client subscribes to
+`/api/run` and renders each event live. Vite proxies `/api` to the FastAPI
+server on port 8000 (`web/vite.config.js`).
+
+Launch:
+
+```
+uvicorn api:app --host 0.0.0.0 --port 8000   # backend
+cd web && npm run dev                         # React dev server
+```
