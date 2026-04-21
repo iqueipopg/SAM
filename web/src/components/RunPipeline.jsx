@@ -50,7 +50,7 @@ export default function RunPipeline() {
   const [query, setQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState({
-    max_results: 30,
+    max_results: 40,
     dedup_threshold: 0.90,
     a3_ensemble: 3,
     a3_vote_threshold: 0.60,
@@ -311,8 +311,9 @@ export default function RunPipeline() {
                   <SettingSlider
                     label="Max papers (total target)"
                     value={settings.max_results}
-                    min={10} max={200} step={10}
+                    min={40} max={200} step={10}
                     onChange={(v) => updateSetting('max_results', v)}
+                    tooltip="Con 4 bases de datos y floor 10 papers/DB, valores < 40 son subóptimos."
                   />
                   <SettingSlider
                     label="Dedup threshold"
@@ -539,11 +540,25 @@ export default function RunPipeline() {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function SettingSlider({ label, value, min, max, step, onChange, format }) {
+function SettingSlider({ label, value, min, max, step, onChange, format, tooltip }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-xs text-zinc-500 font-medium">{label}</label>
+        <label
+          className="text-xs text-zinc-500 font-medium"
+          title={tooltip || undefined}
+        >
+          {label}
+          {tooltip && (
+            <span
+              className="ml-1 text-zinc-400 cursor-help"
+              title={tooltip}
+              aria-label={tooltip}
+            >
+              &#9432;
+            </span>
+          )}
+        </label>
         <span className="font-mono text-xs text-zinc-700 font-semibold">
           {format ? format(value) : value}
         </span>
@@ -557,6 +572,9 @@ function SettingSlider({ label, value, min, max, step, onChange, format }) {
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full h-1.5 rounded-full bg-zinc-200 appearance-none cursor-pointer accent-sam-600"
       />
+      {tooltip && (
+        <p className="mt-1 text-[10px] text-zinc-400 leading-snug">{tooltip}</p>
+      )}
     </div>
   )
 }
