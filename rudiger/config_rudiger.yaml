@@ -1,0 +1,328 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# SAM — Configuración específica para el servidor Rudiger (T16.2)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# MECANISMO DE HERENCIA (IMPORTANTE):
+#   Ni batch_run.py._load_config() ni api.py.load_config() aplican merge con el
+#   config.yaml raíz. Hacen un `yaml.safe_load()` puro y el dict resultante se
+#   usa tal cual (consultado con .get("seccion", {}).get("clave") en agentes).
+#   Por tanto este archivo NO es un "overlay" parcial: es SELF-CONTAINED.
+#
+#   Partimos del schema completo de ../config.yaml (zona sagrada) y aplicamos
+#   los overrides de Rudiger. Cuando Eduardo cambie el config raíz, habrá que
+#   sincronizar este archivo manualmente (o añadir código de merge en T16.x).
+#
+# USO:
+#   python batch_run.py --config rudiger/config_rudiger.yaml
+#   SAM_CONFIG=rudiger/config_rudiger.yaml uvicorn api:app --host 0.0.0.0
+#
+# RELLENAR ANTES DE PRIMER RUN EN RUDIGER:
+#   * Rutas de modelos bajo `models:` (marcadas con <RELLENAR_EDUARDO>).
+#   * Email de contacto (entrez_email / unpaywall_email) si aplica.
+#   * Tokens de APIs (lens, core) en .env — NO en este archivo.
+#   * (Opcional) activar ensemble_models para A3/A4 — ver sección al final.
+# ══════════════════════════════════════════════════════════════════════════════
+
+project:
+  name: "meta-analisis-automatizado"
+  version: "0.2.0-rudiger"
+
+# ── Modelos ──────────────────────────────────────────────────────────────────
+# Rudiger tiene más VRAM que la laptop (RTX 4060 8GB). Eduardo elige los
+# modelos: pueden seguir siendo Qwen2.5-7B, o bien modelos 70B sin cuantizar.
+# Los paths deben apuntar a directorios locales en el servidor (o HF hub ids).
+models:
+  agent1_protocol:   "<RELLENAR_EDUARDO>"   # p.ej. "/opt/models/qwen2.5-7b"
+  agent2_search:     "<RELLENAR_EDUARDO>"   # p.ej. "/opt/models/qwen2.5-7b"
+  agent3_screening:  "<RELLENAR_EDUARDO>"   # p.ej. "/opt/models/qwen2.5-7b"
+  agent4_validation: "<RELLENAR_EDUARDO>"   # p.ej. "/opt/models/qwen2.5-7b"
+  agent5_extraction: "<RELLENAR_EDUARDO>"   # p.ej. "/opt/models/qwen2.5-7b"
+  agent6_quality:    "<RELLENAR_EDUARDO>"   # p.ej. "/opt/models/qwen2.5-7b"
+  agent7_synthesis:  "R/metafor"            # A7 es puro R, no LLM
+  agent8_manuscript: "<RELLENAR_EDUARDO>"   # p.ej. "/opt/models/llama-3.3-70b"
+
+device: "cuda"
+# Rudiger admite "none" (sin cuantizar) si la VRAM llega. Opciones: 4bit|8bit|none
+quantization: "none"
+batch_size: 1
+max_tokens: 2048
+
+# ── Parámetros de generación compartidos ────────────────────────────────────
+generation:
+  do_sample: true
+  top_p: 0.9
+  repetition_penalty: 1.3   # regla #7 del proyecto — no bajar de 1.3 con Qwen
+
+# ── Rutas separadas para aislar las corridas de Rudiger ─────────────────────
+# Los directorios se crean automáticamente por los agentes (os.makedirs).
+paths:
+  outputs: "./rudiger/outputs"
+  plots: "./rudiger/outputs/plots"
+  checkpoints: "./rudiger/outputs"
+
+# ── A1: Protocol Generation ─────────────────────────────────────────────────
+protocol:
+  temperature: 0.3
+  max_tokens_pubmed_query: 40
+  max_tokens_translation: 60
+  max_tokens_metadata: 400
+  max_tokens_criteria: 300
+  generate_protocol_document: true
+
+# ── A2: Multi-database Search ───────────────────────────────────────────────
+# Rudiger aguanta búsquedas más agresivas (más ancho de banda, más I/O).
+search:
+  databases:
+    pubmed: true
+    europepmc: true
+    semantic_scholar: true
+    google_scholar: true
+  google_scholar_rate_limit_seconds: 3.0   # mantener: GS bloquea igual
+  max_results_per_database: 300            # override: laptop usa 500, pero 300
+                                           # tras dedup ya da corpus amplio
+  min_per_db: 40                           # nuevo floor más alto por DB
+  dedup_similarity_threshold: 0.95
+  rate_limit_seconds: 1.0
+  entrez_email: "meta-analysis@example.com"
+
+# ── A3: Title/Abstract Screening ────────────────────────────────────────────
+# regla #6 del proyecto: ensemble_size=3, vote_threshold=0.60 (no tocar).
+screening:
+  ensemble_size: 3
+  voting_threshold: 0.60
+  abstract_max_chars: 800
+  temperature: 0.2
+  max_tokens: 150
+  fallback_decision: "EXCLUDE"
+
+# ── A4: Full-Text Retrieval & Screening ─────────────────────────────────────
+# Timeouts más generosos: Rudiger suele tener mejor red, pero merece la pena
+# dejar holgura para descargas grandes de PMC/Sci-Hub.
+retrieval:
+  europepmc_enabled: true
+  semanticscholar_enabled: true
+  openalex_enabled: true
+  crossref_enabled: true
+  doaj_enabled: true
+  lens_enabled: true
+  core_enabled: true
+  google_scholar_enabled: true
+  scihub_enabled: true
+  scihub_domain: "sci-hub.se"
+  rate_limits:
+    ncbi_seconds: 0.4
+    unpaywall_seconds: 1.0
+    semanticscholar_seconds: 1.0
+    openalex_seconds: 0.2
+    crossref_seconds: 0.5
+    doaj_seconds: 0.5
+    lens_seconds: 1.0
+    core_seconds: 0.1
+    google_scholar_seconds: 3.0
+    scihub_seconds: 2.0
+  request_timeout: 60            # override: laptop=30, Rudiger=60 (PDFs grandes)
+  max_chars_for_prompt: 6000
+  unpaywall_email: "meta-analysis@example.com"
+
+fulltext_screening:
+  ensemble_size: 3               # override: mantener 3 (project rule #6)
+  voting_threshold: 0.60
+  temperature: 0.2
+
+# ── A5: Data Extraction ─────────────────────────────────────────────────────
+extraction:
+  dual_extraction: true
+  concordance_threshold_numeric: 0.15
+  concordance_threshold_sample: 0.10
+  temperature: 0.1
+  max_tokens:
+    study_characteristics: 300
+    intervention: 250
+    outcomes: 500
+  max_chars:
+    study_characteristics: 4000
+    intervention: 3000
+    outcomes: 6000
+
+# ── A6: Quality Assessment ──────────────────────────────────────────────────
+quality:
+  temperature: 0.2
+  max_tokens:
+    rob2: 600
+    robins_i: 700
+    jbi: 500
+    design_detection: 100
+  design_keywords:
+    rct:
+      - "rct"
+      - "randomized"
+      - "randomised"
+      - "random"
+      - "crossover rct"
+      - "cluster-randomized"
+      - "cluster-randomised"
+    observational:
+      - "cohort"
+      - "case-control"
+      - "case control"
+      - "cross-sectional"
+      - "cross sectional"
+      - "retrospective"
+      - "prospective"
+      - "observational"
+      - "case series"
+      - "ecological"
+    qualitative:
+      - "qualitative"
+      - "phenomenolog"
+      - "grounded theory"
+      - "ethnograph"
+      - "narrative inquiry"
+      - "thematic analysis"
+      - "focus group"
+      - "interviews"
+  quality_weights:
+    Low: 1.0
+    "Some concerns": 0.6
+    High: 0.3
+    Moderate: 0.7
+    Serious: 0.4
+    Critical: 0.2
+    "No information": 0.3
+    Include: 1.0
+    "Include with caution": 0.6
+    Exclude: 0.2
+    Good: 1.0
+    Fair: 0.6
+    Poor: 0.3
+
+# ── A7: Statistical Synthesis ───────────────────────────────────────────────
+# Override r_library_path para que apunte al usuario de Rudiger, si Eduardo
+# instala metafor en un prefijo distinto. Si queda igual que el raíz, no pasa
+# nada — rpy2 usa el default del sistema.
+synthesis:
+  method: "REML"
+  min_studies_per_analysis: 2
+  min_studies_for_egger: 10
+  min_studies_for_meta_regression: 10
+  min_studies_per_subgroup: 2
+  confidence_level: 0.95
+  heterogeneity_thresholds:
+    low: 25
+    moderate: 50
+    substantial: 75
+  subgroup_analyses:
+    by_risk_of_bias: true
+    by_sample_size: true
+    by_study_design: true
+  sample_size_cutoff: 100
+  grade:
+    starting_level_weight_threshold: 0.7
+    ois_continuous: 400
+  r_library_path: "<RELLENAR_EDUARDO>"   # p.ej. "~/R/library" o "/opt/R/library"
+
+# ── Retry / Exponential Backoff ─────────────────────────────────────────────
+retry:
+  max_retries: 3
+  base_delay: 1.0
+  max_delay: 30.0
+  backoff_factor: 2.0
+
+# ── A8: Manuscript Generation ───────────────────────────────────────────────
+# En Rudiger conviene activar el perfil `extended` de section_max_tokens en
+# config/agents.json (T16.1) ya que hay VRAM para secciones largas.
+# La selección del perfil se hace desde agents.json, no desde aquí.
+manuscript:
+  language: "en"
+  temperature:
+    abstract: 0.3
+    introduction: 0.6
+    methods: 0.3
+    results: 0.3
+    discussion: 0.6
+    conclusion: 0.4
+  max_tokens:
+    abstract: 400
+    introduction: 800
+    methods: 1000
+    results: 1200
+    discussion: 1000
+    conclusion: 500
+  word_limits:
+    abstract: 350
+    introduction: 600
+    methods: 800
+    results: 800
+    discussion: 800
+    conclusion: 500
+  rag:
+    chunk_size: 800
+    chunk_overlap: 100
+    k:
+      abstract: 4
+      introduction: 6
+      methods: 4
+      results: 10
+      discussion: 8
+      conclusion: 4
+    embedding_model: "all-MiniLM-L6-v2"
+  repetition_penalty: 1.3
+  include_prisma_diagram: true
+  include_rob_plots: true
+
+# ── Groq Cloud LLM ──────────────────────────────────────────────────────────
+# En Rudiger se usa GPU local por defecto; dejar "local". Eduardo puede
+# conmutar a "groq" si quiere comparar con la nube.
+groq:
+  provider: "local"
+  model: "llama-3.3-70b-versatile"
+  api_key_env: "GROQ_API_KEY"
+  max_retries: 3
+  timeout: 60
+  agent_models:
+    agent1_protocol: "llama-3.1-8b-instant"
+    agent2_search: "llama-3.1-8b-instant"
+    agent3_screening: "llama-3.1-8b-instant"
+    agent4_validation: "llama-3.1-8b-instant"
+    agent5_extraction: "llama-3.3-70b-versatile"
+    agent6_quality: "llama-3.3-70b-versatile"
+    agent8_manuscript: "llama-3.3-70b-versatile"
+
+# ── Pipeline Settings ───────────────────────────────────────────────────────
+pipeline:
+  checkpointing: true
+  resume_enabled: true
+  save_final_json: true
+  cleanup_checkpoints_on_success: false
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ENSEMBLE MULTI-MODELO (T16.6) — DESACTIVADO POR DEFECTO
+# ══════════════════════════════════════════════════════════════════════════════
+# Eduardo definirá el ensemble final en Rudiger. El bloque queda aquí como
+# plantilla para que sepa el schema exacto esperado por A3/A4 (ver
+# config/agents.json._ensemble_models_schema).
+#
+# Semántica: para cada modelo, A3/A4 lo carga → emite `votes` votos →
+# free_vram() → pasa al siguiente. Solo UN modelo en VRAM a la vez.
+#
+# Para activarlo: descomentar los bloques de abajo y ajustar paths/votes.
+# Reglas: la suma de `votes` debe ser >= screening.ensemble_size (3).
+#
+# agent3_screening:
+#   ensemble_models:
+#     - path: "/opt/models/qwen2.5-7b"
+#       quantization: "4bit"
+#       votes: 1
+#     - path: "/opt/models/llama-3.3-70b"
+#       quantization: "4bit"
+#       votes: 2
+#
+# agent4_validation:
+#   ensemble_models:
+#     - path: "/opt/models/qwen2.5-7b"
+#       quantization: "4bit"
+#       votes: 1
+#     - path: "/opt/models/llama-3.3-70b"
+#       quantization: "4bit"
+#       votes: 2
+# ══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,28 @@
+{
+  "description": "Benchmark queries para ejecuciones reproducibles de SAM en Rudiger (sprint T16). Consumido por batch_run.py: la lista `queries` se puede mapear directamente a QUERIES = [q['query'] for q in data['queries']]. Cada entrada lleva metadata (id, framework sugerido, max_results, notas) para analisis posterior y comparacion contra gold standards.",
+  "schema_version": "1.0",
+  "generated": "2026-04-21",
+  "queries": [
+    {
+      "id": "paula_nutrition",
+      "query": "In community-dwelling adults of retirement age (mean age 55-65), are interventions with psychological components (such as motivational interviewing, cognitive behavioral therapy, self-management, goal setting, or behavior modification) that promote dietary change more effective than any comparator at improving dietary intake (vegetables, fruit, calories, fat, diet quality) and anthropometric outcomes (weight, BMI, waist circumference, visceral fat)?",
+      "framework": "PICO",
+      "max_results": 150,
+      "notes": "Gold standard interno: 90 PDFs incluidos en data/gold_standard/nutricion/pdfs_incluidos/ (meta-analisis de nutricion de Paula Collazo, SAMA). Poblacion: adultos edad jubilacion (mean 55-65, rango con SD 50-70). EXCLUIR outcomes glicemicos/lipidicos (HbA1c, medidas biologicas de sangre) en A7. PICO confirmada 2026-03-19. Pendiente recibir de Paula: Google Sheet con estudios + outcomes + estadisticos."
+    },
+    {
+      "id": "paula_sport",
+      "query": "In community-dwelling adults around retirement age (mean age 55-65), are physical activity interventions that include intentional psychological components (behavior change techniques, action planning, or strategies based on psychological theory such as Self-Determination Theory) more effective than any comparator (usual care or alternative intervention) at improving directly measured physical activity behavior (strength, walking, reduction of sedentary time)?",
+      "framework": "PICO",
+      "max_results": 150,
+      "notes": "Gold standard interno: 1552 estudios screening + MA publicada por Paula (data/gold_standard/deporte/, recibido 2026-04-21). Solo RCTs individuales o estratificados (EXCLUIR cluster-RCTs). EXCLUIR pacientes con enfermedades mentales/fisicas serias (COPD, cancer activo). Outcomes: medida conductual directa de PA, NO intentions ni valores fisiologicos. Criterio exigente: componente psicologico intencional (evaluado por dos psicologas) - SAM puede generar falsos positivos aqui, medir en benchmark."
+    },
+    {
+      "id": "cbt_depression_baseline",
+      "query": "Is cognitive behavioral therapy more effective than medication for treating depression in adults?",
+      "framework": "PICO",
+      "max_results": 150,
+      "notes": "Baseline de referencia: reproduce outputs/run_20260311_155651/ (CBT depression, 10 included). Query extraida verbatim de checkpoint_a1_protocol.json. Utilizada como smoke-test de regresion entre versiones/hardware."
+    }
+  ]
+}
