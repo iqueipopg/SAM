@@ -1,6 +1,6 @@
 """
 SAM — FastAPI backend for the React web UI.
-Runs the A1→A8 pipeline with SSE progress streaming.
+Runs the A1→A9 pipeline (9 agents) with SSE progress streaming.
 
 Usage:  uvicorn api:app --host 0.0.0.0 --port 8000
 """
@@ -40,15 +40,30 @@ from agents.agent5_extraction import Agent5Extraction
 from agents.agent6_quality import Agent6Quality
 from agents.agent7_synthesis import Agent7Synthesis
 from agents.agent8_manuscript import Agent8Manuscript
+from agents.agent9_explainer import Agent9Explainer
 from agents.prisma_flow import generate_prisma_flow
 from agents.rob_plots import generate_rob_traffic_light, generate_rob_summary
 from agents.exporters import export_csv, export_excel, export_revman, export_summary_table
-from agents.logger import setup_logger
+from agents.logger import setup_logger, get_logger
 from agents.review_report import ReviewReportGenerator
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="SAM API", version="0.4.0")
+def _read_version() -> str:
+    """Read the SAM version from the VERSION file at project root.
+
+    Falls back to '0.0.0' if the file is missing or unreadable. The path is
+    resolved relative to this module file so the function works regardless of
+    the caller's working directory.
+    """
+    version_path = Path(__file__).parent / "VERSION"
+    try:
+        return version_path.read_text(encoding="utf-8").strip() or "0.0.0"
+    except (OSError, FileNotFoundError):
+        return "0.0.0"
+
+
+app = FastAPI(title="SAM API", version=_read_version())
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -250,12 +265,11 @@ def run_pipeline_generator(req: PipelineRequest):
     # ── A3: Screening ────────────────────────────────────────
     yield _sse_event("agent_start", {"agent": "A3", "name": "Screening"})
     try:
-        a3 = Agent3Screening()
-        a3_results = a3.screen(
-            papers, protocol,
+        a3 = Agent3Screening(
             ensemble_size=req.a3_ensemble,
-            vote_threshold=req.a3_vote_threshold,
+            voting_threshold=req.a3_vote_threshold,
         )
+        a3_results = a3.screen_batch(papers, protocol)
         free_vram(a3)
         save_checkpoint(run_dir, "a3_screening", a3_results)
         stats3 = a3_results.get("stats", {})
@@ -282,16 +296,15 @@ def run_pipeline_generator(req: PipelineRequest):
     # ── A4: Full-text ────────────────────────────────────────
     yield _sse_event("agent_start", {"agent": "A4", "name": "Full-text"})
     try:
-        a3_included = a3_results.get("included", [])
+        a3_included = a3_results.get("include", [])
         a3_uncertain = a3_results.get("uncertain", [])
         ft_papers = a3_included + a3_uncertain
 
-        a4 = Agent4FullText()
-        a4_result = a4.process(
-            ft_papers, protocol,
+        a4 = Agent4FullText(
             ensemble_size=req.a4_ensemble,
-            vote_threshold=req.a4_vote_threshold,
+            voting_threshold=req.a4_vote_threshold,
         )
+        a4_result = a4.run(ft_papers, papers, protocol)
         free_vram(a4)
         save_checkpoint(run_dir, "a4_fulltext", a4_result)
         stats4 = a4_result.get("stats", {})
@@ -318,9 +331,9 @@ def run_pipeline_generator(req: PipelineRequest):
     # ── A5: Extraction ───────────────────────────────────────
     yield _sse_event("agent_start", {"agent": "A5", "name": "Extraction"})
     try:
-        included_papers = a4_result.get("fulltext_included", [])
+        included_papers = a4_result.get("include", [])
         a5 = Agent5Extraction()
-        a5_result = a5.extract(included_papers, protocol)
+        a5_result = a5.extract_all(included_papers, protocol)
         free_vram(a5)
         save_checkpoint(run_dir, "a5_extraction", a5_result)
         stats5 = a5_result.get("stats", {})
@@ -349,7 +362,7 @@ def run_pipeline_generator(req: PipelineRequest):
     try:
         quality_papers = (a5_result or {}).get("papers", included_papers)
         a6 = Agent6Quality()
-        a6_result = a6.assess(quality_papers, protocol)
+        a6_result = a6.assess_all(quality_papers, protocol)
         free_vram(a6)
         save_checkpoint(run_dir, "a6_quality", a6_result)
         stats6 = a6_result.get("stats", {})
@@ -359,8 +372,8 @@ def run_pipeline_generator(req: PipelineRequest):
             rob_papers = a6_result.get("papers", [])
             generate_rob_traffic_light(rob_papers, os.path.join(plots_dir, "rob_traffic_light.png"))
             generate_rob_summary(rob_papers, os.path.join(plots_dir, "rob_summary.png"))
-        except Exception:
-            pass
+        except Exception as e:
+            get_logger("api").warning("RoB plot generation failed: %s", e, exc_info=True)
 
         yield _sse_event("agent_done", {
             "agent": "A6", "name": "Quality",
@@ -384,9 +397,9 @@ def run_pipeline_generator(req: PipelineRequest):
     # ── A7: Synthesis ────────────────────────────────────────
     yield _sse_event("agent_start", {"agent": "A7", "name": "Synthesis"})
     try:
-        synthesis_papers = (a6_result or {}).get("papers", included_papers)
         a7 = Agent7Synthesis()
-        a7_result = a7.synthesize(synthesis_papers, protocol, plots_dir=plots_dir)
+        a7_input = a6_result if a6_result else {"papers": included_papers}
+        a7_result = a7.synthesize(a7_input, protocol, output_dir=run_dir)
         save_checkpoint(run_dir, "a7_synthesis", _clean_r_objects(a7_result) if a7_result else {})
         stats7 = (a7_result or {}).get("stats", {})
         yield _sse_event("agent_done", {
@@ -411,9 +424,9 @@ def run_pipeline_generator(req: PipelineRequest):
     yield _sse_event("agent_start", {"agent": "A8", "name": "Manuscript"})
     try:
         a8 = Agent8Manuscript()
-        a8_result = a8.generate(
-            papers=included_papers,
+        a8_result = a8.generate_manuscript(
             protocol=protocol,
+            included_papers=included_papers,
             extraction=a5_result,
             quality=a6_result,
             synthesis=_clean_r_objects(a7_result) if a7_result else None,
@@ -539,6 +552,26 @@ def run_pipeline_generator(req: PipelineRequest):
         "review_report": review_report_data,
     }
 
+    # ── A9: Explainability & Traceability ────────────────────
+    yield _sse_event("agent_start", {"agent": "A9", "name": "Explainer"})
+    a9_result = None
+    try:
+        a9 = Agent9Explainer()
+        a9_result = a9.run(output, os.path.basename(run_dir), run_dir)
+        output["explainability"] = a9_result
+        yield _sse_event("agent_done", {
+            "agent": "A9", "name": "Explainer",
+            "summary": {
+                "total_papers": a9_result["stats"]["total_papers"],
+                "included": a9_result["stats"]["included"],
+                "excluded": a9_result["stats"]["excluded"],
+                "elapsed_s": a9_result["stats"]["elapsed_s"],
+            }
+        })
+    except Exception as e:
+        yield _sse_event("agent_error", {"agent": "A9", "error": str(e)})
+        yield _sse_event("agent_warning", {"agent": "A9", "warning": str(e)})
+
     # Save pipeline JSON
     out_path = os.path.join(run_dir, "pipeline.json")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -572,6 +605,8 @@ def run_pipeline_generator(req: PipelineRequest):
         ("summary_table.md", "Summary"),
         ("review_report.txt", "Review Report"),
         ("prospero_draft.txt", "PROSPERO Draft"),
+        ("papers_raw.xlsx", "Papers (raw)"),
+        ("explainability.md", "Explainability Report"),
     ]:
         fpath = os.path.join(run_dir, fname)
         if os.path.exists(fpath):
