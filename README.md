@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Automated systematic reviews and meta-analyses from a research question.</strong><br>
-  8 AI agents &middot; Multi-database search &middot; R/metafor statistics &middot; Manuscript generation
+  9 AI agents &middot; Multi-database search &middot; R/metafor statistics &middot; Manuscript generation &middot; Explainability report
 </p>
 
 <p align="center">
@@ -25,14 +25,17 @@ Developed as part of the **Trabajo de Fin de Grado (TFG)** at **Universidad Pont
 
 ### Key Features
 
-- **8 specialized agents** working sequentially (A1→A8)
+- **9 specialized agents** working sequentially (A1→A9)
 - **4 search databases**: PubMed, Europe PMC, Semantic Scholar, Google Scholar
 - **10-source full-text retrieval cascade**: PMC XML → Unpaywall → Europe PMC → Semantic Scholar → OpenAlex → CrossRef → DOAJ → CORE → Google Scholar → Sci-Hub
 - **3 quality assessment tools**: RoB 2.0 (RCTs), ROBINS-I (observational), JBI (qualitative)
-- **R/metafor statistical synthesis** — no LLM for statistics
+- **R/metafor statistical synthesis** — REML, Egger's test, trim-and-fill, Rosenthal's Fail-Safe N, leave-one-out, subgroups, meta-regression, GRADE; no LLM for statistics
 - **RAG-based manuscript generation** with FAISS + MiniLM-L6-v2
+- **Explainability & traceability** report (A9): `papers_raw.xlsx` + `explainability.md` in Spanish
 - **Model-agnostic**: auto-detects chat templates, works with any HuggingFace model
-- **Light & Dark mode** Streamlit UI with branded SVG logos
+- **Per-agent LLM parameters** in `config/agents.json` (temperature, max_tokens, repetition penalty)
+- **Two UIs**: Streamlit (desktop, light/dark mode) and a modern React + Vite + Tailwind web UI backed by a FastAPI/SSE server
+- **154+ automated tests** covering all 9 agents plus end-to-end pipeline
 
 ---
 
@@ -46,8 +49,9 @@ Developed as part of the **Trabajo de Fin de Grado (TFG)** at **Universidad Pont
 | **A4** | Full-Text Retrieval & Screening | 10-source retrieval cascade + LLM full-text screening |
 | **A5** | Data Extraction | 3 focused prompts per paper (study characteristics, intervention, outcomes) |
 | **A6** | Quality Assessment | RoB 2.0 / ROBINS-I / JBI Critical Appraisal with weighted scores |
-| **A7** | Statistical Synthesis | R/metafor: random-effects REML, heterogeneity, publication bias, sensitivity, GRADE |
-| **A8** | Manuscript Generation | RAG-based writing, section-specific retrieval, LaTeX/PDF output |
+| **A7** | Statistical Synthesis | R/metafor: random-effects REML, heterogeneity, Egger's test, trim-and-fill, Rosenthal's Fail-Safe N, leave-one-out, subgroups, meta-regression, GRADE, R script export |
+| **A8** | Manuscript Generation | RAG-based writing, section-specific retrieval, population descriptives, LaTeX/PDF output |
+| **A9** | Explainability & Traceability | `papers_raw.xlsx` (per-paper trace) + `explainability.md` report in Spanish, no GPU |
 
 ### Design Principles
 
@@ -188,7 +192,7 @@ Each vote in the ensemble uses a different model (VRAM is freed between swaps).
 
 ## Streamlit UI
 
-The web interface features:
+The desktop interface (`app.py`) features:
 
 - **Chat-based interaction** — describe your question, watch the pipeline run
 - **Pipeline progress** — each agent shown as a collapsible status widget
@@ -201,16 +205,42 @@ The web interface features:
 
 ---
 
+## React Web UI + FastAPI Backend
+
+A modern web UI lives in `web/` (React + Vite + Tailwind) and talks to a FastAPI
+backend (`api.py`) that streams pipeline progress over Server-Sent Events (SSE).
+
+```bash
+# 1. Launch the backend (A1-A9 pipeline over HTTP)
+uvicorn api:app --host 0.0.0.0 --port 8000
+
+# 2. In another terminal, launch the React dev server
+cd web && npm install && npm run dev
+```
+
+Vite proxies `/api` to port 8000. The React client subscribes to `/api/run`
+and renders `agent_start` / `agent_done` / `agent_warning` events live, then
+consumes the `pipeline_done` manifest to expose downloads (PDF, CSV, Excel,
+plots, RevMan XML, `papers_raw.xlsx`, `explainability.md`).
+
+Key endpoints: `/api/run`, `/api/stop`, `/api/kill`, `/api/status`, `/api/runs`,
+`/api/download/{run_id}/{filepath}`, `/api/health`.
+
+---
+
 ## Project Structure
 
 ```
 SAM/
 ├── app.py                     # Streamlit UI
+├── api.py                     # FastAPI backend (SSE streaming) for the React web UI
 ├── config.yaml                # Central configuration
+├── config/agents.json         # Per-agent LLM parameters (temp, max_tokens, rep_penalty, ...)
 ├── requirements.txt           # Python dependencies
 ├── run.sh                     # Server deployment script
 ├── batch_run.py               # Batch pipeline runner
 ├── .env.example               # Environment variable template
+├── ARCHITECTURE.md            # Pipeline diagram, agent table, VRAM flow, API endpoints
 │
 ├── agents/                    # Core multi-agent pipeline
 │   ├── base.py                # BaseAgent: model loading, chat template detection
@@ -222,6 +252,8 @@ SAM/
 │   ├── agent6_quality.py      # A6: RoB 2.0 / ROBINS-I / JBI
 │   ├── agent7_synthesis.py    # A7: R/metafor statistical synthesis
 │   ├── agent8_manuscript.py   # A8: RAG manuscript generation
+│   ├── agent9_explainer.py    # A9: papers_raw.xlsx + explainability.md (ES)
+│   ├── groq_adapter.py        # Optional Groq cloud LLM provider
 │   ├── prompts.py             # All LLM prompt templates
 │   ├── effect_converters.py   # Effect size conversion utilities
 │   ├── exporters.py           # CSV, Excel, RevMan XML exporters
@@ -231,11 +263,16 @@ SAM/
 │   ├── logger.py              # Logging setup
 │   └── retry.py               # Exponential backoff retry logic
 │
+├── web/                       # React + Vite + Tailwind web UI
+│   ├── src/App.jsx            # Main app component
+│   ├── src/components/        # Hero, Pipeline, RunPipeline, Features, Stats, ...
+│   └── vite.config.js         # Proxies /api to FastAPI on :8000
+│
 ├── assets/                    # SVG logos (light + dark variants)
 ├── .streamlit/config.toml     # Streamlit theme configuration
 │
-├── tests/                     # Agent and pipeline tests
-├── experiments/               # Validation and benchmarking scripts
+├── tests/                     # 154+ tests (per-agent + end-to-end pipeline)
+├── experiments/               # Validation and benchmarking scripts (exp1-exp8)
 ├── docs/                      # Documentation & presentation
 │   ├── presentacion_sam.tex   # Beamer presentation (LaTeX)
 │
@@ -247,16 +284,26 @@ SAM/
 
 ## Configuration
 
-All pipeline parameters are in `config.yaml`:
+SAM reads configuration from two files:
 
-- **Models**: paths per agent, quantization mode (`4bit`/`8bit`/`none`)
-- **Search**: database toggles, rate limits, dedup threshold
-- **Screening**: ensemble size, voting threshold, temperature
-- **Retrieval**: enable/disable each of the 10 full-text sources
-- **Quality**: RoB 2.0 / ROBINS-I / JBI weights, design keywords
-- **Synthesis**: REML method, heterogeneity thresholds, GRADE settings
-- **Manuscript**: language, section temperatures, RAG chunk sizes, word limits
-- **Pipeline**: checkpointing, resume, cleanup settings
+- **`config.yaml`** — pipeline-level defaults:
+  - **Models**: paths per agent, quantization mode (`4bit`/`8bit`/`none`)
+  - **Search**: database toggles, rate limits, dedup threshold
+  - **Screening**: ensemble size, voting threshold
+  - **Retrieval**: enable/disable each of the 10 full-text sources
+  - **Quality**: RoB 2.0 / ROBINS-I / JBI weights, design keywords
+  - **Synthesis**: REML method, heterogeneity thresholds, GRADE settings
+  - **Manuscript**: language, RAG chunk sizes, word limits
+  - **Pipeline**: checkpointing, resume, cleanup settings
+  - **Groq provider**: `groq.provider: local | groq` (cloud LLM fallback)
+
+- **`config/agents.json`** — per-agent LLM parameters (temperature, max_tokens,
+  max_input_chars, repetition_penalty), with per-prompt granularity for A5
+  (3 prompt types) and A8 (6 sections). Overrides `config.yaml` defaults when
+  present; backward compatible if absent.
+
+- **`.env`** — API keys (`ENTREZ_EMAIL`, `UNPAYWALL_EMAIL`, `GROQ_API_KEY`, ...),
+  loaded via `python-dotenv` with fallback to `config.yaml`.
 
 ---
 
@@ -272,6 +319,8 @@ The `experiments/` directory contains validation scripts:
 | `exp4_model_comparison.py` | Cross-model performance comparison |
 | `exp5_end_to_end_benchmark.py` | Full pipeline benchmark |
 | `exp6_fulltext_impact.py` | Impact of full-text vs abstract-only screening |
+| `exp7_vram_profiling.py` | VRAM + time profiling per agent |
+| `exp8_gold_standard_eval.py` | A3 / A3+A4 vs human gold standard |
 
 Run all experiments:
 
@@ -319,3 +368,7 @@ python experiments/run_all.py
 - Hugging Face for the Transformers ecosystem
 - Wolfgang Viechtbauer for R/metafor
 - Open-source communities: LangChain, FAISS, Streamlit, Biopython
+
+---
+
+**Version:** v0.6.0 — 9 agents (A1-A9), React + Vite + Tailwind web UI, FastAPI/SSE backend, `config/agents.json`, 154+ tests.
