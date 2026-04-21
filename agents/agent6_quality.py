@@ -137,15 +137,32 @@ class Agent6Quality(BaseAgent):
     #  STUDY DESIGN DETECTION                                              #
     # ================================================================== #
 
+    # Deterministic RCT regex: catches common phrasings in title/abstract
+    _RCT_REGEX = re.compile(
+        r"\b(randomi[sz]ed controlled trial|RCT|randomi[sz]ed trial|"
+        r"randomi[sz]ed\s+(?:clinical\s+)?trial|"
+        r"double[- ]blind.{0,20}trial|controlled clinical trial)\b",
+        re.IGNORECASE,
+    )
+
     def _detect_study_design(self, paper: Dict) -> str:
         """Detect study design: 'rct', 'observational', or 'qualitative'.
-        First tries keyword matching on A5's study_characteristics.study_design,
-        falls back to LLM if null/ambiguous.
+        Order:
+          1) Deterministic RCT regex on title+abstract (no LLM needed).
+          2) Keyword match on A5's study_characteristics.study_design.
+          3) LLM fallback.
         """
+        # (1) Deterministic RCT regex on title + abstract — skip LLM if matched
+        title = paper.get("title", "") or ""
+        abstract = paper.get("abstract", "") or ""
+        haystack = f"{title}\n{abstract}"
+        if self._RCT_REGEX.search(haystack):
+            return "rct"
+
         sc = paper.get("study_characteristics") or {}
         design_str = (sc.get("study_design") or "").lower().strip()
 
-        # Keyword match — check qualitative first (some qualitative studies may
+        # (2) Keyword match — check qualitative first (some qualitative studies may
         # mention "interviews" alongside observational keywords, so order matters)
         qual_keywords = ["qualitative", "phenomenolog", "grounded theory", "ethnograph",
                          "narrative inquiry", "thematic analysis", "focus group",
@@ -165,11 +182,7 @@ class Agent6Quality(BaseAgent):
             if kw in design_str:
                 return "observational"
 
-        # Fallback: LLM detection
-        if design_str:
-            # If there's a design string but it didn't match, try LLM
-            pass
-
+        # (3) LLM fallback
         prompt = format_agent6_design_prompt(paper, max_chars=self._design_max_chars)
         response = self._simple_generate(prompt, max_tokens=100)
         parsed = self._parse_json_response(response)

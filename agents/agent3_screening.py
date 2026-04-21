@@ -8,6 +8,13 @@ from agents.base import BaseAgent
 import json, torch, re, time
 from typing import List, Dict
 
+# Deterministic filter: if title/abstract contains any of these terms, paper is a
+# secondary study (review/meta-analysis) and must be EXCLUDED regardless of the LLM vote.
+_REVIEW_SECONDARY_REGEX = re.compile(
+    r"(?i)\b(meta[- ]?analys[ie]s|systematic review|scoping review|"
+    r"narrative review|literature review|umbrella review)\b"
+)
+
 
 class Agent3Screening(BaseAgent):
     """Title/abstract screening with ensemble voting.
@@ -140,13 +147,32 @@ class Agent3Screening(BaseAgent):
         screening_confidence = round(abs(include_frac - 0.5) * 2, 2)
         is_borderline = screening_confidence < 0.3
 
+        # Deterministic override: force EXCLUDE for secondary studies
+        # (meta-analyses, systematic/scoping/narrative/literature/umbrella reviews)
+        # regardless of the LLM vote. Title/abstract match is sufficient signal.
+        override_reasoning = None
+        title_text = paper.get("title", "") or ""
+        abstract_text = str(paper.get("abstract", "") or "")
+        if _REVIEW_SECONDARY_REGEX.search(title_text) or _REVIEW_SECONDARY_REGEX.search(abstract_text):
+            decision = "EXCLUDE"
+            confidence = 1.0
+            screening_confidence = 1.0
+            is_borderline = False
+            if "secondary_study" not in flags:
+                flags.append("secondary_study")
+            override_reasoning = "Study design is a review/meta-analysis (deterministic filter)"
+
+        final_reasoning = override_reasoning if override_reasoning is not None else (
+            vote_details[0]["reasoning"] if vote_details else ""
+        )
+
         return {
             "pmid": paper.get("pmid", ""),
             "title": paper.get("title", ""),
             "decision": decision,
             "confidence": round(confidence, 2),
             "votes": vote_details,
-            "reasoning": vote_details[0]["reasoning"] if vote_details else "",
+            "reasoning": final_reasoning,
             "flags": flags,
             "screening_confidence": screening_confidence,
             "borderline": is_borderline,
@@ -250,6 +276,14 @@ DECISION RULES:
 - INCLUDE  : the paper involves "{intv}" as one of the interventions studied, compared, or analyzed AND the topic is relevant to the inclusion criteria. Include even if "{intv}" is studied alongside other methods (e.g., prediction models, secondary analyses) — what matters is that "{intv}" data is present.
 - EXCLUDE  : "{intv}" is NOT mentioned or studied at all, OR the paper targets a completely different condition/population with no relevance, OR it is an editorial/letter/case report, OR it clearly triggers an exclusion criterion
 - UNCERTAIN: the paper mentions "{intv}" but there is not enough information to confirm it meets all criteria
+
+MANDATORY EXCLUSION (secondary studies):
+If the title or abstract contains any of the following terms, this paper is a
+secondary study (review/meta-analysis) and MUST be EXCLUDED with high confidence:
+"meta-analysis", "meta analysis", "systematic review", "scoping review",
+"narrative review", "literature review", "umbrella review".
+In that case respond with:
+{{"vote": "EXCLUDE", "reasoning": "Study design is a review/meta-analysis"}}
 
 IMPORTANT: Be INCLUSIVE at this stage — title/abstract screening should cast a wide net. If "{intv}" appears in the title or abstract as something being tested, compared, or evaluated, lean towards INCLUDE. Only EXCLUDE when the paper is clearly irrelevant. Reviews and guidelines should be EXCLUDED.
 

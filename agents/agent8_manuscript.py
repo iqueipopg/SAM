@@ -731,8 +731,9 @@ class Agent8Manuscript(BaseAgent):
             year = str(p.get("year", "")).strip()
             title = p.get("title", "")
 
-            if not year:
-                continue
+            # BUG5 fix: do NOT skip papers with missing year. Upstream metadata
+            # (A4) may leave year="" for some OA scrapes; in that case we still
+            # want the paper to verify against surname-only matches.
 
             # Extract surnames from all authors
             surnames = []
@@ -743,32 +744,43 @@ class Agent8Manuscript(BaseAgent):
                 else:
                     parts = author.strip().split()
                     surname = parts[-1] if parts else ""
-                if surname:
+                # Drop obvious placeholders ("…", single-letter, empty)
+                if surname and len(surname) >= 2 and surname not in ("...", "…"):
                     surnames.append(surname)
 
             if not surnames:
                 continue
 
             first_surname = surnames[0].lower()
+            effective_year = year if year else "n.d."
             paper_info = {
                 "pmid": pmid,
                 "first_author": surnames[0],
                 "all_surnames": [s.lower() for s in surnames],
                 "year": year,
                 "title": title,
-                "citation": self._paper_lookup.get(pmid, {}).get("citation", f"{surnames[0]} et al., {year}"),
+                "citation": self._paper_lookup.get(pmid, {}).get(
+                    "citation",
+                    f"{surnames[0]} et al., {year}" if year else f"{surnames[0]} et al.",
+                ),
             }
 
-            # Primary key: (first_author_surname, year)
-            key = (first_surname, year)
-            index[key] = paper_info
+            # Primary key: (first_author_surname, year) — when year known
+            if year:
+                index[(first_surname, year)] = paper_info
+                if len(surnames) >= 2:
+                    index[(first_surname, surnames[1].lower(), year)] = paper_info
 
-            # Also index with just surname (no year) for fuzzy matching
-            # and with all author surnames for multi-author citations
-            if len(surnames) >= 2:
-                second_surname = surnames[1].lower()
-                # "(Smith & Jones, 2020)" pattern
-                index[(first_surname, second_surname, year)] = paper_info
+            # BUG5 fix: always add a surname-only fallback so yearless citations
+            # (e.g. "(Peter et al.)") can still be matched.
+            # Only set if not already claimed by another paper (first wins).
+            fallback_key = (first_surname, "")
+            if fallback_key not in index:
+                index[fallback_key] = paper_info
+
+            # Also index by (surname, "n.d.") so the fuzzy scan in
+            # _check_single_citation can find it when year is given but unknown.
+            index[(first_surname, effective_year)] = paper_info
 
         return index
 
@@ -831,29 +843,40 @@ class Agent8Manuscript(BaseAgent):
             - 1.0: exact (surname, year) match
             - 0.9: exact (surname, second_author, year) match
             - 0.7: surname found in any author list for that year
+            - 0.5: yearless fallback match (surname only) — used when upstream
+              metadata is missing year (BUG5)
             - 0.0: no match found
             """
             s_lower = surname.lower()
-            y = year.strip()
+            y = (year or "").strip()
 
             # Direct match: (surname, year)
-            if (s_lower, y) in self._citation_index:
+            if y and (s_lower, y) in self._citation_index:
                 return True, 1.0
 
             # Try with second author: (surname, second, year)
-            if second_author:
+            if y and second_author:
                 s2_lower = second_author.lower()
                 if (s_lower, s2_lower, y) in self._citation_index:
                     return True, 0.9
 
             # Fuzzy: check if surname appears in any paper's author list for that year
+            if y:
+                for (key_surname, *rest), info in self._citation_index.items():
+                    if len(rest) >= 1 and rest[-1] == y:
+                        # Check if surname matches first author or any author
+                        if s_lower == key_surname:
+                            return True, 0.8
+                        if s_lower in info.get("all_surnames", []):
+                            return True, 0.7
+
+            # BUG5 fallback: yearless or mismatched-year citation.
+            # Accept when the surname is known at all (first or any author).
+            if (s_lower, "") in self._citation_index:
+                return True, 0.5
             for (key_surname, *rest), info in self._citation_index.items():
-                if len(rest) >= 1 and rest[-1] == y:
-                    # Check if surname matches first author or any author
-                    if s_lower == key_surname:
-                        return True, 0.8
-                    if s_lower in info.get("all_surnames", []):
-                        return True, 0.7
+                if s_lower == key_surname or s_lower in info.get("all_surnames", []):
+                    return True, 0.5
 
             return False, 0.0
 
@@ -961,6 +984,64 @@ class Agent8Manuscript(BaseAgent):
                 return "(" + "; ".join(verified_parts) + ")"
 
         section_text = bracket_citation_re.sub(_replace_bracket_group, section_text)
+
+        # ----------------------------------------------------------
+        # Pattern 1c: YEARLESS parenthetical / bracket citations (BUG5)
+        #   (Peter et al.)  [Peter et al.]  (Smith & Jones)
+        # Emitted by the LLM when upstream metadata has empty year.
+        # Must run AFTER year-bearing patterns so it doesn't steal matches.
+        # Requires an explicit author marker (et al. / &) so that bare
+        # parenthetical tokens like (PRISMA), (Spain), (Table 1) don't match.
+        # ----------------------------------------------------------
+        yearless_cite_re = re.compile(
+            r'([\(\[])@?'
+            r'([A-Z][a-zA-Z\u00C0-\u024F\'-]+'
+            r'\s+(?:et\s+al\.?|&\s+[A-Z][a-zA-Z\u00C0-\u024F\'-]+))'
+            r'([\)\]])'
+        )
+
+        def _replace_yearless(match):
+            nonlocal total, verified, removed, details
+            open_br = match.group(1)
+            inner = match.group(2).strip()
+            close_br = match.group(3)
+            # Only accept matching bracket pairs
+            if (open_br, close_br) not in (("(", ")"), ("[", "]")):
+                return match.group(0)
+            m = single_cite_re.search(inner + " 9999")  # dummy year to parse surname
+            # Fallback parser without year
+            surname_re = re.compile(
+                r'^([A-Z][a-zA-Z\u00C0-\u024F\'-]+)'
+                r'(?:\s+et\s+al\.?)?'
+                r'(?:\s*&\s*([A-Z][a-zA-Z\u00C0-\u024F\'-]+))?$'
+            )
+            sm = surname_re.match(inner)
+            if not sm:
+                return match.group(0)
+            surname = sm.group(1)
+            second_author = sm.group(2)
+            total += 1
+            matched, confidence = _check_single_citation(surname, second_author, "")
+            if matched:
+                verified += 1
+                status = "verified" if confidence >= 0.8 else "verified_low_confidence"
+                details.append({
+                    "citation": match.group(0),
+                    "status": status,
+                    "confidence": confidence,
+                })
+                # Normalize to parenthetical form
+                return "(" + inner + ")"
+            else:
+                removed += 1
+                details.append({
+                    "citation": match.group(0),
+                    "status": "removed_phantom_yearless",
+                    "confidence": 0.0,
+                })
+                return "previous research"
+
+        section_text = yearless_cite_re.sub(_replace_yearless, section_text)
 
         # ----------------------------------------------------------
         # Pattern 2: Numeric references [1], [2,3], [1-3], [1, 2, 3]

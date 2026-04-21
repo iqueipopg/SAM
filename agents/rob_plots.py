@@ -46,39 +46,39 @@ DEFAULT_COLOR = "#BDBDBD"
 
 # Canonical domain labels
 ROB2_DOMAINS = [
-    "randomization_process",
-    "deviations_from_intervention",
-    "missing_outcome_data",
-    "outcome_measurement",
-    "selection_of_reported_result",
+    "randomization",
+    "deviations",
+    "missing_data",
+    "measurement",
+    "selection",
 ]
 
 ROB2_DOMAIN_LABELS = {
-    "randomization_process": "D1\nRandom.",
-    "deviations_from_intervention": "D2\nDeviat.",
-    "missing_outcome_data": "D3\nMissing",
-    "outcome_measurement": "D4\nMeasure.",
-    "selection_of_reported_result": "D5\nSelect.",
+    "randomization": "D1\nRandom.",
+    "deviations": "D2\nDeviat.",
+    "missing_data": "D3\nMissing",
+    "measurement": "D4\nMeasure.",
+    "selection": "D5\nSelect.",
 }
 
 ROBINS_I_DOMAINS = [
     "confounding",
     "selection_of_participants",
     "classification_of_interventions",
-    "deviations_from_intended_interventions",
+    "deviations_from_interventions",
     "missing_data",
     "measurement_of_outcomes",
-    "selection_of_reported_result",
+    "selection_of_results",
 ]
 
 ROBINS_I_DOMAIN_LABELS = {
     "confounding": "D1\nConfound.",
     "selection_of_participants": "D2\nSelect.",
     "classification_of_interventions": "D3\nClassif.",
-    "deviations_from_intended_interventions": "D4\nDeviat.",
+    "deviations_from_interventions": "D4\nDeviat.",
     "missing_data": "D5\nMissing",
     "measurement_of_outcomes": "D6\nMeasure.",
-    "selection_of_reported_result": "D7\nReport.",
+    "selection_of_results": "D7\nReport.",
 }
 
 
@@ -95,9 +95,10 @@ def _extract_study_data(quality_data: dict) -> Tuple[List[Dict], str]:
     - domains: dict of {domain_name: judgment_str}
     - tool: str
     """
-    papers = quality_data.get("papers", [])
     if isinstance(quality_data, list):
         papers = quality_data
+    else:
+        papers = quality_data.get("papers", [])
 
     studies = []
     tool_counts = {"RoB2": 0, "ROBINS-I": 0, "JBI": 0}
