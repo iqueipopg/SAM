@@ -398,7 +398,29 @@ class Agent5Extraction(BaseAgent):
         return False
 
     def _extract_once(self, paper: Dict, protocol: Dict, temperature: float = 0.1) -> Dict:
-        """Single extraction pass at a given temperature (original logic)."""
+        """Single extraction pass at a given temperature (original logic).
+
+        NOTE(ARQ5 eval, 2026-04-21): evaluated merging the 3 focused prompts
+        (study_chars / intervention / outcomes) into 1 combined prompt with a
+        nested JSON schema. Rejected because:
+          (a) the outcomes array alone can exceed 600 output tokens for
+              multi-arm trials (see AGENT5_OUTCOMES_TEMPLATE: 14 fields per
+              outcome plus two detailed examples). A combined prompt would
+              regularly exceed the configured max_new_tokens and truncate mid-JSON.
+          (b) the 3 prompts draw from DIFFERENT input sections with different
+              `max_input_chars` budgets (methods 3000-4000 chars for chars +
+              intervention, results 6000 chars for outcomes). Feeding all
+              sections in a single prompt would either blow past context budget
+              or force harmful truncation of the results section where numeric
+              data lives.
+          (c) dual extraction + `_reconcile` deliberately use pass 1 for
+              study_characteristics (lower temperature) and pass 2 for outcomes;
+              a single mega-prompt collapses that per-field temperature tuning.
+          (d) individual prompt JSON-parse failure doesn't cascade today:
+              losing study_chars still yields usable outcomes. With one combined
+              prompt, a single JSON error loses everything.
+        Kept the 3-prompt approach.
+        """
         sections_used = []
 
         # Prompt 1: Study characteristics
