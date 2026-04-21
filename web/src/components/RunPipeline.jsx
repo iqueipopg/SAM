@@ -3,8 +3,9 @@ import {
   Play, Square, ChevronDown, ChevronUp, Loader2, Check, X,
   AlertTriangle, Download, Settings2, ArrowRight,
   FileText, Search, Filter, BookOpen, Database,
-  ShieldCheck, BarChart3, FileOutput
+  ShieldCheck, BarChart3, FileOutput, ScrollText
 } from 'lucide-react'
+import ResultsPanel from './ResultsPanel'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -40,9 +41,10 @@ const AGENT_META = {
   A6: { name: 'Quality', icon: ShieldCheck, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   A7: { name: 'Synthesis', icon: BarChart3, color: 'text-sky-600 bg-sky-50 border-sky-200' },
   A8: { name: 'Manuscript', icon: FileOutput, color: 'text-zinc-600 bg-zinc-50 border-zinc-200' },
+  A9: { name: 'Explainer', icon: ScrollText, color: 'text-teal-600 bg-teal-50 border-teal-200' },
 }
 
-const AGENTS_ORDER = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8']
+const AGENTS_ORDER = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9']
 
 export default function RunPipeline() {
   const [query, setQuery] = useState('')
@@ -52,7 +54,7 @@ export default function RunPipeline() {
     dedup_threshold: 0.90,
     a3_ensemble: 3,
     a3_vote_threshold: 0.60,
-    a4_ensemble: 1,
+    a4_ensemble: 3,
     a4_vote_threshold: 0.60,
   })
 
@@ -63,6 +65,8 @@ export default function RunPipeline() {
   const [pipelineError, setPipelineError] = useState(null)
   const [downloads, setDownloads] = useState({})
   const [runId, setRunId] = useState(null)
+  const [fullData, setFullData] = useState(null)
+  const [loadingResults, setLoadingResults] = useState(false)
 
   const logRef = useRef(null)
   const readerRef = useRef(null)
@@ -86,6 +90,7 @@ export default function RunPipeline() {
     setPipelineError(null)
     setDownloads({})
     setRunId(null)
+    setFullData(null)
 
     try {
       const controller = new AbortController()
@@ -182,11 +187,21 @@ export default function RunPipeline() {
         }))
         break
 
-      case 'pipeline_done':
+      case 'pipeline_done': {
         setPipelineResult(data)
         setDownloads(data.downloads || {})
-        setRunId(data.run_dir?.split('/').pop())
+        const rid = data.run_dir?.split('/').pop()
+        setRunId(rid)
+        if (rid) {
+          setLoadingResults(true)
+          fetch(`${API_URL}/api/download/${rid}/pipeline.json`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((json) => setFullData(json))
+            .catch(() => setFullData(null))
+            .finally(() => setLoadingResults(false))
+        }
         break
+      }
 
       case 'pipeline_error':
         setPipelineError(data.error)
@@ -239,7 +254,7 @@ export default function RunPipeline() {
           </h2>
           <p className="mt-4 text-zinc-500 leading-relaxed">
             Enter a research question or select an example. SAM will execute the
-            full 8-agent pipeline and produce downloadable outputs.
+            full 9-agent pipeline and produce downloadable outputs.
           </p>
         </div>
 
@@ -294,7 +309,7 @@ export default function RunPipeline() {
               {showSettings && (
                 <div className="px-6 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <SettingSlider
-                    label="Max papers per DB"
+                    label="Max papers (total target)"
                     value={settings.max_results}
                     min={10} max={200} step={10}
                     onChange={(v) => updateSetting('max_results', v)}
@@ -322,7 +337,7 @@ export default function RunPipeline() {
                   <SettingSelect
                     label="A4 Ensemble size"
                     value={settings.a4_ensemble}
-                    options={[1, 3]}
+                    options={[1, 3, 5]}
                     onChange={(v) => updateSetting('a4_ensemble', Number(v))}
                   />
                   <SettingSlider
@@ -501,6 +516,17 @@ export default function RunPipeline() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Results panel (A9, A7, A6, A8, PRISMA, A1) */}
+              {pipelineResult && loadingResults && (
+                <div className="px-6 py-5 border-t border-zinc-100 flex items-center gap-2 text-sm text-zinc-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  Loading detailed results...
+                </div>
+              )}
+              {pipelineResult && fullData && (
+                <ResultsPanel fullData={fullData} runId={runId} apiUrl={API_URL} />
               )}
             </div>
           )}
