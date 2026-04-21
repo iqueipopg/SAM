@@ -36,11 +36,14 @@ experiments/__pycache__/
 *.synctex.gz
 *.fls
 *.fdb_latexmk
+*.bcf
+*.lof
+*.lot
+*.run.xml
 
 # ── Docs (PDFs, data, presentations — not tracked) ──────
 docs/presentaciones/
 docs/congreso/
-docs/datos-paula/
 docs/descripcion_tfg.txt
 docs/groq_integration_guide.txt
 

@@ -3,7 +3,7 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import {
   FileText, Search, Filter, BookOpen,
-  Database, ShieldCheck, BarChart3, FileOutput
+  Database, ShieldCheck, BarChart3, FileOutput, ScrollText
 } from 'lucide-react'
 
 const agents = [
@@ -71,6 +71,14 @@ const agents = [
     desc: 'RAG-enhanced section-by-section generation using FAISS + MiniLM. Data-driven prose, not hallucinated. LaTeX PDF output.',
     tech: 'LLM + RAG',
   },
+  {
+    id: 'A9',
+    name: 'Explainer',
+    icon: ScrollText,
+    color: 'bg-teal-50 text-teal-700 border-teal-200',
+    desc: 'Generates an Excel with raw per-paper data and a Spanish traceability report explaining every pipeline decision and its source.',
+    tech: 'CPU',
+  },
 ]
 
 export default function Pipeline() {
@@ -110,7 +118,7 @@ export default function Pipeline() {
             Pipeline
           </span>
           <h2 className="mt-3 text-3xl md:text-4xl font-800 tracking-tighter text-zinc-950">
-            8 agents, one seamless workflow
+            9 agents, one seamless workflow
           </h2>
           <p className="mt-4 text-zinc-500 leading-relaxed max-w-[55ch]">
             Each agent is specialized for a single phase of the systematic review process.
@@ -165,7 +173,7 @@ export default function Pipeline() {
         <div className="mt-8 flex items-center justify-center gap-3">
           <div className="h-px flex-1 max-w-[200px] bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
           <span className="text-xs text-zinc-400 font-medium tracking-wide">
-            A1 &rarr; A2 &rarr; A3 &rarr; A4 &rarr; A5 &rarr; A6 &rarr; A7 &rarr; A8
+            A1 &rarr; A2 &rarr; A3 &rarr; A4 &rarr; A5 &rarr; A6 &rarr; A7 &rarr; A8 &rarr; A9
           </span>
           <div className="h-px flex-1 max-w-[200px] bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
         </div>
