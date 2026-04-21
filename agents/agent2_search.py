@@ -22,7 +22,7 @@ class Agent2Search:
     GPU: no -- uses CPU-only MiniLM-L6-v2 for deduplication embeddings.
     """
 
-    def __init__(self):
+    def __init__(self, min_per_db: int = None):
         self.dedup_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
         # Load config
@@ -47,6 +47,15 @@ class Agent2Search:
         self.rate_limit = search_cfg.get("rate_limit_seconds", 1.0)
         self.google_scholar_rate_limit = search_cfg.get("google_scholar_rate_limit_seconds", 3.0)
 
+        # CFG1: floor of papers per DB. Precedence:
+        #   1. constructor kwarg (min_per_db, for tests / programmatic override)
+        #   2. config/agents.json -> agents.agent2_search.min_per_db
+        #   3. hardcoded default 10 (backward compat)
+        if min_per_db is not None:
+            self.min_per_db = int(min_per_db)
+        else:
+            self.min_per_db = int(self._load_min_per_db_from_agents_json(default=10))
+
         # Semantic Scholar API key (optional — strongly recommended to avoid 429).
         # Env var priority over config. S2 accepts header "x-api-key".
         self.s2_api_key = (
@@ -60,6 +69,34 @@ class Agent2Search:
                 "Semantic Scholar impondra rate limit estricto (429). "
                 "Solicita clave gratuita en https://www.semanticscholar.org/product/api#api-key-form"
             )
+
+    @staticmethod
+    def _load_min_per_db_from_agents_json(default: int = 10) -> int:
+        """Read `agents.agent2_search.min_per_db` from config/agents.json.
+
+        Returns `default` (10) if the file is missing, malformed, or the key
+        isn't set — preserves backward compatibility with the previous
+        hardcoded floor of 10 papers per database.
+        """
+        path = os.path.join(os.path.dirname(__file__), "..", "config", "agents.json")
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return default
+        agent_cfg = (data.get("agents") or {}).get("agent2_search") or {}
+        if "min_per_db" in agent_cfg:
+            try:
+                return int(agent_cfg["min_per_db"])
+            except (TypeError, ValueError):
+                return default
+        defaults = data.get("defaults") or {}
+        if "min_per_db" in defaults:
+            try:
+                return int(defaults["min_per_db"])
+            except (TypeError, ValueError):
+                return default
+        return default
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -93,7 +130,7 @@ class Agent2Search:
 
         # 1. PubMed
         if self.db_pubmed:
-            cap = min(max(remaining // max(dbs_left, 1), 10), self.max_per_db)
+            cap = min(max(remaining // max(dbs_left, 1), self.min_per_db), self.max_per_db)
             dbs_left -= 1
             try:
                 pm = self._search_pubmed(pubmed_query, max_results=cap)
@@ -105,7 +142,7 @@ class Agent2Search:
 
         # 2. Europe PMC
         if self.db_europepmc:
-            cap = min(max(remaining // max(dbs_left, 1), 10), self.max_per_db)
+            cap = min(max(remaining // max(dbs_left, 1), self.min_per_db), self.max_per_db)
             dbs_left -= 1
             try:
                 epmc = self._search_europepmc(search_terms, max_results=cap)
@@ -117,7 +154,7 @@ class Agent2Search:
 
         # 3. Semantic Scholar
         if self.db_semantic_scholar:
-            cap = min(max(remaining, 10), self.max_per_db)
+            cap = min(max(remaining, self.min_per_db), self.max_per_db)
             dbs_left -= 1
             try:
                 s2 = self._search_semantic_scholar(search_terms, max_results=cap)
@@ -129,7 +166,7 @@ class Agent2Search:
 
         # 4. Google Scholar
         if self.db_google_scholar:
-            cap = min(max(remaining, 10), self.max_per_db)
+            cap = min(max(remaining, self.min_per_db), self.max_per_db)
             dbs_left -= 1
             try:
                 gs = self._search_google_scholar(search_terms, max_results=cap)

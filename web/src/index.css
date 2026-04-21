@@ -15,6 +15,19 @@ body {
   background: #FAFAFA;
   color: #18181B;
   margin: 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+html.dark body {
+  background: #09090B;
+  color: #F4F4F5;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #3F3F46;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #52525B;
 }
 
 ::selection {

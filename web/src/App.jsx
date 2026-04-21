@@ -10,6 +10,7 @@ import RunPipeline from './components/RunPipeline'
 import Stats from './components/Stats'
 import CTA from './components/CTA'
 import Footer from './components/Footer'
+import { ThemeProvider } from './contexts/ThemeContext'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -37,17 +38,19 @@ function App() {
   }, [])
 
   return (
-    <div className="min-h-[100dvh] bg-[#FAFAFA] overflow-x-hidden">
-      <Navbar />
-      <Hero />
-      <Marquee />
-      <Pipeline />
-      <Features />
-      <RunPipeline />
-      <Stats />
-      <CTA />
-      <Footer />
-    </div>
+    <ThemeProvider>
+      <div className="min-h-[100dvh] bg-[#FAFAFA] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-x-hidden transition-colors duration-300">
+        <Navbar />
+        <Hero />
+        <Marquee />
+        <Pipeline />
+        <Features />
+        <RunPipeline />
+        <Stats />
+        <CTA />
+        <Footer />
+      </div>
+    </ThemeProvider>
   )
 }
 

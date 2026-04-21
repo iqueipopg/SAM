@@ -39,23 +39,23 @@ export default function Hero() {
           <div>
             <h1
               ref={titleRef}
-              className="text-4xl sm:text-5xl md:text-6xl font-800 tracking-tighter leading-[1.05] text-zinc-950 opacity-0"
+              className="text-4xl sm:text-5xl md:text-6xl font-800 tracking-tighter leading-[1.05] text-zinc-950 dark:text-zinc-50 opacity-0"
             >
               From research question
               <br />
               to published manuscript.
               <br />
-              <span className="text-sam-600">Automated.</span>
+              <span className="text-sam-600 dark:text-sam-400">Automated.</span>
             </h1>
 
             <p
               ref={subtitleRef}
-              className="mt-6 text-lg text-zinc-500 leading-relaxed max-w-[52ch] opacity-0"
+              className="mt-6 text-lg text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-[52ch] opacity-0"
             >
-              SAM orchestrates 8 specialized AI agents to execute the full cycle
+              SAM orchestrates 9 specialized AI agents to execute the full cycle
               of a systematic review and meta-analysis — protocol design, literature
               search, screening, data extraction, quality assessment, statistical
-              synthesis, and manuscript generation.
+              synthesis, manuscript generation, and a traceability report.
             </p>
 
             <div ref={ctaRef} className="mt-8 flex flex-wrap gap-4 opacity-0">
@@ -68,7 +68,7 @@ export default function Hero() {
               </a>
               <a
                 href="#pipeline"
-                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full border border-zinc-200 bg-white text-zinc-700 font-medium text-sm hover:border-zinc-300 hover:bg-zinc-50 transition-all duration-200 hover:-translate-y-[1px] active:translate-y-0"
+                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full border border-zinc-200 bg-white text-zinc-700 font-medium text-sm hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600 dark:hover:bg-zinc-800 transition-all duration-200 hover:-translate-y-[1px] active:translate-y-0"
               >
                 Explore pipeline
               </a>
@@ -82,9 +82,9 @@ export default function Hero() {
               ].map(({ icon: Icon, text }) => (
                 <div
                   key={text}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-zinc-100 text-xs text-zinc-500 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-zinc-100 text-xs text-zinc-500 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.04)] dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400"
                 >
-                  <Icon size={14} strokeWidth={2} className="text-sam-600" />
+                  <Icon size={14} strokeWidth={2} className="text-sam-600 dark:text-sam-400" />
                   {text}
                 </div>
               ))}
@@ -101,16 +101,17 @@ export default function Hero() {
                   <span className="text-white font-bold text-xl tracking-tighter">SAM</span>
                 </div>
 
-                {/* Orbiting agents */}
+                {/* Orbiting agents (9 positions, 40° apart) */}
                 {[
                   { label: 'A1', sub: 'Protocol', x: '50%', y: '5%', delay: '' },
-                  { label: 'A2', sub: 'Search', x: '85%', y: '20%', delay: 'animate-float-delay' },
-                  { label: 'A3', sub: 'Screen', x: '95%', y: '50%', delay: 'animate-float-delay-2' },
-                  { label: 'A4', sub: 'Full-text', x: '85%', y: '78%', delay: '' },
-                  { label: 'A5', sub: 'Extract', x: '50%', y: '93%', delay: 'animate-float-delay' },
-                  { label: 'A6', sub: 'Quality', x: '15%', y: '78%', delay: 'animate-float-delay-2' },
-                  { label: 'A7', sub: 'Synthesis', x: '5%', y: '50%', delay: '' },
-                  { label: 'A8', sub: 'Manuscript', x: '15%', y: '20%', delay: 'animate-float-delay' },
+                  { label: 'A2', sub: 'Search', x: '79%', y: '16%', delay: 'animate-float-delay' },
+                  { label: 'A3', sub: 'Screen', x: '94%', y: '42%', delay: 'animate-float-delay-2' },
+                  { label: 'A4', sub: 'Full-text', x: '89%', y: '73%', delay: '' },
+                  { label: 'A5', sub: 'Extract', x: '65%', y: '92%', delay: 'animate-float-delay' },
+                  { label: 'A6', sub: 'Quality', x: '35%', y: '92%', delay: 'animate-float-delay-2' },
+                  { label: 'A7', sub: 'Synthesis', x: '11%', y: '73%', delay: '' },
+                  { label: 'A8', sub: 'Manuscript', x: '6%', y: '42%', delay: 'animate-float-delay' },
+                  { label: 'A9', sub: 'Explainer', x: '21%', y: '16%', delay: 'animate-float-delay-2' },
                 ].map(({ label, sub, x, y, delay }) => (
                   <div
                     key={label}

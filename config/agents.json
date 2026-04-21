@@ -8,6 +8,9 @@
     "model_name": null
   },
   "agents": {
+    "agent2_search": {
+      "min_per_db": 10
+    },
     "agent1_protocol": {
       "temperature": 0.3,
       "repetition_penalty": 1.3,

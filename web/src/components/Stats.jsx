@@ -45,13 +45,13 @@ function AnimatedNumber({ value, suffix }) {
 
 export default function Stats() {
   return (
-    <section className="py-24 md:py-32 bg-white">
+    <section className="py-24 md:py-32 bg-white dark:bg-zinc-950">
       <div className="max-w-[1400px] mx-auto px-6 md:px-10">
         <div className="text-center mb-16">
-          <span className="text-xs font-semibold tracking-[0.15em] uppercase text-sam-600">
+          <span className="text-xs font-semibold tracking-[0.15em] uppercase text-sam-600 dark:text-sam-400">
             By the numbers
           </span>
-          <h2 className="mt-3 text-3xl md:text-4xl font-800 tracking-tighter text-zinc-950">
+          <h2 className="mt-3 text-3xl md:text-4xl font-800 tracking-tighter text-zinc-950 dark:text-zinc-50">
             Engineered for research at scale
           </h2>
         </div>
@@ -59,10 +59,10 @@ export default function Stats() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
           {stats.map((stat, i) => (
             <div key={stat.label} className="text-center">
-              <div className="text-4xl md:text-5xl font-800 tracking-tighter text-zinc-950 font-mono">
+              <div className="text-4xl md:text-5xl font-800 tracking-tighter text-zinc-950 dark:text-zinc-50 font-mono">
                 <AnimatedNumber value={stat.value} suffix={stat.suffix} />
               </div>
-              <p className="mt-2 text-sm text-zinc-500 leading-snug">
+              <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400 leading-snug">
                 {stat.label}
               </p>
             </div>

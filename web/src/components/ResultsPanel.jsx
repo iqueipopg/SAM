@@ -36,8 +36,8 @@ export default function ResultsPanel({ fullData, runId, apiUrl = '' }) {
   }
 
   return (
-    <div className="px-6 py-6 border-t border-zinc-100 bg-white space-y-4">
-      <p className="text-xs font-semibold tracking-[0.1em] uppercase text-zinc-400">
+    <div className="px-6 py-6 border-t border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-4">
+      <p className="text-xs font-semibold tracking-[0.1em] uppercase text-zinc-400 dark:text-zinc-500">
         Results
       </p>
       {a9 && <A9Section a9={a9} runId={runId} apiUrl={apiUrl} />}
@@ -546,19 +546,22 @@ function Field({ label, value }) {
 
 function Accordion({ icon, title, subtitle, children, defaultOpen = false }) {
   return (
-    <details className="group rounded-xl border border-zinc-200 bg-white overflow-hidden" open={defaultOpen}>
-      <summary className="cursor-pointer p-4 flex items-center gap-3 hover:bg-zinc-50 transition-colors list-none">
+    <details
+      className="group rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60 overflow-hidden"
+      open={defaultOpen}
+    >
+      <summary className="cursor-pointer p-4 flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors list-none">
         <ChevronRight
           size={16}
-          className="text-zinc-400 group-open:rotate-90 transition-transform shrink-0"
+          className="text-zinc-400 dark:text-zinc-500 group-open:rotate-90 transition-transform shrink-0"
         />
         {icon}
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
-          {subtitle && <p className="text-xs text-zinc-500 mt-0.5">{subtitle}</p>}
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+          {subtitle && <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{subtitle}</p>}
         </div>
       </summary>
-      <div className="p-4 border-t border-zinc-100">
+      <div className="p-4 border-t border-zinc-100 dark:border-zinc-800">
         {children}
       </div>
     </details>
