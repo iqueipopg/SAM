@@ -113,10 +113,36 @@ def _clean_r_objects(obj):
 
 
 def save_checkpoint(run_dir, agent_name, data):
+    """Persist ``data`` as checkpoint_<agent_name>.json inside ``run_dir``.
+
+    ARQ2: the write is atomic — data is first serialized to a ``.tmp`` file
+    in the same directory and then renamed over the target via
+    :func:`os.replace` (atomic on POSIX). If any step fails before the rename,
+    the previous checkpoint on disk is left untouched, so a partial write
+    can never corrupt a prior successful checkpoint.
+    """
     os.makedirs(run_dir, exist_ok=True)
     path = os.path.join(run_dir, f"checkpoint_{agent_name}.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+    tmp_path = path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except (OSError, AttributeError):
+                # fsync may be unavailable on some filesystems (e.g. tmpfs in
+                # CI); the atomic rename below still provides safety.
+                pass
+        os.replace(tmp_path, path)
+    except Exception:
+        # Clean up a leftover .tmp so it doesn't accumulate across retries.
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def load_checkpoint(run_dir, agent_name):
