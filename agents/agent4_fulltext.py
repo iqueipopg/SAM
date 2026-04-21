@@ -17,6 +17,8 @@ from agents.base import BaseAgent
 from agents.retry import retry_with_backoff
 from Bio import Entrez
 import json, torch, re, time, io, requests
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Optional, Tuple
 
@@ -113,6 +115,15 @@ class Agent4FullText(BaseAgent):
         self._core_interval = rate_cfg.get("core_seconds", 0.1)
         self._google_scholar_interval = rate_cfg.get("google_scholar_seconds", 3.0)
 
+        # ARQ4: concurrency for Phase A retrieval (parallelize across papers).
+        # The cascade inside _retrieve_single stays sequential; we only parallelize
+        # the per-paper outer loop. Rate-limit timestamps and counters are guarded
+        # by threading.Lock to avoid races.
+        self.max_workers = int(self.get_agent_param("max_workers", 4) or 4)
+        self._stats_lock = threading.Lock()
+        self._progress_lock = threading.Lock()
+        self._rate_limit_lock = threading.Lock()
+
     # ================================================================== #
     #  PUBLIC API                                                          #
     # ================================================================== #
@@ -173,7 +184,6 @@ class Agent4FullText(BaseAgent):
         # Batch-fetch metadata (DOI, PMCID) from PubMed
         metadata = self._batch_fetch_metadata(pmids)
 
-        enriched = []
         stats = {
             "pmc_fulltext": 0, "unpaywall_pdf": 0,
             "europepmc_fulltext": 0, "semanticscholar_pdf": 0,
@@ -183,6 +193,8 @@ class Agent4FullText(BaseAgent):
             "scihub_pdf": 0, "abstract_only": 0,
         }
 
+        # Build enriched_paper stubs first (keeps input order, cheap work)
+        paper_tasks: List[Dict] = []
         for paper in included_papers:
             pmid = str(paper.get("pmid", ""))
             if pmid:
@@ -208,11 +220,22 @@ class Agent4FullText(BaseAgent):
                 "sections": {},
                 "oa_url": None,
             }
+            paper_tasks.append(enriched_paper)
 
+        total = len(paper_tasks)
+
+        def _worker(enriched_paper: Dict) -> Tuple[Dict, Dict]:
+            """Retrieve full-text for one paper. Returns (paper, local_stats).
+
+            Uses a fresh per-call stats dict so _retrieve_single's `stats[k] += 1`
+            never races another thread; we merge the deltas into the global stats
+            under `_stats_lock` in the main thread below.
+            """
+            local_stats = {k: 0 for k in stats}
             try:
-                self._retrieve_single(enriched_paper, stats)
+                self._retrieve_single(enriched_paper, local_stats)
             except Exception as e:
-                print(f"    [!] Error retrieving {pmid}: {e}")
+                print(f"    [!] Error retrieving {enriched_paper.get('pmid', '')}: {e}")
 
             # Parse sections from plain text if source didn't provide them
             if (enriched_paper.get("full_text")
@@ -221,10 +244,49 @@ class Agent4FullText(BaseAgent):
                 sections = self._parse_sections_from_text(enriched_paper["full_text"])
                 if sections:
                     enriched_paper["sections"] = sections
-                    n_secs = [k for k in sections if k not in ("references",)]
-                    print(f"    [{pmid}] Parsed {len(n_secs)} sections: {', '.join(n_secs)}")
+            return enriched_paper, local_stats
 
-            enriched.append(enriched_paper)
+        enriched: List[Dict] = [None] * total  # preserve input order
+        completed = 0
+        workers = max(1, int(self.max_workers))
+        print(f"    [A4] Retrieving {total} papers with {workers} parallel workers...")
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            future_to_idx = {
+                pool.submit(_worker, task): i
+                for i, task in enumerate(paper_tasks)
+            }
+            for fut in as_completed(future_to_idx):
+                idx = future_to_idx[fut]
+                try:
+                    paper_out, local_stats = fut.result()
+                except Exception as e:
+                    # Defensive: keep original stub if worker blows up
+                    print(f"    [!] Worker failed for idx={idx}: {e}")
+                    paper_out, local_stats = paper_tasks[idx], {}
+
+                enriched[idx] = paper_out
+
+                # Merge local stats into global stats (thread-safe)
+                with self._stats_lock:
+                    for k, v in local_stats.items():
+                        stats[k] = stats.get(k, 0) + v
+
+                # Thread-safe progress log
+                with self._progress_lock:
+                    completed += 1
+                    pmid = paper_out.get("pmid", "")
+                    src = paper_out.get("text_source", "?")
+                    secs = paper_out.get("sections") or {}
+                    sec_suffix = ""
+                    if secs:
+                        n_secs = [k for k in secs if k not in ("references",)]
+                        if n_secs:
+                            sec_suffix = f" [{len(n_secs)} sections]"
+                    print(
+                        f"    [{completed}/{total}] Retrieved pmid={pmid} "
+                        f"source={src}{sec_suffix}"
+                    )
 
         print(
             f"\n  Retrieval summary: "
@@ -1349,11 +1411,12 @@ class Agent4FullText(BaseAgent):
         except ImportError:
             return None
 
-        # Rate limit
-        elapsed = time.time() - self._last_google_scholar_call
-        if elapsed < self._google_scholar_interval:
-            time.sleep(self._google_scholar_interval - elapsed)
-        self._last_google_scholar_call = time.time()
+        # Rate limit (thread-safe, ARQ4)
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_google_scholar_call
+            if elapsed < self._google_scholar_interval:
+                time.sleep(self._google_scholar_interval - elapsed)
+            self._last_google_scholar_call = time.time()
 
         headers = {
             "User-Agent": (
@@ -1689,60 +1752,68 @@ class Agent4FullText(BaseAgent):
     # ------------------------------------------------------------------ #
 
     def _rate_limit_semanticscholar(self):
-        """Semantic Scholar: 1 RPS for unauthenticated."""
-        elapsed = time.time() - self._last_semanticscholar_call
-        if elapsed < 1.0:
-            time.sleep(1.0 - elapsed)
-        self._last_semanticscholar_call = time.time()
+        """Semantic Scholar: 1 RPS for unauthenticated. Thread-safe (ARQ4)."""
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_semanticscholar_call
+            if elapsed < 1.0:
+                time.sleep(1.0 - elapsed)
+            self._last_semanticscholar_call = time.time()
 
     def _rate_limit_ncbi(self):
         """NCBI allows 3 req/s without API key; be conservative with 0.4s gap."""
-        elapsed = time.time() - self._last_ncbi_call
-        if elapsed < 0.4:
-            time.sleep(0.4 - elapsed)
-        self._last_ncbi_call = time.time()
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_ncbi_call
+            if elapsed < 0.4:
+                time.sleep(0.4 - elapsed)
+            self._last_ncbi_call = time.time()
 
     def _rate_limit_unpaywall(self):
         """Unpaywall: 100K/day, be polite with 1s gap."""
-        elapsed = time.time() - self._last_unpaywall_call
-        if elapsed < 1.0:
-            time.sleep(1.0 - elapsed)
-        self._last_unpaywall_call = time.time()
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_unpaywall_call
+            if elapsed < 1.0:
+                time.sleep(1.0 - elapsed)
+            self._last_unpaywall_call = time.time()
 
     def _rate_limit_openalex(self):
         """OpenAlex: polite pool allows 10 RPS with email, conservative 0.2s gap."""
-        elapsed = time.time() - self._last_openalex_call
-        if elapsed < self._openalex_interval:
-            time.sleep(self._openalex_interval - elapsed)
-        self._last_openalex_call = time.time()
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_openalex_call
+            if elapsed < self._openalex_interval:
+                time.sleep(self._openalex_interval - elapsed)
+            self._last_openalex_call = time.time()
 
     def _rate_limit_crossref(self):
         """CrossRef: polite pool with mailto, 0.5s gap."""
-        elapsed = time.time() - self._last_crossref_call
-        if elapsed < self._crossref_interval:
-            time.sleep(self._crossref_interval - elapsed)
-        self._last_crossref_call = time.time()
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_crossref_call
+            if elapsed < self._crossref_interval:
+                time.sleep(self._crossref_interval - elapsed)
+            self._last_crossref_call = time.time()
 
     def _rate_limit_doaj(self):
         """DOAJ: no official rate limit, be polite with 0.5s gap."""
-        elapsed = time.time() - self._last_doaj_call
-        if elapsed < self._doaj_interval:
-            time.sleep(self._doaj_interval - elapsed)
-        self._last_doaj_call = time.time()
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_doaj_call
+            if elapsed < self._doaj_interval:
+                time.sleep(self._doaj_interval - elapsed)
+            self._last_doaj_call = time.time()
 
     def _rate_limit_lens(self):
         """The Lens: 1 request per second for free tier."""
-        elapsed = time.time() - self._last_lens_call
-        if elapsed < self._lens_interval:
-            time.sleep(self._lens_interval - elapsed)
-        self._last_lens_call = time.time()
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_lens_call
+            if elapsed < self._lens_interval:
+                time.sleep(self._lens_interval - elapsed)
+            self._last_lens_call = time.time()
 
     def _rate_limit_core(self):
         """CORE: 10 requests per second for free tier, 0.1s gap."""
-        elapsed = time.time() - self._last_core_call
-        if elapsed < self._core_interval:
-            time.sleep(self._core_interval - elapsed)
-        self._last_core_call = time.time()
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_core_call
+            if elapsed < self._core_interval:
+                time.sleep(self._core_interval - elapsed)
+            self._last_core_call = time.time()
 
     # ================================================================== #
     #  PHASE B: FULL-TEXT PRISMA SCREENING                                 #

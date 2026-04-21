@@ -27,6 +27,7 @@
       "repetition_penalty": 1.3,
       "max_tokens": 150,
       "max_input_chars": 6000,
+      "max_workers": 4,
       "model_name": null
     },
     "agent5_extraction": {
