@@ -47,6 +47,20 @@ class Agent2Search:
         self.rate_limit = search_cfg.get("rate_limit_seconds", 1.0)
         self.google_scholar_rate_limit = search_cfg.get("google_scholar_rate_limit_seconds", 3.0)
 
+        # Semantic Scholar API key (optional — strongly recommended to avoid 429).
+        # Env var priority over config. S2 accepts header "x-api-key".
+        self.s2_api_key = (
+            os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
+            or search_cfg.get("semantic_scholar_api_key", "")
+            or ""
+        ).strip()
+        if not self.s2_api_key:
+            print(
+                "[A2] WARNING: SEMANTIC_SCHOLAR_API_KEY no configurada. "
+                "Semantic Scholar impondra rate limit estricto (429). "
+                "Solicita clave gratuita en https://www.semanticscholar.org/product/api#api-key-form"
+            )
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def search(self, protocol, pubmed_query, max_results=500):
@@ -348,32 +362,97 @@ class Agent2Search:
 
     # ── Semantic Scholar ──────────────────────────────────────────────────────
 
+    def _sanitize_s2_query(self, search_terms):
+        """Clean PubMed-style syntax that S2 rejects / ignores.
+
+        S2 expects free-text keywords. Tags like [MeSH], [Publication Type],
+        boolean operators in caps (AND/OR), quoted phrases and parentheses
+        either return 0 hits or a 400. We strip them and keep the content words.
+        """
+        if not search_terms:
+            return ""
+        q = str(search_terms)
+        # Drop PubMed-style field tags like [MeSH], [Publication Type], [tiab]
+        q = re.sub(r"\[[^\]]*\]", " ", q)
+        # Drop boolean operators and parentheses
+        q = re.sub(r"\b(AND|OR|NOT)\b", " ", q)
+        q = q.replace("(", " ").replace(")", " ").replace('"', " ").replace("*", " ")
+        # Collapse whitespace and cap length (S2 silently truncates anyway)
+        q = " ".join(q.split())
+        return q[:300]
+
     def _search_semantic_scholar(self, search_terms, max_results=500):
-        """Search Semantic Scholar Academic Graph API (free, no key for basic)."""
-        print(f"[A2] Searching Semantic Scholar: '{search_terms[:80]}...' (max {max_results})...")
+        """Search Semantic Scholar Academic Graph API.
+
+        Uses SEMANTIC_SCHOLAR_API_KEY (env or config) when available for higher
+        rate limits. Without a key S2 returns 429 frequently; we honor the
+        Retry-After header and log a clear warning instead of silently
+        returning 0 results.
+        """
+        clean_query = self._sanitize_s2_query(search_terms)
+        if clean_query != search_terms:
+            print(f"[A2] S2 query sanitized: '{search_terms[:80]}' -> '{clean_query[:80]}'")
+        if not clean_query:
+            print("[A2] Semantic Scholar: empty query after sanitization, skipping")
+            return []
+
+        print(f"[A2] Searching Semantic Scholar: '{clean_query[:80]}...' (max {max_results})...")
         base_url = "https://api.semanticscholar.org/graph/v1/paper/search"
+        headers = {
+            "User-Agent": "SAM-MetaAnalysis/0.6 (+https://github.com/iqueipopg/SAM)",
+            "Accept": "application/json",
+        }
+        if self.s2_api_key:
+            headers["x-api-key"] = self.s2_api_key
         papers = []
         offset = 0
         page_size = min(100, max_results)
 
         while len(papers) < max_results:
             params = {
-                "query": search_terms,
+                "query": clean_query,
                 "limit": page_size,
                 "offset": offset,
                 "fields": "paperId,externalIds,title,abstract,authors,year,journal,citationCount",
             }
             try:
-                def _s2_request(p=params):
-                    r = requests.get(base_url, params=p, timeout=30)
+                def _s2_request(p=params, h=headers):
+                    r = requests.get(base_url, params=p, headers=h, timeout=30)
+                    # Honor Retry-After on 429 by sleeping before the retry
+                    # helper even sees the exception; the helper still applies
+                    # its own backoff on top for additional safety.
+                    if r.status_code == 429:
+                        retry_after = r.headers.get("Retry-After", "")
+                        try:
+                            wait = min(float(retry_after), 30.0) if retry_after else 0.0
+                        except ValueError:
+                            wait = 0.0
+                        if wait > 0:
+                            print(f"[A2] S2 429: honoring Retry-After={wait}s")
+                            time.sleep(wait)
                     r.raise_for_status()
                     return r.json()
 
                 data = retry_with_backoff(
                     _s2_request,
                     retryable_exceptions=(requests.exceptions.RequestException,),
+                    max_retries=4,
+                    base_delay=2.0,
+                    max_delay=60.0,
                     on_retry=lambda a, e, d: print(f"[A2] Semantic Scholar retry {a+1}: {e}"),
                 )
+            except requests.exceptions.HTTPError as e:
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                if status == 429:
+                    print(
+                        "[A2] Semantic Scholar 429 Too Many Requests tras reintentos. "
+                        "Configura SEMANTIC_SCHOLAR_API_KEY en .env para evitarlo "
+                        "(free key en https://www.semanticscholar.org/product/api#api-key-form). "
+                        f"Papers acumulados hasta ahora: {len(papers)}."
+                    )
+                else:
+                    print(f"[A2] Semantic Scholar HTTP {status}: {e}")
+                break
             except Exception as e:
                 print(f"[A2] Semantic Scholar request failed: {e}")
                 break
@@ -484,11 +563,14 @@ class Agent2Search:
                         break
 
                     try:
-                        # Title and link
+                        # Title and link — use separator=" " so text in nested
+                        # tags (<b>, <span>) stays word-separated ("...therapyfor..."
+                        # vs "...therapy for..."). Then collapse runs of whitespace.
                         title_elem = result.select_one("h3.gs_rt a") or result.select_one("h3.gs_rt")
                         if not title_elem:
                             continue
-                        title = title_elem.get_text(strip=True)
+                        title = title_elem.get_text(separator=" ", strip=True)
+                        title = re.sub(r"\s+", " ", title).strip()
                         # Clean [PDF], [HTML], [BOOK] prefixes
                         title = re.sub(r'^\[(PDF|HTML|BOOK|CITATION)\]\s*', '', title)
                         if not title:
@@ -496,13 +578,30 @@ class Agent2Search:
 
                         link = title_elem.get("href", "") if title_elem.name == "a" else ""
 
-                        # Authors, journal, year line
+                        # Authors, journal, year line (gs_a cite row)
                         meta_elem = result.select_one("div.gs_a")
                         authors = []
                         journal = ""
                         year = ""
+                        pmid = ""
+                        gs_doi = ""
                         if meta_elem:
-                            meta_text = meta_elem.get_text()
+                            meta_text = meta_elem.get_text(separator=" ", strip=True)
+                            meta_text = re.sub(r"\s+", " ", meta_text).strip()
+                            # Year: 4-digit token anywhere in the cite row
+                            year_match = re.search(r'\b(19|20)\d{2}\b', meta_text)
+                            if year_match:
+                                year = year_match.group()
+                            # PMID: "PMID: 12345678" or "pubmed/12345678"
+                            pmid_match = re.search(
+                                r'(?:PMID[:\s]+|pubmed/)(\d{5,9})', meta_text, flags=re.IGNORECASE
+                            )
+                            if pmid_match:
+                                pmid = pmid_match.group(1)
+                            # DOI inside cite row: "10.XXXX/..."
+                            doi_match_meta = re.search(r'\b(10\.\d{4,9}/[^\s,]+)', meta_text)
+                            if doi_match_meta:
+                                gs_doi = doi_match_meta.group(1).rstrip(".,;)")
                             # Format: "Author1, Author2 - Journal, Year - Publisher"
                             parts = meta_text.split(" - ")
                             if parts:
@@ -511,32 +610,38 @@ class Agent2Search:
                                            if a.strip() and not a.strip().startswith("...")]
                             if len(parts) >= 2:
                                 journal_year = parts[1].strip()
-                                # Extract year (4 digits)
-                                year_match = re.search(r'\b(19|20)\d{2}\b', journal_year)
-                                if year_match:
-                                    year = year_match.group()
-                                    journal = journal_year[:year_match.start()].strip().rstrip(",").strip()
+                                jy_year_match = re.search(r'\b(19|20)\d{2}\b', journal_year)
+                                if jy_year_match:
+                                    journal = journal_year[:jy_year_match.start()].strip().rstrip(",").strip()
                                 else:
                                     journal = journal_year
+                            # Venue = publisher part if present (last chunk)
+                            venue = parts[-1].strip() if len(parts) >= 3 else journal
 
-                        # Abstract/snippet
+                        # Abstract/snippet — also separator-aware
                         snippet_elem = result.select_one("div.gs_rs")
-                        abstract = snippet_elem.get_text(strip=True) if snippet_elem else ""
+                        if snippet_elem:
+                            abstract = snippet_elem.get_text(separator=" ", strip=True)
+                            abstract = re.sub(r"\s+", " ", abstract).strip()
+                        else:
+                            abstract = ""
 
-                        # Try to extract DOI from link
-                        doi = ""
+                        # Try to extract DOI from link (overrides cite-row DOI
+                        # only when link contains a doi.org URL)
+                        doi = gs_doi
                         if link and "doi.org/" in link:
                             doi_match = re.search(r'doi\.org/(10\.\S+)', link)
                             if doi_match:
-                                doi = doi_match.group(1)
+                                doi = doi_match.group(1).rstrip(".,;)")
 
                         papers.append({
-                            "pmid": "",
+                            "pmid": pmid,
                             "doi": doi,
                             "title": title,
                             "abstract": abstract,
                             "authors": authors,
                             "journal": journal,
+                            "venue": venue if meta_elem else "",
                             "year": year,
                             "link": link,
                             "sources": ["google_scholar"],
