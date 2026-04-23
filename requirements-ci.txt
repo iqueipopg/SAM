@@ -47,5 +47,9 @@ groq>=0.4.0
 # Plotting (needed for py_compile of agents that import matplotlib)
 matplotlib>=3.10.0
 
+# FastAPI backend (needed for test_api.py imports)
+fastapi>=0.115.0,<1.0
+uvicorn>=0.30.0
+
 # Testing
 pytest>=8.0.0
