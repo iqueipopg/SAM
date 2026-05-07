@@ -377,6 +377,35 @@ Flags:
 
 The script only touches `outputs/run_*` directories directly under the project root and never follows into subdirectories. It is intentionally not scheduled in CI or cron — always run it manually after confirming with `--dry-run`.
 
+### `scripts/post_run_backup.sh`
+
+Copies a single pipeline run from `outputs/` to a backup directory (default `~/backup_outputs`), preserving timestamps and permissions. The script verifies the file count after copy and exits non-zero if integrity fails.
+
+```bash
+# Backup a specific run by name
+./scripts/post_run_backup.sh run_20260507_081359
+
+# Backup the most recent run (auto-detect)
+./scripts/post_run_backup.sh
+
+# Use a custom backup directory (e.g. external drive)
+BACKUP_DIR=/external/sam ./scripts/post_run_backup.sh run_20260507_081359
+```
+
+Flags / arguments:
+
+| Argument / env | Description |
+|----------------|-------------|
+| `<run_name>` | Run directory name (e.g. `run_20260507_081359`), relative to `outputs/`. |
+| `<abs_path>` | Absolute path to a run directory inside `outputs/`. |
+| `(no args)` | Auto-detects the most recent `run_*` under `outputs/`. |
+| `BACKUP_DIR` | Env variable. Destination directory. Default: `~/backup_outputs`. |
+| `--help` | Prints usage and exits 0. |
+
+Exit codes: `0` success, `1` invalid args, `2` run not found, `3` `BACKUP_DIR` not writable, `4` post-copy integrity check failed.
+
+Recommended `.env` entry (operator preference, optional): `BACKUP_DIR=/path/to/your/backup/dir`. Retention/cleanup of the backup dir is out of scope for this script — use `cleanup_old_runs.sh` on `outputs/` separately.
+
 ---
 
 ## Limitations
