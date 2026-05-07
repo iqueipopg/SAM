@@ -18,6 +18,13 @@ import sys
 import pytest
 from unittest.mock import patch, MagicMock, call
 
+pytestmark = pytest.mark.skip(
+    reason="T16 Rudiger feature deferred post-defensa: ensemble multi-model "
+           "requires Rudiger access for VRAM-cycling validation. Tests written "
+           "against unimplemented BaseAgent.get_ensemble_models / "
+           "Agent3._run_ensemble_vote. Ver docs/DIARIO_SESIONES.md sesión 16."
+)
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
