@@ -348,6 +348,10 @@ class Agent5Extraction(BaseAgent):
 
         Returns True if confidence is too low to trust a single pass.
         """
+        if result is None:
+            return False
+        if paper is None:
+            paper = {}
         outcomes = result.get("outcomes") or []
         text_source = paper.get("text_source", "")
         full_text = paper.get("full_text", "") or ""
