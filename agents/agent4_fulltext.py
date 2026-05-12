@@ -92,6 +92,7 @@ class Agent4FullText(BaseAgent):
         self.google_scholar_enabled = retrieval_cfg.get("google_scholar_enabled", True)
         # New sources for BUG6: preprint servers + Semantic Scholar v2 open-access
         self.preprints_enabled = retrieval_cfg.get("preprints_enabled", True)
+        self.arxiv_enabled = retrieval_cfg.get("arxiv_enabled", True)
         self.semanticscholar_v2_enabled = retrieval_cfg.get("semanticscholar_v2_enabled", True)
 
         # API keys for token-gated sources (env var takes priority)
