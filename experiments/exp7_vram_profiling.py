@@ -34,12 +34,22 @@ def free_vram(agent):
 
 
 def profile_agent(name, fn):
-    """Run fn(), measuring time and VRAM. Returns (result, profile_dict)."""
+    """Run fn(), measuring time and VRAM. Returns (result, profile_dict).
+
+    Uses torch.cuda.max_memory_allocated() to capture the true peak during
+    fn() execution. Reset peak stats before fn() so the measurement is local
+    to this agent's run, even if fn() calls free_vram() internally.
+    """
     vram_before = get_vram_mb()
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
     t0 = time.time()
     result = fn()
     elapsed = round(time.time() - t0, 2)
-    vram_peak = get_vram_mb()
+    if torch.cuda.is_available():
+        vram_peak = round(torch.cuda.max_memory_allocated() / (1024 * 1024), 1)
+    else:
+        vram_peak = 0
     return result, {
         "agent": name,
         "time_seconds": elapsed,
