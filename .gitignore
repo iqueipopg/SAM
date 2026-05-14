@@ -40,6 +40,9 @@ experiments/__pycache__/
 *.lof
 *.lot
 *.run.xml
+*.bbl
+*.blg
+memoria/*.pdf
 
 # ── Docs (PDFs, data, presentations — not tracked) ──────
 docs/presentaciones/
