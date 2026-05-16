@@ -272,6 +272,30 @@ Abstract: {abstract}
 
 {focus_rule}
 
+SEMANTIC EQUIVALENCE (avoid literal-string matching):
+Treat the intervention "{intv}" as a concept, not a literal string. If "{intv}"
+mentions broad psychological/behavioural constructs (e.g. "psychological
+components", "behaviour change", "self-management"), the following are
+operationally equivalent and should be treated as MEETING the criterion, even
+if the exact phrase is not used:
+- behaviour change theory (COM-B, TTM, HBM, SCT, Self-Determination Theory)
+- goal-setting, self-monitoring, action planning
+- motivational interviewing, coaching, counseling, psychoeducation
+- mindfulness, MBSR, MBCT, CBT, ACT
+- self-efficacy, self-regulation, self-management interventions
+- theory-informed digital / SMS / mobile-health behaviour interventions
+- text-messaging programmes anchored in behaviour-change techniques (BCTs)
+Apply this guidance only when "{intv}" includes a psychological or behavioural
+concept. Do NOT invent equivalences for unrelated criteria.
+
+TITLE-ONLY POLICY (when abstract is absent or empty):
+- INCLUDE   if the title contains BOTH a topic term AND an inclusion-relevant
+            concept (or its semantic equivalent above).
+- EXCLUDE   if the title clearly addresses an unrelated topic (e.g. drug
+            therapy only, surgery, paediatrics, animal study, basic science).
+- UNCERTAIN ONLY if the title is uninformative or corrupted (e.g. a file name
+            like "DX096272_1_0001.tif", "en_AO05.indd", "301 hawthorne.qxd").
+
 DECISION RULES:
 - INCLUDE  : the paper involves "{intv}" as one of the interventions studied, compared, or analyzed AND the topic is relevant to the inclusion criteria. Include even if "{intv}" is studied alongside other methods (e.g., prediction models, secondary analyses) — what matters is that "{intv}" data is present.
 - EXCLUDE  : "{intv}" is NOT mentioned or studied at all, OR the paper targets a completely different condition/population with no relevance, OR it is an editorial/letter/case report, OR it clearly triggers an exclusion criterion
