@@ -23,6 +23,7 @@ PyMuPDF>=1.27.0
 pdfplumber>=0.11.0
 pdfminer.six>=20251230
 pypdfium2>=5.5.0
+pypdf>=4.0.0
 
 # R integration (Agent 7)
 rpy2>=3.6.0
