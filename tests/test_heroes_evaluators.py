@@ -462,6 +462,41 @@ class TestHero2Stratified:
         # (avoids 'age' substring collision that 'language' triggers)
         assert _normalise_a4_reason("not in english text") == "Language"
 
+    def test_a4_fallback_literal_not_routed_to_wpt(self):
+        """The A4 fallback literal 'excluded on full-text review' must NOT be
+        routed to Wrong publication type via the 'review' substring rule.
+
+        Root cause of T16.D.8.B WPT bias: when the LLM returned EXCLUDE with an
+        empty exclusion_reason, Agent4 injected the literal 'excluded on
+        full-text review'; the substring 'review' then matched WPT. The fix
+        short-circuits this exact literal to use the reasoning fallback when
+        provided, or 'unknown_reason' when absent.
+        """
+        from experiments.eval_hero2_fulltext import _normalise_a4_reason
+        assert _normalise_a4_reason("excluded on full-text review") == "unknown_reason"
+        assert _normalise_a4_reason("Excluded on full-text review") == "unknown_reason"
+
+    def test_a4_fallback_uses_reasoning_when_available(self):
+        """When raw_reason is the fallback literal, normalisation must consult
+        the substantive reasoning text passed as second argument."""
+        from experiments.eval_hero2_fulltext import _normalise_a4_reason
+        fallback = "excluded on full-text review"
+        # reasoning mentions Wrong age → must route to Wrong age, not WPT
+        out = _normalise_a4_reason(
+            fallback,
+            reasoning_fallback="Participants were aged 30-45 years, outside the inclusion range",
+        )
+        assert out == "Wrong age"
+        # reasoning mentions outcome → Wrong outcome
+        out = _normalise_a4_reason(
+            fallback,
+            reasoning_fallback="Study does not report any physical activity outcome",
+        )
+        assert out == "Wrong outcome"
+        # reasoning is empty → unknown_reason
+        out = _normalise_a4_reason(fallback, reasoning_fallback="")
+        assert out == "unknown_reason"
+
     def test_cohens_kappa_against_sklearn(self):
         """Hero 2 kappa helper matches sklearn.metrics.cohen_kappa_score."""
         pytest.importorskip("sklearn")

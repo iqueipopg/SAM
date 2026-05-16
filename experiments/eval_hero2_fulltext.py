@@ -205,17 +205,37 @@ def _extract_pdf_text_from_path(pdf_path: Path) -> tuple[str | None, str | None]
     return _extract_pdf_text_shared(pdf_path)
 
 
-def _normalise_a4_reason(raw_reason: str) -> str:
+# Fallback literal injected by Agent4._screen_single_fulltext when the LLM
+# returns EXCLUDE with exclusion_reason="". Matching this literal as substring
+# would route every fallback to "Wrong publication type" via the "review"
+# needle, which was the root cause of the WPT bias documented in T16.D.8.B.
+_A4_FALLBACK_LITERAL = "excluded on full-text review"
+
+
+def _normalise_a4_reason(raw_reason: str, reasoning_fallback: str = "") -> str:
     """Map a free-text A4 exclusion reason to the canonical gold category.
 
     Returns one of GOLD_REASON_CATEGORIES, or "unknown_reason" if no keyword
     matched. Matching is case-insensitive substring search; the *first*
     matching entry of A4_REASON_NORMALISATION wins.
+
+    If raw_reason equals the A4 fallback literal "excluded on full-text review"
+    (which contains the substring "review" and would otherwise collide with
+    Wrong publication type), normalisation falls back to reasoning_fallback —
+    the substantive justification text the LLM emits in the `reasoning` field.
+    See T16.D.8.B diagnosis and T16.D.9.B fix.
     """
     if not raw_reason or not isinstance(raw_reason, str):
         return "unknown_reason"
     haystack = raw_reason.lower().strip()
     if not haystack:
+        return "unknown_reason"
+    if haystack == _A4_FALLBACK_LITERAL:
+        if reasoning_fallback and isinstance(reasoning_fallback, str):
+            fallback_hay = reasoning_fallback.lower().strip()
+            for needle, canonical in A4_REASON_NORMALISATION:
+                if needle in fallback_hay:
+                    return canonical
         return "unknown_reason"
     for needle, canonical in A4_REASON_NORMALISATION:
         if needle in haystack:
@@ -586,7 +606,8 @@ def run_hero2_evaluation(
         if a4_decision == "include":
             a4_reason_norm = "include"
         else:
-            a4_reason_norm = _normalise_a4_reason(a4_reason_raw)
+            a4_reasoning_text = a4_paper.get("fulltext_reasoning") or ""
+            a4_reason_norm = _normalise_a4_reason(a4_reason_raw, a4_reasoning_text)
             if a4_reason_norm == "unknown_reason" and a4_reason_raw:
                 unknown_a4_reasons.append(a4_reason_raw)
 
