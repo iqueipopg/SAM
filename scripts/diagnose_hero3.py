@@ -68,6 +68,7 @@ SAMPLE_CSV = PROJECT_ROOT / "data" / "gold_standard" / "deporte" / "samples" / "
 GOLD_SCREENING = PROJECT_ROOT / "data" / "gold_standard" / "deporte" / "unified" / "gold_screening_unified.csv"
 GOLD_METRICS = PROJECT_ROOT / "data" / "gold_standard_normalized" / "gold_metrics.csv"
 ARM_MAPPING = PROJECT_ROOT / "data" / "gold_standard" / "deporte" / "unified" / "arm_to_parent_mapping.csv"
+EXTRACTED_METADATA = PROJECT_ROOT / "data" / "gold_standard" / "deporte" / "unified" / "extracted_metadata.csv"
 PDFS_DIR = PROJECT_ROOT / "data" / "gold_standard" / "deporte" / "pdfs_todos"
 OUT_DIR = PROJECT_ROOT / "outputs" / "eval" / "micro"
 A5_CACHE = OUT_DIR / "_a5_full_outputs.json"
@@ -190,14 +191,35 @@ def build_papers() -> tuple[list[dict], list[dict]]:
     includes = _filter_hero3_includes(sample)
     gold_idx = gold_scr.set_index("covidence_id")
 
+    # T16.D.9.C — apply the same canonical-PDF override the hero3 evaluator
+    # uses, so the cache regenerated here mirrors the evaluator behaviour.
+    canonical_pdf_by_cid: dict[str, str] = {}
+    if EXTRACTED_METADATA.exists():
+        em_df = pd.read_csv(EXTRACTED_METADATA, dtype={"covidence_id": str})
+        if "pdf_used" in em_df.columns:
+            for _, em_row in em_df.iterrows():
+                cid_em = str(em_row.get("covidence_id", "") or "").strip()
+                pdf_used = em_row.get("pdf_used")
+                if cid_em and pdf_used is not None and not pd.isna(pdf_used):
+                    canonical_pdf_by_cid[cid_em] = str(pdf_used)
+
     papers: list[dict] = []
     skipped: list[dict] = []
 
     for _, row in includes.iterrows():
         cid = str(row["covidence_id"])
-        pdf_filename = row.get("pdf_filename")
+        pdf_filename_sample = row.get("pdf_filename")
         has_pdf = bool(row.get("has_pdf", False))
-        if not has_pdf or pd.isna(pdf_filename):
+        # Canonical override (T16.D.9.C)
+        canonical_pdf = canonical_pdf_by_cid.get(cid)
+        if canonical_pdf is not None and pd.isna(canonical_pdf):
+            canonical_pdf = None
+        if canonical_pdf:
+            pdf_filename = canonical_pdf
+            has_pdf = True
+        else:
+            pdf_filename = pdf_filename_sample
+        if not has_pdf or pdf_filename is None or pd.isna(pdf_filename):
             skipped.append({"covidence_id": cid, "reason": "no_pdf_available"})
             continue
         pdf_path = PDFS_DIR / str(pdf_filename)

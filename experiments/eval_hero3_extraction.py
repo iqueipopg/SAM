@@ -445,21 +445,54 @@ def _build_papers(
     gold_screening_df: pd.DataFrame,
     pdfs_dir: Path,
     errors: list,
+    canonical_pdf_by_cid: dict | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Build paper dicts ready for `Agent5Extraction.extract_all`.
 
     Each dict carries: pmid (= covidence_id), title, abstract, authors, year,
     journal, doi, full_text, text_source='local_pdf'. Rows whose PDF cannot be
     extracted are skipped with an `errors[]` entry.
+
+    When `canonical_pdf_by_cid` is provided (T16.D.9.C fix), the canonical
+    `pdf_used` from `extracted_metadata.csv` overrides the per-sample
+    `pdf_filename` whenever a non-null canonical value exists for the
+    covidence_id. This avoids the protocol/appendix mismatch documented in
+    T16.D.8.C (sample's pdf_filename pointed to orphan protocol PDFs for
+    #13950 and #5298). When the canonical lookup yields None / NaN, the
+    sample's `pdf_filename` is used as fallback so that covidence_ids
+    recovered manually (e.g. #3490 in T16.D.3.bis) remain processable.
     """
     gold_idx = gold_screening_df.set_index("covidence_id")
     papers: list[dict] = []
     skipped: list[dict] = []
+    canonical_pdf_by_cid = canonical_pdf_by_cid or {}
 
     for _, row in includes_df.iterrows():
         cid = str(row["covidence_id"])
-        pdf_filename = row.get("pdf_filename")
+        pdf_filename_sample = row.get("pdf_filename")
         has_pdf = bool(row.get("has_pdf", False))
+
+        canonical_pdf = canonical_pdf_by_cid.get(cid)
+        if canonical_pdf is not None and (
+            isinstance(canonical_pdf, float) and pd.isna(canonical_pdf)
+        ):
+            canonical_pdf = None
+
+        if canonical_pdf:
+            if pdf_filename_sample and str(pdf_filename_sample) != str(canonical_pdf):
+                errors.append({
+                    "input_id": cid,
+                    "error_type": "pdf_canonical_override",
+                    "message": (
+                        f"Canonical pdf_used ({canonical_pdf!r}) overrides "
+                        f"sample pdf_filename ({pdf_filename_sample!r}). "
+                        "T16.D.9.C fix: prefer extracted_metadata.csv.pdf_used."
+                    ),
+                })
+            pdf_filename = canonical_pdf
+            has_pdf = True
+        else:
+            pdf_filename = pdf_filename_sample
 
         if not has_pdf or pdf_filename is None or (
             isinstance(pdf_filename, float) and pd.isna(pdf_filename)
@@ -612,12 +645,31 @@ def run_hero3_evaluation(
     gold_metrics_df = pd.read_csv(gold_metrics_path, dtype={"covidence_id": str})
     arm_df = pd.read_csv(arm_mapping_path, dtype=str)
 
+    # T16.D.9.C fix: optional canonical PDF mapping from extracted_metadata.csv
+    canonical_pdf_by_cid: dict[str, str] = {}
+    extracted_meta_cfg = eval_cfg.get("extracted_metadata")
+    if extracted_meta_cfg:
+        extracted_meta_path = (PROJECT_ROOT / extracted_meta_cfg).resolve()
+        if extracted_meta_path.exists():
+            em_df = pd.read_csv(extracted_meta_path, dtype={"covidence_id": str})
+            if "pdf_used" in em_df.columns:
+                for _, em_row in em_df.iterrows():
+                    cid = str(em_row.get("covidence_id", "") or "").strip()
+                    pdf_used = em_row.get("pdf_used")
+                    if cid and pdf_used is not None and not (
+                        isinstance(pdf_used, float) and pd.isna(pdf_used)
+                    ):
+                        canonical_pdf_by_cid[cid] = str(pdf_used)
+
     includes_df = _filter_hero3_includes(sample_df)
     include_ids = includes_df["covidence_id"].astype(str).tolist()
     sample_size = int(len(includes_df))
 
     errors: list = []
-    papers, skipped = _build_papers(includes_df, gold_screening_df, pdfs_dir, errors)
+    papers, skipped = _build_papers(
+        includes_df, gold_screening_df, pdfs_dir, errors,
+        canonical_pdf_by_cid=canonical_pdf_by_cid,
+    )
     eval_n = len(papers)
 
     # ── 2. Build the gold subset (direct + arm-mapped) ─────────────────────

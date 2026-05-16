@@ -11,6 +11,7 @@ gold_metrics: data/gold_standard_normalized/gold_metrics.csv
 gold_rob: data/gold_standard_normalized/gold_rob.csv
 arm_to_parent_mapping: data/gold_standard/deporte/unified/arm_to_parent_mapping.csv
 ref_to_covidence: data/gold_standard/deporte/unified/ref_to_covidence_mapping.csv
+extracted_metadata: data/gold_standard/deporte/unified/extracted_metadata.csv
 pdfs_dir: data/gold_standard/deporte/pdfs_todos
 
 heroes:
