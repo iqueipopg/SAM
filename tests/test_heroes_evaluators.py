@@ -497,6 +497,30 @@ class TestHero2Stratified:
         out = _normalise_a4_reason(fallback, reasoning_fallback="")
         assert out == "unknown_reason"
 
+    def test_age_rule_uses_word_boundary(self):
+        """T16.D.10.B: the "age" rule must use word boundary regex so
+        substrings inside 'manage' / 'management' / 'manager' do NOT route
+        the reason to Wrong age. Root cause of #3707 misclassification.
+        """
+        from experiments.eval_hero2_fulltext import _normalise_a4_reason
+        # Positive case: explicit age criterion remains Wrong age
+        assert _normalise_a4_reason(
+            "wrong age range, participants over 70"
+        ) == "Wrong age"
+        # Negative case: 'self-management' must not trigger Wrong age. It
+        # contains 'manage' (which contains the substring 'age'). With the
+        # fix it routes to Wrong intervention via 'intervention' keyword.
+        assert _normalise_a4_reason(
+            "self-management intervention for hypertension"
+        ) == "Wrong intervention"
+        # 'manager' alone — without other category needles — must not be
+        # categorised as Wrong age. Should fall through to unknown_reason.
+        assert _normalise_a4_reason("manager training program") == "unknown_reason"
+        # 'aged' still matches Wrong age via its own dedicated substring rule
+        assert _normalise_a4_reason(
+            "participants aged 16-25 years"
+        ) == "Wrong age"
+
     def test_cohens_kappa_against_sklearn(self):
         """Hero 2 kappa helper matches sklearn.metrics.cohen_kappa_score."""
         pytest.importorskip("sklearn")

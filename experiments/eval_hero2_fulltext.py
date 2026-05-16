@@ -60,6 +60,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -116,8 +117,13 @@ MATRIX_LABELS = ["include"] + GOLD_REASON_CATEGORIES + ["unknown_reason"]
 # the most discriminative keywords. Anything not matched falls into
 # "unknown_reason".
 A4_REASON_NORMALISATION = [
-    # Wrong age (age criterion)
-    ("age", "Wrong age"),
+    # Wrong age (age criterion).
+    # T16.D.10.B fix: "age" uses a word-boundary regex pattern to avoid
+    # matching "manage" / "management" / "manager" as Wrong age (root cause
+    # of the misclassification of #3707 documented in T16.D.10.A). The rest
+    # of this list keeps plain substring semantics; pattern needles are
+    # detected by type at match time.
+    (re.compile(r"\bage\b"), "Wrong age"),
     ("older", "Wrong age"),
     ("younger", "Wrong age"),
     ("aged", "Wrong age"),
@@ -234,13 +240,25 @@ def _normalise_a4_reason(raw_reason: str, reasoning_fallback: str = "") -> str:
         if reasoning_fallback and isinstance(reasoning_fallback, str):
             fallback_hay = reasoning_fallback.lower().strip()
             for needle, canonical in A4_REASON_NORMALISATION:
-                if needle in fallback_hay:
+                if _needle_matches(needle, fallback_hay):
                     return canonical
         return "unknown_reason"
     for needle, canonical in A4_REASON_NORMALISATION:
-        if needle in haystack:
+        if _needle_matches(needle, haystack):
             return canonical
     return "unknown_reason"
+
+
+def _needle_matches(needle, haystack: str) -> bool:
+    """Return True if ``needle`` (str substring OR re.Pattern) hits haystack.
+
+    T16.D.10.B: enable per-rule regex semantics for entries that need word
+    boundaries (currently only the bare "age" rule) without rewriting the
+    other 40+ substring rules.
+    """
+    if isinstance(needle, re.Pattern):
+        return needle.search(haystack) is not None
+    return needle in haystack
 
 
 def _normalise_gold_reason(raw_reason) -> str:
