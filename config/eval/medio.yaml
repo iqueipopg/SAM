@@ -1,0 +1,6 @@
+# config/eval/medio.yaml
+# Configuracion para evaluacion en sample medio
+# TODO T16.D.6: definir tamano y composicion del sample medio
+# (probablemente 200-400 estudios estratificados)
+#
+# Heredara la estructura de micro.yaml pero con sample distinto.

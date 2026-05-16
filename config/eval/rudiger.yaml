@@ -1,0 +1,9 @@
+# config/eval/rudiger.yaml
+# Configuracion para evaluacion full en servidor Rudiger
+# TODO T16.D.6: definir cuando se migre la pipeline a Rudiger
+#
+# Diferencias esperadas respecto a micro/medio:
+# - sample: full gold standard (1552 estudios deporte)
+# - model_override: posible modelo distinto si Rudiger usa otra arquitectura
+# - timeouts mas largos
+# - paralelismo cross-hero si la GPU lo permite

@@ -1,0 +1,33 @@
+# config/eval/llm_config.yaml
+# Settings comunes a los 4 evaluadores hero (T16.D.5).
+# Los parametros LLM por agente (temperature, max_tokens, etc.) se leen
+# desde config/agents.json (regla #9 del proyecto - no hardcodear thresholds).
+# Este archivo solo contiene settings del FRAMEWORK de evaluacion.
+
+evaluator:
+  # Override de temperature/top_p para evaluacion (max determinismo)
+  # Estos OVERRIDE temporalmente los valores de config/agents.json
+  # solo durante la ejecucion del evaluator.
+  override_temperature: 0
+  override_top_p: 1.0
+  override_seed: 42  # torch.manual_seed cuando dispatch a Transformers lo permita
+
+  # Capturar raw LLM response en raw_predictions[].details.raw_llm_response
+  capture_raw_response: true
+
+  # Si el agente falla parseando JSON, fallback conservativo:
+  # - hero1/hero2: EXCLUDE  (matching el comportamiento de produccion)
+  # - hero3: vacio
+  # - hero4: default quality
+  conservative_fallback_on_parse_error: true
+
+model_override:
+  # Override del model_path en config.yaml SOLO para escala Rudiger
+  # En micro y medio se usa el modelo local de config.yaml
+  path: null  # null = usar config.yaml default
+  notes: "Se rellena en T16.D.6 cuando migremos a Rudiger"
+
+output:
+  base_dir: outputs/eval
+  json_indent: 2
+  ensure_ascii: false  # mantener unicode en raw_predictions
