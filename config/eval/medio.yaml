@@ -1,6 +1,32 @@
 # config/eval/medio.yaml
-# Configuracion para evaluacion en sample medio
-# TODO T16.D.6: definir tamano y composicion del sample medio
-# (probablemente 200-400 estudios estratificados)
+# Configuracion maestra para evaluacion en sample medio (T16.E.1).
 #
-# Heredara la estructura de micro.yaml pero con sample distinto.
+# A diferencia de micro.yaml, medio usa un sample distinto por hero. Cada
+# hero apunta a su propio CSV bajo data/gold_standard/deporte/samples/medio/.
+# El orquestador run_heroes_medio.py serializa la configuracion por-hero
+# en un objeto temporal antes de invocar cada evaluador.
+
+scale: medio
+
+samples:
+  hero1: data/gold_standard/deporte/samples/medio/sample_medio_a3.csv
+  hero2: data/gold_standard/deporte/samples/medio/sample_medio_a4.csv
+  hero3: data/gold_standard/deporte/samples/medio/sample_medio_a5.csv
+  hero4: data/gold_standard/deporte/samples/medio/sample_medio_a6.csv
+
+# Gold standard files (compartidos entre heroes).
+gold_screening: data/gold_standard/deporte/unified/gold_screening_unified.csv
+gold_metrics: data/gold_standard_normalized/gold_metrics.csv
+gold_rob: data/gold_standard_normalized/gold_rob.csv
+arm_to_parent_mapping: data/gold_standard/deporte/unified/arm_to_parent_mapping.csv
+ref_to_covidence: data/gold_standard/deporte/unified/ref_to_covidence_mapping.csv
+extracted_metadata: data/gold_standard/deporte/unified/extracted_metadata.csv
+pdfs_dir: data/gold_standard/deporte/pdfs_todos
+
+heroes:
+  - hero1
+  - hero2
+  - hero3
+  - hero4
+
+output_dir: outputs/eval/medio/
