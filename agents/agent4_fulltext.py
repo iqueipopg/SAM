@@ -2118,6 +2118,22 @@ SCREENING FOCUS (criteria hard to verify from abstract alone):
 
 {focus_rule}
 
+SEMANTIC EQUIVALENCE (avoid literal-string matching):
+Treat the intervention "{intv}" as a concept, not a literal string. If "{intv}"
+mentions broad psychological/behavioural constructs (e.g. "psychological
+components", "behaviour change", "self-management"), the following are
+operationally equivalent and should be treated as MEETING the criterion, even
+if the exact phrase is not used:
+- behaviour change theory (COM-B, TTM, HBM, SCT, Self-Determination Theory)
+- goal-setting, self-monitoring, action planning
+- motivational interviewing, coaching, counseling, psychoeducation
+- mindfulness, MBSR, MBCT, CBT, ACT
+- self-efficacy, self-regulation, self-management interventions
+- theory-informed digital / SMS / mobile-health behaviour interventions
+- text-messaging programmes anchored in behaviour-change techniques (BCTs)
+Apply this guidance only when "{intv}" includes a psychological or behavioural
+concept. Do NOT invent equivalences for unrelated criteria.
+
 DECISION RULES:
 - INCLUDE: {decision_include}
 - EXCLUDE: {decision_exclude}
