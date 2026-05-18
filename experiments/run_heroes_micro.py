@@ -275,11 +275,21 @@ def _extract_top_metrics(record: dict) -> dict:
     if hero_id == "hero1":
         return {
             "sensitivity_overall": metrics.get("sensitivity_overall"),
+            "sensitivity_adjusted": metrics.get("sensitivity_adjusted"),
             "sensitivity_abstract_yes": metrics.get("sensitivity_abstract_yes"),
             "sensitivity_abstract_no": metrics.get("sensitivity_abstract_no"),
+            "specificity": metrics.get("specificity"),
+            "precision": metrics.get("precision"),
+            "f1": metrics.get("f1"),
+            "accuracy": metrics.get("accuracy"),
+            "cohens_kappa": metrics.get("cohens_kappa"),
             "tp": metrics.get("tp"),
             "fn": metrics.get("fn"),
+            "tn": metrics.get("tn"),
+            "fp": metrics.get("fp"),
             "uncertain_count": metrics.get("uncertain_count"),
+            "n_relevant_gold": metrics.get("n_relevant_gold"),
+            "n_irrelevant_gold": metrics.get("n_irrelevant_gold"),
         }
     if hero_id == "hero2":
         return {

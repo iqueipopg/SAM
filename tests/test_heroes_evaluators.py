@@ -371,6 +371,138 @@ class TestHero1Scoring:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# TestHero1MixedSample (T16.E.1.fix)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestHero1MixedSample:
+    """T16.E.1.fix: ``compute_hero1_metrics`` handles mixed gold composition.
+
+    Original evaluator assumed 100% gold-positive. The medio sample contains
+    both relevant and irrelevant rows, so the helper must (a) preserve legacy
+    sensitivity fields when called on a 100% positive sample (backward compat
+    with micro), (b) compute full binary metrics on a balanced sample, and (c)
+    compute specificity correctly from TN/FP.
+    """
+
+    def _preds(self, items):
+        """Convert (gold, predicted) tuples into prediction dicts."""
+        return [
+            {
+                "covidence_id": f"c{i:03d}",
+                "gold": gold,
+                "predicted": pred,
+                "abstract_used": True,
+            }
+            for i, (gold, pred) in enumerate(items)
+        ]
+
+    def test_micro_compat_all_relevant_preserves_sensitivity(self):
+        """Sample 100% relevant -> sensitivity fields match legacy; specificity None."""
+        from experiments.eval_hero1_screening import compute_hero1_metrics
+
+        preds = self._preds([
+            ("relevant", "relevant"),
+            ("relevant", "relevant"),
+            ("relevant", "relevant"),
+            ("relevant", "irrelevant"),  # FN
+            ("relevant", "uncertain"),
+        ])
+        m, cm, fn_ids, fp_ids = compute_hero1_metrics(preds)
+
+        assert m["tp"] == 3
+        assert m["fn"] == 1
+        assert m["uncertain_count"] == 1
+        assert m["sensitivity_overall"] == round(3 / 5, 4)
+        # adjusted excludes uncertain: 3 / (3+1) = 0.75
+        assert m["sensitivity_adjusted"] == 0.75
+        # No irrelevant gold -> specificity / TN / FP must be None.
+        assert m["specificity"] is None
+        assert m["tn"] is None
+        assert m["fp"] is None
+        # Kappa undefined when only one gold class is present.
+        assert m["cohens_kappa"] is None
+        # Confusion matrix only populated on the "relevant" row.
+        assert cm["relevant"]["relevant"] == 3
+        assert cm["relevant"]["irrelevant"] == 1
+        assert cm["relevant"]["uncertain"] == 1
+        assert cm["irrelevant"] == {"relevant": 0, "irrelevant": 0, "uncertain": 0}
+
+    def test_mixed_sample_computes_full_binary_metrics(self):
+        """50/50 sample -> sensitivity, specificity, precision, F1, accuracy populated."""
+        from experiments.eval_hero1_screening import compute_hero1_metrics
+
+        # 6 relevant: 4 correctly INCLUDE, 1 wrong EXCLUDE, 1 uncertain.
+        # 6 irrelevant: 4 correctly EXCLUDE, 1 wrong INCLUDE, 1 uncertain.
+        preds = self._preds([
+            ("relevant", "relevant"),
+            ("relevant", "relevant"),
+            ("relevant", "relevant"),
+            ("relevant", "relevant"),
+            ("relevant", "irrelevant"),
+            ("relevant", "uncertain"),
+            ("irrelevant", "irrelevant"),
+            ("irrelevant", "irrelevant"),
+            ("irrelevant", "irrelevant"),
+            ("irrelevant", "irrelevant"),
+            ("irrelevant", "relevant"),
+            ("irrelevant", "uncertain"),
+        ])
+        m, cm, fn_ids, fp_ids = compute_hero1_metrics(preds)
+
+        assert m["n_relevant_gold"] == 6
+        assert m["n_irrelevant_gold"] == 6
+        assert m["tp"] == 4
+        assert m["fn"] == 1
+        assert m["tn"] == 4
+        assert m["fp"] == 1
+        assert m["uncertain_count"] == 2
+        # Sensitivity adjusted = tp / (tp+fn) = 4/5 = 0.8
+        assert m["sensitivity_adjusted"] == 0.8
+        # Specificity = tn / (tn+fp) = 4/5 = 0.8
+        assert m["specificity"] == 0.8
+        # Precision = tp / (tp+fp) = 4/5 = 0.8
+        assert m["precision"] == 0.8
+        # F1 = 2*0.8*0.8 / (0.8+0.8) = 0.8
+        assert m["f1"] == 0.8
+        # Accuracy = (tp+tn) / decided = 8/10 = 0.8
+        assert m["accuracy"] == 0.8
+        # Kappa defined and positive.
+        assert m["cohens_kappa"] is not None
+        assert m["cohens_kappa"] > 0.5
+        # FP / FN id lists populated.
+        assert len(fn_ids) == 1
+        assert len(fp_ids) == 1
+        # Confusion matrix populates both rows.
+        assert cm["relevant"]["relevant"] == 4
+        assert cm["relevant"]["irrelevant"] == 1
+        assert cm["irrelevant"]["irrelevant"] == 4
+        assert cm["irrelevant"]["relevant"] == 1
+
+    def test_specificity_correct_with_tn_only(self):
+        """All irrelevant gold predicted irrelevant -> specificity=1.0, FP=0."""
+        from experiments.eval_hero1_screening import compute_hero1_metrics
+
+        preds = self._preds([
+            ("relevant", "relevant"),
+            ("relevant", "relevant"),
+            ("irrelevant", "irrelevant"),
+            ("irrelevant", "irrelevant"),
+            ("irrelevant", "irrelevant"),
+        ])
+        m, cm, fn_ids, fp_ids = compute_hero1_metrics(preds)
+        assert m["tn"] == 3
+        assert m["fp"] == 0
+        assert m["specificity"] == 1.0
+        # Sensitivity perfect (2 of 2 relevant correctly INCLUDE).
+        assert m["sensitivity_adjusted"] == 1.0
+        # Precision perfect (no FP).
+        assert m["precision"] == 1.0
+        # No false positives recorded.
+        assert fp_ids == []
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # TestHero2Stratified
 # ──────────────────────────────────────────────────────────────────────────────
 
