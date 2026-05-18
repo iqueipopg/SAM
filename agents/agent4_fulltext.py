@@ -2124,13 +2124,37 @@ mentions broad psychological/behavioural constructs (e.g. "psychological
 components", "behaviour change", "self-management"), the following are
 operationally equivalent and should be treated as MEETING the criterion, even
 if the exact phrase is not used:
-- behaviour change theory (COM-B, TTM, HBM, SCT, Self-Determination Theory)
-- goal-setting, self-monitoring, action planning
-- motivational interviewing, coaching, counseling, psychoeducation
+- behaviour change theory (COM-B, TTM, HBM, SCT / Social Cognitive Theory,
+  Self-Determination Theory, Theory of Planned Behaviour / TPB)
+- goal-setting, self-monitoring, action planning, implementation intentions,
+  activation of intention
+- motivational interviewing, coaching, counseling (including telephone-based
+  counseling and automated telephone systems), psychoeducation, the "five A's"
+  approach (Ask, Advise, Assess, Assist, Arrange)
 - mindfulness, MBSR, MBCT, CBT, ACT
-- self-efficacy, self-regulation, self-management interventions
-- theory-informed digital / SMS / mobile-health behaviour interventions
-- text-messaging programmes anchored in behaviour-change techniques (BCTs)
+- self-efficacy interventions, self-regulation, self-management programmes
+  (including chronic disease self-management, Lorig-style)
+- theory-informed digital / SMS / mobile-health behaviour interventions,
+  including web-based, eHealth, mHealth, smartphone-app and tailored
+  internet-delivered behaviour-change programmes
+- text-messaging programmes anchored in behaviour-change techniques (BCTs per
+  Michie taxonomy)
+- message framing (gain-framed / loss-framed messages targeting behaviour)
+- behavioural lifestyle interventions / lifestyle-facilitator programmes
+- stress management, social support, group-meeting components when embedded
+  in a behaviour-change framework
+- modelling / self-modelling / avatar-based self-modelling rooted in SCT
+
+CONSISTENCY RULE (no self-contradiction):
+If your own chain-of-reasoning explicitly identifies ANY of the above concepts
+in the paper's intervention (either by exact name or by clear paraphrase you
+yourself write), you MAY NOT exclude on the grounds that the intervention
+"lacks psychological components" or "is not a behaviour-change intervention".
+Such an exclusion is a self-contradiction and is forbidden. In such cases the
+intervention criterion is MET; if you still believe the paper should be
+excluded, the exclusion must be justified on a DIFFERENT criterion
+(population, comparator, outcome, study design).
+
 Apply this guidance only when "{intv}" includes a psychological or behavioural
 concept. Do NOT invent equivalences for unrelated criteria.
 
