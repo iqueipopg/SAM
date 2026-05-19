@@ -129,6 +129,8 @@ def _build_payload(
     seed: int,
     n: int,
     split_size: int,
+    sampling_method: str | None = None,
+    extra_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Construct the JSON payload to persist.
 
@@ -139,7 +141,8 @@ def _build_payload(
             "split_size": <int>, "seed": <int>, "n": <int>,
             "sampling_method": "<exact code>",
             "numpy_version": "<runtime>", "datasets_version": "<runtime>",
-            "timestamp": "<UTC ISO 8601>", "git_commit": "<HEAD short hash>"
+            "timestamp": "<UTC ISO 8601>", "git_commit": "<HEAD short hash>",
+            <optional extras: pairing_strategy, parent_smoke_file, ...>
           },
           "samples": [
             {
@@ -155,6 +158,11 @@ def _build_payload(
     ``origin.abstract`` is intentionally omitted (§5.3 of pre-registro).
     """
     import datasets as _datasets_pkg
+
+    if sampling_method is None:
+        sampling_method = (
+            "numpy.random.default_rng(seed).choice(len(ds), size=n, replace=False)"
+        )
 
     samples: list[dict[str, Any]] = []
     for idx in indices:
@@ -174,25 +182,40 @@ def _build_payload(
             f"pmids={sample['publication_pmids_count']}"
         )
 
-    payload = {
-        "metadata": {
-            "dataset": DATASET_NAME,
-            "config": DATASET_CONFIG,
-            "split": DATASET_SPLIT,
-            "split_size": split_size,
-            "seed": seed,
-            "n": n,
-            "sampling_method": (
-                "numpy.random.default_rng(seed).choice(len(ds), size=n, replace=False)"
-            ),
-            "numpy_version": np.__version__,
-            "datasets_version": _datasets_pkg.__version__,
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "git_commit": _get_git_commit(),
-        },
-        "samples": samples,
+    metadata: dict[str, Any] = {
+        "dataset": DATASET_NAME,
+        "config": DATASET_CONFIG,
+        "split": DATASET_SPLIT,
+        "split_size": split_size,
+        "seed": seed,
+        "n": n,
+        "sampling_method": sampling_method,
+        "numpy_version": np.__version__,
+        "datasets_version": _datasets_pkg.__version__,
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "git_commit": _get_git_commit(),
     }
-    return payload
+    if extra_metadata:
+        metadata.update(extra_metadata)
+
+    return {"metadata": metadata, "samples": samples}
+
+
+def _load_smoke_indices(smoke_path: Path) -> tuple[list[int], list[str]]:
+    """Read smoke artefact and return (selected_indices, sample_ids) in smoke order.
+
+    The smoke file is the source of truth for the hard-prefix of the stitched
+    sample. Order is preserved exactly as it appears in ``samples`` (NOT
+    re-sorted). The caller uses this order for positions 0..len(smoke)-1 of
+    the stitched artefact.
+    """
+    raw = json.loads(smoke_path.read_text())
+    samples = raw.get("samples", [])
+    if not samples:
+        raise ValueError(f"smoke file has no samples: {smoke_path}")
+    indices = [int(s["selected_index"]) for s in samples]
+    ids = [str(s.get("id", "")) for s in samples]
+    return indices, ids
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -220,7 +243,89 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_OUTPUT,
         help=f"Output JSON path (default {DEFAULT_OUTPUT}).",
     )
+    parser.add_argument(
+        "--stitch-from-smoke",
+        type=Path,
+        default=None,
+        help=(
+            "If given, build a stitched sample whose first len(smoke) positions "
+            "are the smoke records (in smoke order) and the remaining n-len(smoke) "
+            "are drawn deterministically from the complement with "
+            "numpy.random.default_rng(seed).choice(remaining, size=delta, replace=False), "
+            "then sorted ascending. Smoke path stays untouched when this flag is omitted."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _run_smoke_mode(records: list[dict[str, Any]], *, seed: int, n: int) -> tuple[list[int], dict[str, Any]]:
+    """Original (pre-stitched) sampling path. Bit-identical to v1 behaviour."""
+    split_size = len(records)
+    rng = np.random.default_rng(seed)
+    raw_indices = rng.choice(split_size, size=n, replace=False)
+    indices = sorted(int(i) for i in raw_indices)
+    _log(f"seed={seed} n={n} selected_indices={indices}")
+    return indices, {}
+
+
+def _run_stitched_mode(
+    records: list[dict[str, Any]],
+    *,
+    seed: int,
+    n: int,
+    smoke_path: Path,
+) -> tuple[list[int], dict[str, Any], str]:
+    """Stitched sampling: hard-prefix smoke + delta draw from complement.
+
+    Returns (indices, extra_metadata, sampling_method_string).
+    Positions 0..len(smoke)-1 preserve smoke order (NOT sorted).
+    Positions len(smoke)..n-1 are sorted ascending.
+    """
+    split_size = len(records)
+    smoke_indices, smoke_ids = _load_smoke_indices(smoke_path)
+    smoke_set = set(smoke_indices)
+    if not smoke_set.issubset(range(split_size)):
+        raise ValueError(
+            f"smoke indices {smoke_indices} contain values outside [0, {split_size})"
+        )
+    delta = n - len(smoke_indices)
+    if delta < 0:
+        raise ValueError(
+            f"--n={n} smaller than smoke size={len(smoke_indices)}; cannot stitch"
+        )
+
+    remaining = sorted(set(range(split_size)) - smoke_set)
+    _log(
+        f"stitch mode: smoke={len(smoke_indices)} delta={delta} "
+        f"complement_size={len(remaining)} seed={seed}"
+    )
+    rng = np.random.default_rng(seed)
+    picks = rng.choice(len(remaining), size=delta, replace=False).tolist()
+    delta_indices = sorted(remaining[i] for i in picks)
+
+    indices = list(smoke_indices) + delta_indices  # smoke ORDER preserved
+    _log(
+        f"stitch result: smoke_prefix={smoke_indices} smoke_ids={smoke_ids} "
+        f"delta_sorted={delta_indices}"
+    )
+
+    sampling_method = (
+        "smoke3_prefix + numpy.random.default_rng(42).choice("
+        "remaining_indices_after_smoke, size=17, replace=False)"
+    )
+    extra_metadata = {
+        "pairing_strategy": (
+            "stitched: smoke N=3 hard-prefixed, 17 new samples drawn from "
+            "complement with seed=42"
+        ),
+        "parent_smoke_file": str(smoke_path).replace(
+            str(PROJECT_ROOT) + "/", ""
+        ),
+        "smoke_prefix_indices": smoke_indices,
+        "smoke_prefix_ids": smoke_ids,
+        "delta_indices_sorted": delta_indices,
+    }
+    return indices, extra_metadata, sampling_method
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -237,20 +342,42 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"ERROR: --n={args.n} exceeds split_size={split_size}")
         return 2
 
-    rng = np.random.default_rng(args.seed)
-    raw_indices = rng.choice(split_size, size=args.n, replace=False)
-    # Ascending order for human-readable reproducibility; deterministic from
-    # the same seed because we sort plain int values.
-    indices = sorted(int(i) for i in raw_indices)
-    _log(f"seed={args.seed} n={args.n} selected_indices={indices}")
+    if args.stitch_from_smoke is not None:
+        indices, extra_metadata, sampling_method = _run_stitched_mode(
+            records,
+            seed=args.seed,
+            n=args.n,
+            smoke_path=args.stitch_from_smoke,
+        )
+        payload = _build_payload(
+            records,
+            indices,
+            seed=args.seed,
+            n=args.n,
+            split_size=split_size,
+            sampling_method=sampling_method,
+            extra_metadata=extra_metadata,
+        )
 
-    payload = _build_payload(
-        records,
-        indices,
-        seed=args.seed,
-        n=args.n,
-        split_size=split_size,
-    )
+        # Hard sanity gate: positions 0..len(smoke)-1 must reproduce smoke IDs.
+        expected_ids = extra_metadata["smoke_prefix_ids"]
+        actual_ids = [s["id"] for s in payload["samples"][: len(expected_ids)]]
+        if actual_ids != expected_ids:
+            _log(
+                f"ERROR: sanity gate failed. expected_prefix={expected_ids} "
+                f"got={actual_ids}"
+            )
+            return 3
+        _log(f"sanity gate PASSED: prefix_ids={actual_ids}")
+    else:
+        indices, _extras = _run_smoke_mode(records, seed=args.seed, n=args.n)
+        payload = _build_payload(
+            records,
+            indices,
+            seed=args.seed,
+            n=args.n,
+            split_size=split_size,
+        )
 
     output_path = args.output.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)

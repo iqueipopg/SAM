@@ -1,0 +1,825 @@
+{
+  "metadata": {
+    "dataset": "zifeng-ai/LEADSInstruct",
+    "config": "study_search_publication",
+    "split": "test",
+    "split_size": 4217,
+    "seed": 42,
+    "n": 20,
+    "sampling_method": "smoke3_prefix + numpy.random.default_rng(42).choice(remaining_indices_after_smoke, size=17, replace=False)",
+    "numpy_version": "2.4.2",
+    "datasets_version": "4.8.5",
+    "timestamp": "2026-05-19T12:51:11Z",
+    "git_commit": "355ab1a",
+    "pairing_strategy": "stitched: smoke N=3 hard-prefixed, 17 new samples drawn from complement with seed=42",
+    "parent_smoke_file": "data/groundtruth/leads_smoke.json",
+    "smoke_prefix_indices": [
+      376,
+      2760,
+      3262
+    ],
+    "smoke_prefix_ids": [
+      "MLSEP017395",
+      "MLSEP019779",
+      "MLSEP020281"
+    ],
+    "delta_indices_sorted": [
+      361,
+      374,
+      397,
+      848,
+      1820,
+      1844,
+      2163,
+      2216,
+      2750,
+      2934,
+      3024,
+      3099,
+      3207,
+      3251,
+      3314,
+      3611,
+      4109
+    ]
+  },
+  "samples": [
+    {
+      "selected_index": 376,
+      "id": "MLSEP017395",
+      "origin": {
+        "pmid": "17253547",
+        "title": "Interventions for preventing neuropathy caused by cisplatin and related compounds."
+      },
+      "pico": {
+        "P": "Patients completing a full course of cisplatin chemotherapy",
+        "I": "Neuroprotective therapies",
+        "C": "Standard care or placebo",
+        "O": "Preventing neuropathy caused by cisplatin and related compounds"
+      },
+      "publication_pmids": [
+        "20108160",
+        "1315383",
+        "12853351",
+        "7799029",
+        "12610195",
+        "12177109",
+        "7931444",
+        "11008323",
+        "10442192",
+        "9367703",
+        "19287306",
+        "16622646",
+        "7844610",
+        "16450089",
+        "17190958",
+        "8683243",
+        "2152972",
+        "9261526",
+        "14514973"
+      ],
+      "publication_pmids_count": 19
+    },
+    {
+      "selected_index": 2760,
+      "id": "MLSEP019779",
+      "origin": {
+        "pmid": "18254041",
+        "title": "Transfer of preterm infants from incubator to open cot at lower versus higher body weight."
+      },
+      "pico": {
+        "P": "Preterm infants in neonatal nurseries",
+        "I": "Transfer from incubator to open cot at lower body weight",
+        "C": "Transfer from incubator to open cot at higher body weight",
+        "O": "Effect on weight gain and maintenance of body temperature"
+      },
+      "publication_pmids": [
+        "20696729",
+        "3225660",
+        "7243513"
+      ],
+      "publication_pmids_count": 3
+    },
+    {
+      "selected_index": 3262,
+      "id": "MLSEP020281",
+      "origin": {
+        "pmid": "12917988",
+        "title": "Interventions for replacing missing teeth: different types of dental implants."
+      },
+      "pico": {
+        "P": "Patients with missing teeth",
+        "I": "Different types of dental implants",
+        "C": "Implant surface modifications",
+        "O": "Enhancing clinical performances"
+      },
+      "publication_pmids": [
+        "12296593",
+        "12005142",
+        "7474192",
+        "14536040",
+        "15248875",
+        "8667280",
+        "9104715",
+        "11885181",
+        "11737100",
+        "15348802",
+        "1398828",
+        "9269013",
+        "11938636",
+        "11699480",
+        "14514222",
+        "14696659",
+        "12500876",
+        "11887655",
+        "9393426",
+        "12814319",
+        "11885174",
+        "12685794",
+        "15726847",
+        "11885186",
+        "11429939",
+        "12507240",
+        "7990026",
+        "12814316",
+        "11885176",
+        "1288800",
+        "12175374",
+        "14696664",
+        "12453124",
+        "15127991",
+        "12516643",
+        "15595703",
+        "11885173",
+        "9131473",
+        "3139793",
+        "15669706",
+        "9393430",
+        "9760898",
+        "14969216",
+        "11885169",
+        "9393428",
+        "12956495",
+        "11885172",
+        "12691651",
+        "14575630",
+        "11688021",
+        "11168236",
+        "10397651",
+        "15191587",
+        "11359306",
+        "11406789",
+        "15312092",
+        "11564104",
+        "11168211",
+        "12673431",
+        "17340895",
+        "17348883",
+        "17100744",
+        "17224029"
+      ],
+      "publication_pmids_count": 63
+    },
+    {
+      "selected_index": 361,
+      "id": "MLSEP017380",
+      "origin": {
+        "pmid": "17054242",
+        "title": "Terlipressin for hepatorenal syndrome."
+      },
+      "pico": {
+        "P": "Patients with hepatorenal syndrome",
+        "I": "Terlipressin treatment",
+        "C": "Placebo or standard care",
+        "O": "Reversal of circulatory changes associated with hepatorenal syndrome"
+      },
+      "publication_pmids": [
+        "18471513",
+        "12542598",
+        "9824265",
+        "18471512",
+        "17939047"
+      ],
+      "publication_pmids_count": 5
+    },
+    {
+      "selected_index": 374,
+      "id": "MLSEP017393",
+      "origin": {
+        "pmid": "12076421",
+        "title": "Epidural blood patching for preventing and treating post-dural puncture headache."
+      },
+      "pico": {
+        "P": "Patients undergoing dural puncture procedure",
+        "I": "Epidural blood patching",
+        "C": "Standard care or placebo",
+        "O": "Preventing or treating post-dural puncture headache"
+      },
+      "publication_pmids": [
+        "2522746",
+        "2693404",
+        "8442966",
+        "2639667",
+        "17635971",
+        "15564951",
+        "16265829",
+        "2718002"
+      ],
+      "publication_pmids_count": 8
+    },
+    {
+      "selected_index": 397,
+      "id": "MLSEP017416",
+      "origin": {
+        "pmid": "21249676",
+        "title": "Steam inhalation or humidified oxygen for acute bronchiolitis in children up to three years of age."
+      },
+      "pico": {
+        "P": "Children up to three years of age with acute bronchiolitis",
+        "I": "Steam inhalation",
+        "C": "Humidified oxygen",
+        "O": "Relief of respiratory distress and lightening of secretions in the respiratory tract"
+      },
+      "publication_pmids": [
+        "9695300"
+      ],
+      "publication_pmids_count": 1
+    },
+    {
+      "selected_index": 848,
+      "id": "MLSEP017867",
+      "origin": {
+        "pmid": "10796444",
+        "title": "Peripheral retinal ablation for threshold retinopathy of prematurity in preterm infants."
+      },
+      "pico": {
+        "P": "Preterm infants with threshold retinopathy of prematurity",
+        "I": "Peripheral retinal ablation",
+        "C": "Standard care or alternative treatment",
+        "O": "Efficacy of peripheral retinal ablation in treating threshold retinopathy of prematurity"
+      },
+      "publication_pmids": [
+        "8447743",
+        "8602779"
+      ],
+      "publication_pmids_count": 2
+    },
+    {
+      "selected_index": 1820,
+      "id": "MLSEP018839",
+      "origin": {
+        "pmid": "20824866",
+        "title": "Antiemetic medication for prevention and treatment of chemotherapy induced nausea and vomiting in childhood."
+      },
+      "pico": {
+        "P": "Children undergoing treatment for malignancies",
+        "I": "Antiemetic medication for prevention and treatment of chemotherapy induced nausea and vomiting",
+        "C": "Standard care or placebo",
+        "O": "Improvement in quality of life by reducing nausea, vomiting, and associated clinical problems"
+      },
+      "publication_pmids": [
+        "10989464",
+        "3035479",
+        "10595816",
+        "7749764",
+        "8259853",
+        "9348595",
+        "10087313",
+        "10779814",
+        "8983284",
+        "11902300",
+        "7492164",
+        "2661789",
+        "231736",
+        "10380232",
+        "17372773",
+        "10533454",
+        "519355",
+        "3701526",
+        "3013104",
+        "15202162",
+        "10532104",
+        "7833098",
+        "3522818",
+        "10370357",
+        "7844684",
+        "8772908"
+      ],
+      "publication_pmids_count": 26
+    },
+    {
+      "selected_index": 1844,
+      "id": "MLSEP018863",
+      "origin": {
+        "pmid": "30168578",
+        "title": "Antidepressants for treating depression in dementia."
+      },
+      "pico": {
+        "P": "Patients with dementia accompanied by depressive symptoms",
+        "I": "Antidepressants",
+        "C": "Placebo or alternative treatment",
+        "O": "Clinical efficacy in treating depression in dementia"
+      },
+      "publication_pmids": [
+        "11495397",
+        "8854297",
+        "8378411",
+        "2643356",
+        "8837903",
+        "1529737",
+        "12860778"
+      ],
+      "publication_pmids_count": 7
+    },
+    {
+      "selected_index": 2163,
+      "id": "MLSEP019182",
+      "origin": {
+        "pmid": "35914010",
+        "title": "Felbamate add-on therapy for drug-resistant focal epilepsy."
+      },
+      "pico": {
+        "P": "Patients with drug-resistant focal epilepsy",
+        "I": "Felbamate add-on therapy",
+        "C": "Standard antiepileptic drugs alone",
+        "O": "Reduction in seizure frequency and improvement in seizure control"
+      },
+      "publication_pmids": [
+        "8469324",
+        "2044501",
+        "1944909"
+      ],
+      "publication_pmids_count": 3
+    },
+    {
+      "selected_index": 2216,
+      "id": "MLSEP019235",
+      "origin": {
+        "pmid": "23633343",
+        "title": "Physical tests for shoulder impingements and local lesions of bursa, tendon or labrum that may accompany impingement."
+      },
+      "pico": {
+        "P": "Patients with shoulder impingements and local lesions of bursa, tendon, or labrum",
+        "I": "Physical tests for shoulder impingements and associated pathologies",
+        "C": "Standard clinical management approach without the use of physical tests",
+        "O": "Accurate diagnosis leading to early optimization of clinical management and improved patient outcomes"
+      },
+      "publication_pmids": [
+        "12435645",
+        "19887215",
+        "11172245",
+        "9848587",
+        "11641706",
+        "8042491",
+        "16219944",
+        "9934421",
+        "10979525",
+        "18006674",
+        "11182732",
+        "19223205",
+        "12724682",
+        "9784804",
+        "17027405",
+        "8947391",
+        "16219939",
+        "10627426",
+        "17478654",
+        "19962062",
+        "8872929",
+        "15007311",
+        "11796399",
+        "15128189",
+        "19509414",
+        "8198184",
+        "10633889",
+        "18503815",
+        "16943859",
+        "2703509",
+        "18320379"
+      ],
+      "publication_pmids_count": 31
+    },
+    {
+      "selected_index": 2750,
+      "id": "MLSEP019769",
+      "origin": {
+        "pmid": "18843679",
+        "title": "Honey as a topical treatment for wounds."
+      },
+      "pico": {
+        "P": "Patients with wounds",
+        "I": "Topical application of honey",
+        "C": "Standard wound care",
+        "O": "Accelerated wound healing"
+      },
+      "publication_pmids": [
+        "10085281",
+        "18752540",
+        "7945822",
+        "17068655",
+        "18161896",
+        "19222654",
+        "8884013",
+        "17466071",
+        "16550669",
+        "20368852",
+        "18935732",
+        "17708384",
+        "10630854",
+        "9625243",
+        "2032114",
+        "8330089"
+      ],
+      "publication_pmids_count": 16
+    },
+    {
+      "selected_index": 2934,
+      "id": "MLSEP019953",
+      "origin": {
+        "pmid": "18254122",
+        "title": "Intracervical prostaglandins for induction of labour."
+      },
+      "pico": {
+        "P": "Pregnant women requiring induction of labour",
+        "I": "Intracervical administration of prostaglandins",
+        "C": "Other routes of prostaglandin administration (e.g., intravaginal, oral)",
+        "O": "Achievement of cervical ripening before the onset of contractions with reduced discomfort for the woman"
+      },
+      "publication_pmids": [
+        "11044536",
+        "3901764",
+        "3523330",
+        "12592272",
+        "364917",
+        "7789590",
+        "3209832",
+        "1835301",
+        "6374766",
+        "1563557",
+        "1785269",
+        "9215189",
+        "3504454",
+        "3535695",
+        "8604599",
+        "8262291",
+        "10389710",
+        "14704238",
+        "11684116",
+        "16553177",
+        "6579838",
+        "10483544",
+        "2634922",
+        "8269450",
+        "12375540",
+        "9322631",
+        "9464723",
+        "3277875",
+        "3861138",
+        "11084468",
+        "9731852",
+        "8560996",
+        "7222869",
+        "7710467",
+        "8559529",
+        "9731837",
+        "6384844",
+        "2406438",
+        "1765205",
+        "8610776",
+        "3300135",
+        "1822492",
+        "8212680",
+        "8883753",
+        "7943076"
+      ],
+      "publication_pmids_count": 45
+    },
+    {
+      "selected_index": 3024,
+      "id": "MLSEP020043",
+      "origin": {
+        "pmid": "21328265",
+        "title": "Thymic peptides for treatment of cancer patients."
+      },
+      "pico": {
+        "P": "Cancer patients",
+        "I": "Purified thymus extracts (pTE) and synthetic thymic peptides (sTP)",
+        "C": "Standard care or placebo",
+        "O": "Enhanced immune system, reduced tumour growth, resistance to infections"
+      },
+      "publication_pmids": [
+        "215307",
+        "8010718",
+        "6088341",
+        "7847265",
+        "2539772",
+        "2830968",
+        "3321257",
+        "9471197",
+        "15362772",
+        "1893006",
+        "20194853",
+        "7516641",
+        "3241904",
+        "8695241",
+        "19669251",
+        "6391140",
+        "3212263",
+        "3998766"
+      ],
+      "publication_pmids_count": 18
+    },
+    {
+      "selected_index": 3099,
+      "id": "MLSEP020118",
+      "origin": {
+        "pmid": "17253456",
+        "title": "Screening for colorectal cancer using the faecal occult blood test, Hemoccult."
+      },
+      "pico": {
+        "P": "Patients at risk of colorectal cancer",
+        "I": "Screening using the faecal occult blood test, Hemoccult",
+        "C": "No screening or alternative screening methods",
+        "O": "Reduced mortality from colorectal cancer, early detection of cancer"
+      },
+      "publication_pmids": [
+        "10070942",
+        "8036464",
+        "8474513",
+        "12010887",
+        "10486370",
+        "11772963",
+        "15513382"
+      ],
+      "publication_pmids_count": 7
+    },
+    {
+      "selected_index": 3207,
+      "id": "MLSEP020226",
+      "origin": {
+        "pmid": "33759192",
+        "title": "Lens extraction for chronic angle-closure glaucoma."
+      },
+      "pico": {
+        "P": "Patients with chronic angle-closure glaucoma",
+        "I": "Lens extraction",
+        "C": "Other commonly used treatment modalities",
+        "O": "Improvement in intraocular pressure control"
+      },
+      "publication_pmids": [
+        "9795850",
+        "12913321"
+      ],
+      "publication_pmids_count": 2
+    },
+    {
+      "selected_index": 3251,
+      "id": "MLSEP020270",
+      "origin": {
+        "pmid": "11406027",
+        "title": "Early volume expansion for prevention of morbidity and mortality in very preterm infants."
+      },
+      "pico": {
+        "P": "Very preterm infants",
+        "I": "Early volume expansion",
+        "C": "Standard care without early volume expansion",
+        "O": "Prevention of morbidity and mortality, improved organ perfusion, reduced risk of permanent injury"
+      },
+      "publication_pmids": [
+        "9166037",
+        "3899020",
+        "1444555",
+        "1738219",
+        "1731034",
+        "9536840",
+        "11865269",
+        "8846273",
+        "781206",
+        "12831411",
+        "10952699",
+        "11840234",
+        "2013",
+        "9620569",
+        "11902739",
+        "9175947",
+        "9377132",
+        "1802656",
+        "8345429",
+        "12029450",
+        "9401521",
+        "13679934",
+        "8453217",
+        "8346957",
+        "3565001",
+        "10356137",
+        "12837865",
+        "2189976",
+        "8021760",
+        "1517923",
+        "6206718",
+        "10735462",
+        "1255322",
+        "9059186",
+        "9156531",
+        "993925",
+        "6839914",
+        "7351906",
+        "11441325",
+        "11207991",
+        "8835086",
+        "1391257",
+        "17989698"
+      ],
+      "publication_pmids_count": 43
+    },
+    {
+      "selected_index": 3314,
+      "id": "MLSEP020333",
+      "origin": {
+        "pmid": "29190418",
+        "title": "Interventions to change the behaviour of health professionals and the organisation of care to promote weight reduction in children and adults with overweight or obesity."
+      },
+      "pico": {
+        "P": "Children and adults with overweight or obesity",
+        "I": "Interventions to change the behaviour of health professionals and the organisation of care",
+        "C": "Standard care or alternative interventions",
+        "O": "Weight reduction in patients with overweight or obesity"
+      },
+      "publication_pmids": [
+        "6691639",
+        "23622351",
+        "15622423",
+        "3406729",
+        "25810449",
+        "14604931",
+        "16212848",
+        "3842709",
+        "7080885",
+        "11180306",
+        "4755160",
+        "10396539",
+        "4045942",
+        "363629",
+        "23505167",
+        "10440120",
+        "14517547",
+        "22520658",
+        "8907097",
+        "3208022",
+        "4511011",
+        "22951546",
+        "24136693",
+        "19258409",
+        "27231236",
+        "14633807",
+        "4076432",
+        "5111761",
+        "4884420",
+        "3892032",
+        "4678089",
+        "5049595",
+        "25825539",
+        "3973828",
+        "20101009",
+        "11333990",
+        "27453375",
+        "16988084",
+        "11180304",
+        "15139890",
+        "17325684",
+        "7920874",
+        "26598750",
+        "10546698",
+        "18682018",
+        "9368818",
+        "11434791",
+        "22402982",
+        "3549757",
+        "19582636",
+        "2844940",
+        "24021419",
+        "2001777",
+        "25895016",
+        "7078276",
+        "21464376",
+        "3624623",
+        "18573765",
+        "9449146",
+        "25251166",
+        "15580064",
+        "15139891",
+        "3677741",
+        "26565534",
+        "16552408"
+      ],
+      "publication_pmids_count": 65
+    },
+    {
+      "selected_index": 3611,
+      "id": "MLSEP020630",
+      "origin": {
+        "pmid": "12076480",
+        "title": "Dietary fibre for the prevention of colorectal adenomas and carcinomas."
+      },
+      "pico": {
+        "P": "Patients at risk of colorectal adenomas and carcinomas",
+        "I": "Dietary fibre consumption",
+        "C": "No dietary fibre consumption or low dietary fibre intake",
+        "O": "Prevention of colorectal adenomas and carcinomas"
+      },
+      "publication_pmids": [
+        "10770979",
+        "9440388",
+        "8446136",
+        "7730878",
+        "5920907",
+        "11287446",
+        "11106680",
+        "11058617",
+        "10770980",
+        "3653628",
+        "9895396",
+        "11073017",
+        "2032595",
+        "2549261",
+        "8537982",
+        "9752991",
+        "7473832",
+        "11216500",
+        "9162305"
+      ],
+      "publication_pmids_count": 19
+    },
+    {
+      "selected_index": 4109,
+      "id": "MLSEP021128",
+      "origin": {
+        "pmid": "23881656",
+        "title": "Diet or exercise, or both, for weight reduction in women after childbirth."
+      },
+      "pico": {
+        "P": "Postpartum women who have weight retention after childbirth",
+        "I": "Diet and exercise",
+        "C": "No specific comparison group mentioned in the abstract",
+        "O": "Achieving healthy body weight and weight reduction in women after childbirth"
+      },
+      "publication_pmids": [
+        "3120183",
+        "1521957",
+        "19386740",
+        "19049350",
+        "19775782",
+        "22367259",
+        "3480874",
+        "3379789",
+        "12408198",
+        "20174902",
+        "15026292",
+        "9701192",
+        "10232637",
+        "12532163",
+        "2640472",
+        "20056720",
+        "2048494",
+        "21382511",
+        "3292461",
+        "2837853",
+        "21123462",
+        "12956024",
+        "16720131",
+        "9822949",
+        "2526978",
+        "1564034",
+        "3154650",
+        "2527301",
+        "21483027",
+        "23276189",
+        "15265228",
+        "22891225",
+        "8289849",
+        "11283424",
+        "9927017",
+        "23146549",
+        "10675424",
+        "22952179",
+        "14709187",
+        "2314422",
+        "21085038",
+        "9432092",
+        "21238614",
+        "20149971",
+        "21153759",
+        "22709705",
+        "7816355",
+        "16130582",
+        "15781903",
+        "19727023",
+        "11927700",
+        "15215768",
+        "16877196",
+        "1306643"
+      ],
+      "publication_pmids_count": 54
+    }
+  ]
+}
