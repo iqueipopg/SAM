@@ -1,0 +1,602 @@
+"""
+Hero A1 evaluator — Agent1Protocol vs LEADSInstruct ground truth.
+
+Sprint:  T17.A1 Fase C.2 (script construction; smoke run is C.3).
+Schema:  docs/iterations/T17.A1_hypothesis.md §5.4, §10.2.
+Tag:     pre-T17.A1-v2 (pre-registered, immutable thresholds H1=0.70, H2=0.05).
+
+Pipeline (per sample):
+  1. Read ``origin.title`` from the LEADSInstruct sample record (no abstract is
+     passed; §5.3 of the pre-registration restricts input to the title).
+  2. Run ``Agent1Protocol.generate_protocol(title)`` to obtain the structured
+     PICO/SPIDER/PECO/PCC protocol JSON.
+  3. Run ``Agent1Protocol.generate_pubmed_query(title, protocol)`` to obtain
+     the Boolean query string.
+  4. Execute the query against PubMed E-utilities (``esearch``) with
+     ``retmax=1000`` and ``sort="relevance"``. Cache by SHA-256 hash of the
+     query so repeated runs do not hit NCBI again.
+  5. Compute ``Recall@1000 = |returned PMIDs ∩ publication_pmids| /
+     |publication_pmids|`` and report ``esearch_count`` as the workload proxy.
+
+Completeness PICO (§4 of the pre-registration) is NOT computed by this script;
+it requires manual annotation by the human evaluator and is therefore emitted
+as ``null`` in the output JSON (both per-sample and aggregate).
+
+Outputs:
+  - ``outputs/eval/T17.A1/smoke_{YYYYMMDD_HHMMSS}.json`` — full per-sample
+    results plus aggregates (macro recall/workload + null completeness).
+  - ``outputs/eval/T17.A1/cache/{sha256_16}.json`` — one cache file per
+    distinct Boolean query (gitignored).
+  - Structured stdout in Spanish with one line per sample plus a final
+    summary table.
+
+Design notes:
+  - Entrez configuration replicates the minimal pattern from
+    ``agents/agent2_search.py`` (read email from env or ``config.yaml``;
+    upgrade to 10 req/s when ``NCBI_API_KEY`` is set). We deliberately do
+    NOT import ``Agent2Search`` because that would drag in Google Scholar
+    scraping, semantic dedup, and other unused machinery (see hypothesis
+    §5.4 and the approved plan ``cached-mixing-dream.md``).
+  - The script never modifies ``agents/agent1_protocol.py`` and never writes
+    to any of the sacred zones (``app.py``, ``config.yaml``, ``.env``,
+    ``config/agents.json``, ``data/gold_standard.json``).
+  - Errors on a single sample (A1 generation failure or Entrez network error)
+    are captured and stored alongside that sample's record; processing
+    continues with the remaining samples (anti-fragile smoke).
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import statistics
+import subprocess
+import sys
+import time
+import traceback
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+# Ensure project root is on sys.path so ``agents`` package imports resolve when
+# launching as ``python experiments/eval_hero_a1.py``.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+import yaml  # noqa: E402
+from Bio import Entrez  # noqa: E402
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Constants
+# ──────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_SAMPLE_FILE = PROJECT_ROOT / "data" / "groundtruth" / "leads_smoke.json"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs" / "eval" / "T17.A1"
+DEFAULT_CACHE_DIR = PROJECT_ROOT / "outputs" / "eval" / "T17.A1" / "cache"
+
+PRE_REGISTRATION_TAG = "pre-T17.A1-v2"
+SEED = 42
+K_RETMAX = 1000
+SORT_ORDER = "relevance"
+DATASET_ID = "zifeng-ai/LEADSInstruct/study_search_publication/test"
+
+# Rate-limit cushion between live esearch calls (NCBI public limits).
+# Without an API key NCBI allows ~3 req/s; with a key ~10 req/s.
+SLEEP_WITH_KEY = 0.1
+SLEEP_WITHOUT_KEY = 0.4
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Entrez configuration (replicates Agent2Search pattern without importing it)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _configure_entrez() -> tuple[bool, bool]:
+    """Configure Entrez email + optional API key from env / config.yaml.
+
+    Returns ``(email_set, api_key_set)`` for metadata logging. The function
+    never raises: if ``config.yaml`` is unreadable it falls back to the
+    documented default email.
+    """
+    cfg: dict[str, Any] = {}
+    cfg_path = PROJECT_ROOT / "config.yaml"
+    try:
+        with open(cfg_path, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        cfg = {}
+    search_cfg = cfg.get("search") or {}
+    Entrez.email = (
+        os.environ.get("ENTREZ_EMAIL")
+        or search_cfg.get("entrez_email")
+        or "meta-analysis@example.com"
+    )
+    api_key = (os.environ.get("NCBI_API_KEY") or "").strip()
+    if api_key:
+        Entrez.api_key = api_key
+    return bool(Entrez.email), bool(api_key)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _utc_now_iso() -> str:
+    """Return current UTC time formatted as ISO 8601 (``YYYY-MM-DDTHH:MM:SSZ``)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _git_commit() -> tuple[str, str]:
+    """Return ``(short, full)`` HEAD commit hashes; empty strings on failure."""
+    try:
+        full = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(PROJECT_ROOT),
+            stderr=subprocess.DEVNULL,
+        ).decode("utf-8").strip()
+        short = full[:7]
+        return short, full
+    except Exception:
+        return "", ""
+
+
+def _hash_query(query: str) -> str:
+    """Return the first 16 hex chars of SHA-256(query) for cache keys."""
+    return hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
+
+
+def recall_at_k(returned_pmids: list[str], gold_pmids: list[str]) -> float:
+    """Compute Recall@K = |returned ∩ gold| / |gold|.
+
+    Returns 0.0 if ``gold_pmids`` is empty (avoids ZeroDivisionError; degenerate
+    gold sets are filtered out upstream but the function is defensive).
+    """
+    if not gold_pmids:
+        return 0.0
+    intersection = set(returned_pmids) & set(gold_pmids)
+    return len(intersection) / len(gold_pmids)
+
+
+def _serialize_esearch(result: Any, query: str) -> dict[str, Any]:
+    """Convert a Bio.Entrez parsed result into a plain JSON-serializable dict.
+
+    The object returned by ``Entrez.read`` behaves like a dict but its values
+    can be ``Bio.Entrez.Parser`` element subclasses (Element-like). We cast
+    everything we need to plain ``str``/``int``/``list[str]`` so the cache
+    survives across Biopython versions.
+    """
+    return {
+        "IdList": [str(x) for x in result.get("IdList", [])],
+        "Count": str(result.get("Count", "0")),
+        "RetMax": str(result.get("RetMax", K_RETMAX)),
+        "RetStart": str(result.get("RetStart", 0)),
+        "query": query,
+        "fetched_at_utc": _utc_now_iso(),
+    }
+
+
+def _esearch_with_retry(query: str, has_api_key: bool) -> dict[str, Any]:
+    """Run ``Entrez.esearch`` once; on any exception sleep 2 s and retry once.
+
+    Returns the serialized (plain dict) form of the response. Raises the
+    second exception if both attempts fail.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            handle = Entrez.esearch(
+                db="pubmed",
+                term=query,
+                retmax=K_RETMAX,
+                sort=SORT_ORDER,
+            )
+            try:
+                raw = Entrez.read(handle)
+            finally:
+                handle.close()
+            serialized = _serialize_esearch(raw, query)
+            # Honour rate limit cushion between successive calls.
+            time.sleep(SLEEP_WITH_KEY if has_api_key else SLEEP_WITHOUT_KEY)
+            return serialized
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if attempt == 0:
+                # One retry after a short sleep — covers transient 429/5xx.
+                time.sleep(2.0)
+    assert last_exc is not None  # for type checkers
+    raise last_exc
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Core evaluation
+# ──────────────────────────────────────────────────────────────────────────────
+
+def evaluate_sample(
+    sample: dict[str, Any],
+    a1: Any,
+    cache_dir: Path,
+    has_api_key: bool,
+    slot: int,
+    total: int,
+) -> dict[str, Any]:
+    """Run the full A1 → Entrez pipeline on a single LEADSInstruct sample.
+
+    Errors are captured and returned in the result dict (``error`` field) so
+    that the caller can continue with the next sample. The function logs one
+    structured stdout line summarising the sample at the end.
+    """
+    sample_id = sample.get("id", "<unknown>")
+    selected_index = sample.get("selected_index")
+    origin = sample.get("origin", {}) or {}
+    title = (origin.get("title") or "").strip()
+    origin_pmid = origin.get("pmid")
+    gold_pmids = list(sample.get("publication_pmids", []) or [])
+
+    record: dict[str, Any] = {
+        "id": sample_id,
+        "selected_index": selected_index,
+        "origin_title": title,
+        "origin_pmid": origin_pmid,
+        "gold_pmids_count": len(gold_pmids),
+        "a1_protocol": None,
+        "a1_query": None,
+        "a1_query_hash": None,
+        "esearch_count": None,
+        "returned_pmids_count": None,
+        "returned_pmids": [],
+        "intersection_pmids": [],
+        "intersection_count": None,
+        "recall_at_1000": None,
+        "completeness": None,  # manual annotation, §4.3 hypothesis
+        "from_cache": False,
+        "error": None,
+    }
+
+    # ── Stage 1: A1 protocol + query ──────────────────────────────────────
+    try:
+        protocol = a1.generate_protocol(title)
+        query = a1.generate_pubmed_query(title, protocol)
+    except Exception as exc:  # noqa: BLE001
+        record["error"] = f"A1 failure: {type(exc).__name__}: {exc}"
+        _log_sample(slot, total, record)
+        return record
+
+    if not query or not query.strip():
+        record["a1_protocol"] = protocol
+        record["error"] = "A1 returned empty query"
+        _log_sample(slot, total, record)
+        return record
+
+    record["a1_protocol"] = protocol
+    record["a1_query"] = query
+    record["a1_query_hash"] = _hash_query(query)
+
+    # ── Stage 2: Entrez esearch (with disk cache) ─────────────────────────
+    cache_path = cache_dir / f"{record['a1_query_hash']}.json"
+    if cache_path.exists():
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            record["from_cache"] = True
+        except Exception as exc:  # noqa: BLE001
+            record["error"] = f"Cache read failure: {type(exc).__name__}: {exc}"
+            _log_sample(slot, total, record)
+            return record
+    else:
+        try:
+            cached = _esearch_with_retry(query, has_api_key)
+            cache_path.write_text(
+                json.dumps(cached, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as exc:  # noqa: BLE001
+            record["error"] = f"Entrez failure: {type(exc).__name__}: {exc}"
+            _log_sample(slot, total, record)
+            return record
+
+    # ── Stage 3: Metrics ──────────────────────────────────────────────────
+    returned = [str(p) for p in cached.get("IdList", [])]
+    try:
+        esearch_count = int(cached.get("Count", "0"))
+    except (TypeError, ValueError):
+        esearch_count = 0
+
+    intersection = sorted(set(returned) & set(gold_pmids))
+    recall = recall_at_k(returned, gold_pmids)
+
+    record["esearch_count"] = esearch_count
+    record["returned_pmids_count"] = len(returned)
+    record["returned_pmids"] = returned
+    record["intersection_pmids"] = intersection
+    record["intersection_count"] = len(intersection)
+    record["recall_at_1000"] = round(recall, 6)
+
+    _log_sample(slot, total, record)
+    return record
+
+
+def _log_sample(slot: int, total: int, record: dict[str, Any]) -> None:
+    """Emit one structured stdout line per sample (Spanish, no emojis)."""
+    title_preview = (record.get("origin_title") or "").replace("\n", " ")
+    if len(title_preview) > 80:
+        title_preview = title_preview[:77] + "..."
+    if record.get("error"):
+        print(
+            f"[T17.A1.C2] sample {slot}/{total} id={record['id']} "
+            f"title='{title_preview}' ERROR={record['error']}",
+            flush=True,
+        )
+        return
+    recall = record.get("recall_at_1000")
+    recall_str = f"{recall:.3f}" if isinstance(recall, (int, float)) else "n/a"
+    print(
+        f"[T17.A1.C2] sample {slot}/{total} id={record['id']} "
+        f"title='{title_preview}' "
+        f"recall@1000={recall_str} "
+        f"workload={record.get('esearch_count')} "
+        f"returned={record.get('returned_pmids_count')} "
+        f"intersect={record.get('intersection_count')} "
+        f"from_cache={record.get('from_cache')}",
+        flush=True,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Aggregates + summary
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute macro-averaged recall and workload aggregates over per-sample records.
+
+    Completeness is always ``null`` (manual annotation per §4 hypothesis).
+    Records with an ``error`` contribute ``None`` to the value lists; aggregates
+    are computed only over numeric values.
+    """
+    recall_values: list[float | None] = []
+    workload_values: list[float | None] = []
+    completeness_values: list[None] = []
+
+    for r in records:
+        recall_values.append(
+            r["recall_at_1000"] if isinstance(r.get("recall_at_1000"), (int, float)) else None
+        )
+        workload_values.append(
+            r["esearch_count"] if isinstance(r.get("esearch_count"), (int, float)) else None
+        )
+        completeness_values.append(None)
+
+    def _stats(values: list[float | None]) -> dict[str, Any]:
+        numeric = [v for v in values if isinstance(v, (int, float))]
+        if not numeric:
+            return {"mean": None, "median": None, "values": values}
+        return {
+            "mean": round(statistics.fmean(numeric), 6),
+            "median": round(statistics.median(numeric), 6),
+            "values": values,
+        }
+
+    return {
+        "recall_at_1000": _stats(recall_values),
+        "workload": _stats(workload_values),
+        "completeness": {
+            "mean": None,
+            "median": None,
+            "values": completeness_values,
+        },
+    }
+
+
+def _print_summary(result: dict[str, Any], out_path: Path) -> None:
+    """Print a final Spanish summary table to stdout."""
+    print()
+    print("=" * 72)
+    print("HERO A1 (Agent1 — Protocolo + Query PubMed) — RESUMEN SMOKE")
+    print("=" * 72)
+    meta = result["metadata"]
+    print(f"Tag pre-registro       : {meta['tag']}")
+    print(f"Dataset                : {meta['dataset']}")
+    print(f"N                      : {meta['N']}")
+    print(f"K (retmax)             : {meta['K']}")
+    print(f"Sort                   : {meta['sort']}")
+    print(f"Commit git             : {meta['git_commit']}")
+    print(f"Tiempo total (s)       : {meta['elapsed_seconds']}")
+    print(f"NCBI API key activa    : {meta['ncbi_api_key_set']}")
+    print()
+    agg = result["aggregates"]
+    print(f"Recall@1000 (media)    : {agg['recall_at_1000']['mean']}")
+    print(f"Recall@1000 (mediana)  : {agg['recall_at_1000']['median']}")
+    print(f"Workload (media)       : {agg['workload']['mean']}")
+    print(f"Workload (mediana)     : {agg['workload']['median']}")
+    print("Completitud PICO       : null (anotación manual pendiente)")
+    print()
+    print(f"{'Slot':<5}{'ID':<14}{'Gold':>6}{'Workload':>10}{'Returned':>10}"
+          f"{'Hit':>6}{'Recall@1000':>14}  Title")
+    print("-" * 72)
+    for i, r in enumerate(result["per_sample"], start=1):
+        title_preview = (r.get("origin_title") or "").replace("\n", " ")
+        if len(title_preview) > 40:
+            title_preview = title_preview[:37] + "..."
+        recall = r.get("recall_at_1000")
+        recall_str = f"{recall:.4f}" if isinstance(recall, (int, float)) else "n/a"
+        workload = r.get("esearch_count")
+        workload_str = str(workload) if workload is not None else "n/a"
+        returned = r.get("returned_pmids_count")
+        returned_str = str(returned) if returned is not None else "n/a"
+        hit = r.get("intersection_count")
+        hit_str = str(hit) if hit is not None else "n/a"
+        print(
+            f"{i:<5}{r.get('id', ''):<14}{r.get('gold_pmids_count', 0):>6}"
+            f"{workload_str:>10}{returned_str:>10}{hit_str:>6}{recall_str:>14}  "
+            f"{title_preview}"
+        )
+    print("-" * 72)
+    print(f"JSON guardado en       : {out_path}")
+    print()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Driver
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_eval(
+    sample_file: Path,
+    output_path: Path,
+    cache_dir: Path,
+) -> dict[str, Any]:
+    """Run the full smoke evaluation and write the JSON output. Returns the dict."""
+    # Refuse to overwrite an existing output silently — fail loudly.
+    if output_path.exists():
+        raise FileExistsError(
+            f"El fichero de salida ya existe y no se sobrescribirá: {output_path}"
+        )
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not sample_file.is_file():
+        raise FileNotFoundError(f"Sample file no encontrado: {sample_file}")
+
+    with open(sample_file, encoding="utf-8") as f:
+        sample_doc = json.load(f)
+    samples = sample_doc.get("samples") or []
+    if not samples:
+        raise ValueError(f"Sample file no contiene 'samples': {sample_file}")
+
+    email_set, api_key_set = _configure_entrez()
+    git_short, git_full = _git_commit()
+
+    # Import here so import-time failures of Bio/yaml don't block A1 unit tests.
+    from agents.agent1_protocol import Agent1Protocol  # noqa: WPS433
+
+    a1 = Agent1Protocol()
+
+    start_ts = time.time()
+    per_sample: list[dict[str, Any]] = []
+    try:
+        for i, sample in enumerate(samples, start=1):
+            record = evaluate_sample(
+                sample=sample,
+                a1=a1,
+                cache_dir=cache_dir,
+                has_api_key=api_key_set,
+                slot=i,
+                total=len(samples),
+            )
+            per_sample.append(record)
+    finally:
+        # project rule #1: free VRAM after the last A1 call (single GPU).
+        free_vram = getattr(a1, "free_vram", None)
+        if callable(free_vram):
+            try:
+                free_vram()
+            except Exception:
+                traceback.print_exc()
+
+    elapsed = round(time.time() - start_ts, 2)
+
+    metadata = {
+        "tag": PRE_REGISTRATION_TAG,
+        "seed": SEED,
+        "N": len(samples),
+        "K": K_RETMAX,
+        "sort": SORT_ORDER,
+        "timestamp": _utc_now_iso(),
+        "git_commit": git_short,
+        "git_commit_full": git_full,
+        "dataset": DATASET_ID,
+        "sample_file": str(sample_file.resolve()),
+        "entrez_email_set": email_set,
+        "ncbi_api_key_set": api_key_set,
+        "python_version": platform.python_version(),
+        "elapsed_seconds": elapsed,
+    }
+
+    result = {
+        "metadata": metadata,
+        "per_sample": per_sample,
+        "aggregates": _aggregate(per_sample),
+    }
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+
+    _print_summary(result, output_path)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _default_output_path() -> Path:
+    """Build the default output path with current timestamp."""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return DEFAULT_OUTPUT_DIR / f"smoke_{stamp}.json"
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Evaluador Hero A1 — caracteriza Agent1Protocol sobre el smoke "
+            "N=3 de LEADSInstruct (tag pre-T17.A1-v2). No modifica A1."
+        ),
+    )
+    parser.add_argument(
+        "--sample-file",
+        type=Path,
+        default=DEFAULT_SAMPLE_FILE,
+        help=(
+            "Ruta al JSON de samples generado en Fase C.1 (default: "
+            "data/groundtruth/leads_smoke.json)."
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help=(
+            "Ruta del JSON de salida (default: "
+            "outputs/eval/T17.A1/smoke_{YYYYMMDD_HHMMSS}.json)."
+        ),
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=DEFAULT_CACHE_DIR,
+        help=(
+            "Directorio de caché para respuestas esearch (default: "
+            "outputs/eval/T17.A1/cache/)."
+        ),
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    sample_file = args.sample_file.resolve()
+    cache_dir = args.cache_dir.resolve()
+    output_path = (args.output or _default_output_path()).resolve()
+
+    try:
+        run_eval(
+            sample_file=sample_file,
+            output_path=output_path,
+            cache_dir=cache_dir,
+        )
+    except FileExistsError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 3
+    except FileNotFoundError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:  # noqa: BLE001
+        print(f"ERROR fatal: {type(exc).__name__}: {exc}", file=sys.stderr)
+        traceback.print_exc()
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
