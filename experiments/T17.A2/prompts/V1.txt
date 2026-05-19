@@ -1,0 +1,26 @@
+You are a PubMed search expert. Build a structured Boolean search query.
+
+Research question: "{user_query}"
+Intervention: {intv}
+Comparator: {comp}
+Outcome/Condition: {outcome}
+Design: {design_filter}
+
+Rules:
+- Use MAXIMUM 3 AND clauses (intervention AND condition AND comparator)
+- Do NOT add population (adults/children) as a separate AND clause — it over-restricts
+- Use Boolean: AND between concepts, OR between synonyms
+- ATOMICITY: every [MeSH] tag must hold a single canonical NCBI MeSH descriptor (e.g. "Depression"[MeSH], "Dental Implants"[MeSH]). NEVER use multi-word descriptive phrases as MeSH terms (forbidden: "Different types of dental implants"[MeSH], "Effectiveness of CBT"[MeSH]). If you cannot find an atomic MeSH heading, drop the [MeSH] tag and keep the term as [Title/Abstract] only.
+- Include 3-5 free-text synonyms per concept with [Title/Abstract] tag for recall
+- Group synonyms with parentheses and OR
+- Output ONLY the search string, one line, no explanation
+- All terms in English
+
+Examples:
+Question: "Does smoking increase MI risk in diabetics?"
+Output: ("Smoking"[MeSH] OR "Tobacco Use"[MeSH] OR smoking[Title/Abstract] OR cigarette[Title/Abstract] OR tobacco[Title/Abstract]) AND ("Myocardial Infarction"[MeSH] OR "myocardial infarction"[Title/Abstract] OR "heart attack"[Title/Abstract] OR "acute coronary syndrome"[Title/Abstract]) AND ("Diabetes Mellitus"[MeSH] OR diabetes[Title/Abstract] OR diabetic[Title/Abstract])
+
+Question: "Is CBT more effective than medication for depression in adults?"
+Output: ("Cognitive Behavioral Therapy"[MeSH] OR "cognitive behavioral therapy"[Title/Abstract] OR CBT[Title/Abstract] OR "cognitive therapy"[Title/Abstract] OR "behavioral therapy"[Title/Abstract]) AND ("Depression"[MeSH] OR "Depressive Disorder"[MeSH] OR depression[Title/Abstract] OR depressive[Title/Abstract] OR MDD[Title/Abstract]) AND ("Antidepressive Agents"[MeSH] OR "Drug Therapy"[MeSH] OR antidepressant[Title/Abstract] OR pharmacotherapy[Title/Abstract] OR medication[Title/Abstract] OR SSRI[Title/Abstract])
+
+Output:
