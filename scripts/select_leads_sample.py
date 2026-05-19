@@ -218,6 +218,21 @@ def _load_smoke_indices(smoke_path: Path) -> tuple[list[int], list[str]]:
     return indices, ids
 
 
+def _load_parent_indices(parent_path: Path) -> tuple[list[int], list[str]]:
+    """Read parent artefact and return (selected_indices, sample_ids).
+
+    Used by ``_run_disjoint_mode`` to compute the complement set for held-out
+    sampling. Order is not significant — these are excluded from the draw.
+    """
+    raw = json.loads(parent_path.read_text())
+    samples = raw.get("samples", [])
+    if not samples:
+        raise ValueError(f"parent file has no samples: {parent_path}")
+    indices = [int(s["selected_index"]) for s in samples]
+    ids = [str(s.get("id", "")) for s in samples]
+    return indices, ids
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -255,7 +270,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "then sorted ascending. Smoke path stays untouched when this flag is omitted."
         ),
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--disjoint-from",
+        type=Path,
+        default=None,
+        help=(
+            "If given, build a sample of N indices drawn from the complement of "
+            "the parent artefact's selected_index set (held-out from DEV). Uses "
+            "numpy.random.default_rng(seed).choice(complement, size=n, replace=False) "
+            "then sorts ascending. Mutually exclusive with --stitch-from-smoke."
+        ),
+    )
+    args = parser.parse_args(argv)
+    if args.stitch_from_smoke is not None and args.disjoint_from is not None:
+        parser.error("--stitch-from-smoke and --disjoint-from are mutually exclusive")
+    return args
 
 
 def _run_smoke_mode(records: list[dict[str, Any]], *, seed: int, n: int) -> tuple[list[int], dict[str, Any]]:
@@ -328,6 +357,66 @@ def _run_stitched_mode(
     return indices, extra_metadata, sampling_method
 
 
+def _run_disjoint_mode(
+    records: list[dict[str, Any]],
+    *,
+    seed: int,
+    n: int,
+    parent_path: Path,
+) -> tuple[list[int], dict[str, Any], str]:
+    """Disjoint sampling: draw N indices from complement of a parent DEV artefact.
+
+    Held-out style for T17.A2: parent artefact is the DEV sample (e.g.
+    ``leads_full20.json``); we want N fresh indices that share zero overlap
+    with DEV so the winner of prompt iteration can be validated on truly
+    unseen data.
+
+    Returns (indices, extra_metadata, sampling_method_string).
+    Indices are sorted ascending.
+    """
+    split_size = len(records)
+    parent_indices, parent_ids = _load_parent_indices(parent_path)
+    parent_set = set(parent_indices)
+    if not parent_set.issubset(range(split_size)):
+        raise ValueError(
+            f"parent indices contain values outside [0, {split_size}): "
+            f"{sorted(parent_set - set(range(split_size)))}"
+        )
+
+    complement = sorted(set(range(split_size)) - parent_set)
+    if len(complement) < n:
+        raise ValueError(
+            f"complement size={len(complement)} < n={n}; cannot draw disjoint sample"
+        )
+
+    _log(
+        f"disjoint mode: parent_n={len(parent_indices)} "
+        f"complement_size={len(complement)} drawn={n}"
+    )
+    rng = np.random.default_rng(seed)
+    picks = rng.choice(len(complement), size=n, replace=False).tolist()
+    disjoint_indices = sorted(complement[i] for i in picks)
+
+    _log(f"disjoint result: heldout_indices={disjoint_indices}")
+
+    rel_parent = str(parent_path).replace(str(PROJECT_ROOT) + "/", "")
+    sampling_method = (
+        f"disjoint-from {rel_parent} with "
+        f"numpy.random.default_rng({seed}).choice(complement, size={n}, replace=False)"
+    )
+    extra_metadata = {
+        "pairing_strategy": (
+            f"disjoint: N={n} drawn from complement of parent DEV "
+            f"(N={len(parent_indices)}) with seed={seed}"
+        ),
+        "parent_dev_file": rel_parent,
+        "dev_excluded_ids": parent_ids,
+        "dev_excluded_indices": parent_indices,
+        "complement_size": len(complement),
+    }
+    return disjoint_indices, extra_metadata, sampling_method
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
@@ -369,6 +458,36 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 3
         _log(f"sanity gate PASSED: prefix_ids={actual_ids}")
+    elif args.disjoint_from is not None:
+        indices, extra_metadata, sampling_method = _run_disjoint_mode(
+            records,
+            seed=args.seed,
+            n=args.n,
+            parent_path=args.disjoint_from,
+        )
+        payload = _build_payload(
+            records,
+            indices,
+            seed=args.seed,
+            n=args.n,
+            split_size=split_size,
+            sampling_method=sampling_method,
+            extra_metadata=extra_metadata,
+        )
+
+        # Hard sanity gate: zero overlap between the new sample and the parent DEV.
+        parent_ids_set = set(extra_metadata["dev_excluded_ids"])
+        new_ids_set = {s["id"] for s in payload["samples"]}
+        overlap = parent_ids_set & new_ids_set
+        if overlap:
+            _log(
+                f"ERROR: disjoint sanity gate failed. overlap_ids={sorted(overlap)}"
+            )
+            return 3
+        _log(
+            f"disjoint sanity gate PASSED: zero overlap between heldout "
+            f"({len(new_ids_set)} ids) and parent DEV ({len(parent_ids_set)} ids)"
+        )
     else:
         indices, _extras = _run_smoke_mode(records, seed=args.seed, n=args.n)
         payload = _build_payload(
