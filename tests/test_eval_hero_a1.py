@@ -535,3 +535,258 @@ def test_metadata_ncbi_api_key_set_when_env_present(tmp_path):
         result = run_eval(sample_file=sample_file, output_path=output_path, cache_dir=cache_dir)
 
     assert result["metadata"]["ncbi_api_key_set"] is True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Bloque 9 — Paired-eval extension (T17.A1 Fase D.2)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_a1_output_cache_miss_writes_back(tmp_path):
+    """Cache miss: A1 invocado una vez y entrada escrita al fichero de caché."""
+    sample_file = tmp_path / "samples.json"
+    _write_sample_file(sample_file, [MINIMAL_SAMPLE])
+    output_path = tmp_path / "out_miss.json"
+    cache_dir = tmp_path / "cache"
+    a1_cache_path = tmp_path / "a1_outputs.json"  # no existe todavía
+
+    mock_a1 = _make_mock_a1()
+    mock_handle, raw_result = _make_mock_esearch_result(["111", "222"], count="50")
+
+    with patch("agents.agent1_protocol.Agent1Protocol", return_value=mock_a1), \
+         patch("experiments.eval_hero_a1.Entrez.esearch", return_value=mock_handle), \
+         patch("experiments.eval_hero_a1.Entrez.read", return_value=raw_result), \
+         patch("experiments.eval_hero_a1.time.sleep"):
+
+        result = run_eval(
+            sample_file=sample_file,
+            output_path=output_path,
+            cache_dir=cache_dir,
+            a1_output_cache_path=a1_cache_path,
+        )
+
+    # A1 invocado exactamente una vez para el único sample.
+    assert mock_a1.generate_protocol.call_count == 1
+    assert mock_a1.generate_pubmed_query.call_count == 1
+
+    # Fichero de caché ahora existe en disco con la entrada del sample.
+    assert a1_cache_path.exists()
+    cache_on_disk = json.loads(a1_cache_path.read_text(encoding="utf-8"))
+    assert MINIMAL_SAMPLE["id"] in cache_on_disk
+    assert cache_on_disk[MINIMAL_SAMPLE["id"]]["query"] == FIXED_QUERY
+    assert cache_on_disk[MINIMAL_SAMPLE["id"]]["protocol"] == FIXED_PROTOCOL
+
+    # Output registra a1_output_source="fresh"
+    sample_rec = result["per_sample"][0]
+    assert sample_rec["a1_output_source"] == "fresh"
+    assert sample_rec["intervention_applied"] is False
+    assert sample_rec["validator_modifications"] is None
+    assert sample_rec["validator_near_misses"] is None
+    assert sample_rec["a1_query_pre_validation"] is None
+
+    # Metadata refleja el estado del cache.
+    meta = result["metadata"]
+    assert meta["a1_output_cache_path"] == str(a1_cache_path.resolve())
+    assert meta["a1_output_cache_state"]["loaded"] == 0
+    assert meta["a1_output_cache_state"]["fresh_writes"] == 1
+    assert meta["a1_output_cache_state"]["cache_hits"] == 0
+    assert meta["a1_output_cache_state"]["final_size"] == 1
+
+
+def test_a1_output_cache_hit_skips_a1(tmp_path):
+    """Cache hit: A1 NO se invoca y a1_output_source='cache'."""
+    sample_file = tmp_path / "samples.json"
+    _write_sample_file(sample_file, [MINIMAL_SAMPLE])
+    output_path = tmp_path / "out_hit.json"
+    cache_dir = tmp_path / "cache"
+    a1_cache_path = tmp_path / "a1_outputs.json"
+
+    # Pre-poblar el cache con la entrada del sample (query distinta para
+    # comprobar que se usa la cacheada, no una nueva del mock).
+    cached_query = '("cached") AND query'
+    cached_protocol = {"framework": "PICO", "from": "cache"}
+    a1_cache_path.write_text(
+        json.dumps({MINIMAL_SAMPLE["id"]: {
+            "protocol": cached_protocol,
+            "query": cached_query,
+        }}, indent=2),
+        encoding="utf-8",
+    )
+
+    mock_a1 = _make_mock_a1()
+    mock_handle, raw_result = _make_mock_esearch_result(["111", "222"], count="50")
+
+    with patch("agents.agent1_protocol.Agent1Protocol", return_value=mock_a1), \
+         patch("experiments.eval_hero_a1.Entrez.esearch", return_value=mock_handle), \
+         patch("experiments.eval_hero_a1.Entrez.read", return_value=raw_result), \
+         patch("experiments.eval_hero_a1.time.sleep"):
+
+        result = run_eval(
+            sample_file=sample_file,
+            output_path=output_path,
+            cache_dir=cache_dir,
+            a1_output_cache_path=a1_cache_path,
+        )
+
+    # A1 NO invocado: protocolo+query salen de la caché.
+    assert mock_a1.generate_protocol.call_count == 0
+    assert mock_a1.generate_pubmed_query.call_count == 0
+
+    sample_rec = result["per_sample"][0]
+    assert sample_rec["a1_output_source"] == "cache"
+    assert sample_rec["a1_query"] == cached_query
+    assert sample_rec["a1_protocol"] == cached_protocol
+
+    # Metadata refleja el hit.
+    meta = result["metadata"]
+    assert meta["a1_output_cache_state"]["loaded"] == 1
+    assert meta["a1_output_cache_state"]["cache_hits"] == 1
+    assert meta["a1_output_cache_state"]["fresh_writes"] == 0
+
+
+def test_intervention_false_passes_query_through(tmp_path):
+    """Sin --intervention: mesh_validator.validate_query NO se invoca."""
+    sample_file = tmp_path / "samples.json"
+    _write_sample_file(sample_file, [MINIMAL_SAMPLE])
+    output_path = tmp_path / "out_no_intervention.json"
+    cache_dir = tmp_path / "cache"
+
+    mock_handle, raw_result = _make_mock_esearch_result(["111"], count="5")
+
+    with patch("agents.agent1_protocol.Agent1Protocol", return_value=_make_mock_a1()), \
+         patch("experiments.eval_hero_a1.Entrez.esearch", return_value=mock_handle), \
+         patch("experiments.eval_hero_a1.Entrez.read", return_value=raw_result), \
+         patch("experiments.eval_hero_a1.time.sleep"), \
+         patch("agents.mesh_validator.validate_query") as mock_validate:
+
+        result = run_eval(
+            sample_file=sample_file,
+            output_path=output_path,
+            cache_dir=cache_dir,
+            intervention=False,
+        )
+
+    # Validator NO debe invocarse.
+    assert mock_validate.call_count == 0
+
+    sample_rec = result["per_sample"][0]
+    assert sample_rec["intervention_applied"] is False
+    assert sample_rec["validator_modifications"] is None
+    assert sample_rec["validator_near_misses"] is None
+    assert sample_rec["a1_query_pre_validation"] is None
+    # La query usada es la cruda de A1.
+    assert sample_rec["a1_query"] == FIXED_QUERY
+
+    # Metadata refleja intervention=False.
+    assert result["metadata"]["intervention"] is False
+
+
+def test_intervention_true_invokes_validator(tmp_path):
+    """Con --intervention: validate_query se llama y modifica la query."""
+    sample_file = tmp_path / "samples.json"
+    _write_sample_file(sample_file, [MINIMAL_SAMPLE])
+    output_path = tmp_path / "out_intervention.json"
+    cache_dir = tmp_path / "cache"
+
+    modified_query = "modified query"
+    near_misses = [{"phrase": "X", "nearest_canonical": "Y"}]
+
+    # esearch debe recibir la query MODIFICADA, así que devolvemos PMIDs
+    # consistentes con eso.
+    mock_handle, raw_result = _make_mock_esearch_result(["111"], count="5")
+
+    with patch("agents.agent1_protocol.Agent1Protocol", return_value=_make_mock_a1()), \
+         patch("experiments.eval_hero_a1.Entrez.esearch", return_value=mock_handle) as mock_esearch, \
+         patch("experiments.eval_hero_a1.Entrez.read", return_value=raw_result), \
+         patch("experiments.eval_hero_a1.time.sleep"), \
+         patch(
+             "agents.mesh_validator.validate_query",
+             return_value=(modified_query, 2, near_misses),
+         ) as mock_validate:
+
+        result = run_eval(
+            sample_file=sample_file,
+            output_path=output_path,
+            cache_dir=cache_dir,
+            intervention=True,
+        )
+
+    # Validator invocado exactamente una vez con la query cruda de A1.
+    assert mock_validate.call_count == 1
+    args, _ = mock_validate.call_args
+    assert args[0] == FIXED_QUERY
+
+    sample_rec = result["per_sample"][0]
+    assert sample_rec["intervention_applied"] is True
+    assert sample_rec["validator_modifications"] == 2
+    assert sample_rec["validator_near_misses"] == near_misses
+    assert sample_rec["a1_query_pre_validation"] == FIXED_QUERY
+    # La query final (la enviada a Entrez) es la MODIFICADA.
+    assert sample_rec["a1_query"] == modified_query
+
+    # Entrez.esearch fue llamado con la query modificada (post-validación).
+    assert mock_esearch.call_count == 1
+    _, esearch_kwargs = mock_esearch.call_args
+    assert esearch_kwargs.get("term") == modified_query
+
+    # Metadata refleja intervention=True.
+    assert result["metadata"]["intervention"] is True
+
+
+def test_intervention_with_cached_a1(tmp_path):
+    """Cache hit + --intervention: validator SE invoca sobre la query cacheada."""
+    sample_file = tmp_path / "samples.json"
+    _write_sample_file(sample_file, [MINIMAL_SAMPLE])
+    output_path = tmp_path / "out_cache_intervention.json"
+    cache_dir = tmp_path / "cache"
+    a1_cache_path = tmp_path / "a1_outputs.json"
+
+    cached_query = '("cached") AND query'
+    cached_protocol = {"framework": "PICO", "from": "cache"}
+    a1_cache_path.write_text(
+        json.dumps({MINIMAL_SAMPLE["id"]: {
+            "protocol": cached_protocol,
+            "query": cached_query,
+        }}, indent=2),
+        encoding="utf-8",
+    )
+
+    modified_query = "post-validation query"
+    mock_a1 = _make_mock_a1()
+    mock_handle, raw_result = _make_mock_esearch_result(["111"], count="5")
+
+    with patch("agents.agent1_protocol.Agent1Protocol", return_value=mock_a1), \
+         patch("experiments.eval_hero_a1.Entrez.esearch", return_value=mock_handle) as mock_esearch, \
+         patch("experiments.eval_hero_a1.Entrez.read", return_value=raw_result), \
+         patch("experiments.eval_hero_a1.time.sleep"), \
+         patch(
+             "agents.mesh_validator.validate_query",
+             return_value=(modified_query, 1, []),
+         ) as mock_validate:
+
+        result = run_eval(
+            sample_file=sample_file,
+            output_path=output_path,
+            cache_dir=cache_dir,
+            intervention=True,
+            a1_output_cache_path=a1_cache_path,
+        )
+
+    # A1 NO invocado (cache hit).
+    assert mock_a1.generate_protocol.call_count == 0
+    assert mock_a1.generate_pubmed_query.call_count == 0
+
+    # Validator SÍ invocado sobre la query cacheada.
+    assert mock_validate.call_count == 1
+    args, _ = mock_validate.call_args
+    assert args[0] == cached_query
+
+    sample_rec = result["per_sample"][0]
+    assert sample_rec["a1_output_source"] == "cache"
+    assert sample_rec["intervention_applied"] is True
+    assert sample_rec["a1_query_pre_validation"] == cached_query
+    assert sample_rec["a1_query"] == modified_query
+    assert sample_rec["validator_modifications"] == 1
+
+    # Entrez recibió la query post-validación.
+    _, esearch_kwargs = mock_esearch.call_args
+    assert esearch_kwargs.get("term") == modified_query

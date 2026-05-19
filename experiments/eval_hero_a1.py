@@ -178,6 +178,68 @@ def _serialize_esearch(result: Any, query: str) -> dict[str, Any]:
     }
 
 
+def _load_a1_output_cache(cache_path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load the on-disk A1-output cache (``{sample_id: {"protocol", "query"}}``).
+
+    Returns an empty dict when ``cache_path`` is ``None`` or the file is absent
+    or unreadable. The cache file MUST contain a JSON object mapping sample ids
+    to dicts; anything else is treated as a fresh start.
+    """
+    if cache_path is None or not cache_path.exists():
+        return {}
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _read_a1_output_cache_entry(
+    cache_path: Path | None,
+    sample_id: str,
+) -> dict[str, Any] | None:
+    """Return the cached A1 output for ``sample_id`` or ``None`` on miss.
+
+    Always re-reads the file from disk so concurrent writers don't trample
+    entries (cheap insurance during a long overnight run).
+    """
+    if cache_path is None:
+        return None
+    cache = _load_a1_output_cache(cache_path)
+    entry = cache.get(sample_id)
+    if not isinstance(entry, dict):
+        return None
+    return entry
+
+
+def _append_a1_output_cache_entry(
+    cache_path: Path,
+    sample_id: str,
+    entry: dict[str, Any],
+) -> None:
+    """Atomically append a new entry to the A1-output cache file.
+
+    Append-only semantics: existing entries are never overwritten — if
+    ``sample_id`` is already present the disk file is left untouched.
+    Writes go through a sibling ``.tmp`` file and ``os.replace`` for atomicity.
+    """
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    # Re-read the file at the last possible moment to minimise the window
+    # where another writer could have appended something we'd overwrite.
+    current = _load_a1_output_cache(cache_path)
+    if sample_id in current:
+        return  # respect append-only invariant
+    current[sample_id] = entry
+    tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(current, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    os.replace(tmp_path, cache_path)
+
+
 def _esearch_with_retry(query: str, has_api_key: bool) -> dict[str, Any]:
     """Run ``Entrez.esearch`` once; on any exception sleep 2 s and retry once.
 
@@ -221,12 +283,23 @@ def evaluate_sample(
     has_api_key: bool,
     slot: int,
     total: int,
+    intervention: bool = False,
+    a1_output_cache_path: Path | None = None,
+    a1_output_cache_state: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Run the full A1 → Entrez pipeline on a single LEADSInstruct sample.
+    """Run the full A1 → (validator?) → Entrez pipeline on a single sample.
 
     Errors are captured and returned in the result dict (``error`` field) so
     that the caller can continue with the next sample. The function logs one
     structured stdout line summarising the sample at the end.
+
+    When ``a1_output_cache_path`` is provided, A1 invocations are cached on disk
+    keyed by ``sample_id`` so a paired pre/post run reuses the *exact same* A1
+    protocol+query (necessary because A1 is non-deterministic — see plan
+    ``elegant-tumbling-turtle.md`` §"Critical exploration findings").
+
+    When ``intervention=True``, the (cached-or-fresh) A1 query is post-processed
+    by ``agents.mesh_validator.validate_query`` before being sent to Entrez.
     """
     sample_id = sample.get("id", "<unknown>")
     selected_index = sample.get("selected_index")
@@ -253,22 +326,85 @@ def evaluate_sample(
         "completeness": None,  # manual annotation, §4.3 hypothesis
         "from_cache": False,
         "error": None,
+        # T17.A1 Fase D.2 — paired-eval extension fields.
+        "intervention_applied": bool(intervention),
+        "a1_output_source": "fresh",
+        "validator_modifications": None,
+        "validator_near_misses": None,
+        "a1_query_pre_validation": None,
     }
 
-    # ── Stage 1: A1 protocol + query ──────────────────────────────────────
-    try:
-        protocol = a1.generate_protocol(title)
-        query = a1.generate_pubmed_query(title, protocol)
-    except Exception as exc:  # noqa: BLE001
-        record["error"] = f"A1 failure: {type(exc).__name__}: {exc}"
-        _log_sample(slot, total, record)
-        return record
+    # ── Stage 1: A1 protocol + query (cache-aware) ────────────────────────
+    cached_a1 = (
+        _read_a1_output_cache_entry(a1_output_cache_path, sample_id)
+        if a1_output_cache_path is not None
+        else None
+    )
+
+    if cached_a1 is not None:
+        protocol = cached_a1.get("protocol")
+        query = cached_a1.get("query") or ""
+        record["a1_output_source"] = "cache"
+        if a1_output_cache_state is not None:
+            a1_output_cache_state["cache_hits"] = (
+                a1_output_cache_state.get("cache_hits", 0) + 1
+            )
+    else:
+        try:
+            protocol = a1.generate_protocol(title)
+            query = a1.generate_pubmed_query(title, protocol)
+        except Exception as exc:  # noqa: BLE001
+            record["error"] = f"A1 failure: {type(exc).__name__}: {exc}"
+            _log_sample(slot, total, record)
+            return record
+
+        if a1_output_cache_path is not None:
+            try:
+                _append_a1_output_cache_entry(
+                    a1_output_cache_path,
+                    sample_id,
+                    {"protocol": protocol, "query": query},
+                )
+                if a1_output_cache_state is not None:
+                    a1_output_cache_state["fresh_writes"] = (
+                        a1_output_cache_state.get("fresh_writes", 0) + 1
+                    )
+            except Exception as exc:  # noqa: BLE001
+                # Cache write failure is logged but doesn't abort this sample —
+                # the run still produces a valid record; the next run will retry.
+                print(
+                    f"[T17.A1.D] WARNING: no se pudo escribir a1_output_cache "
+                    f"para {sample_id}: {type(exc).__name__}: {exc}",
+                    flush=True,
+                )
 
     if not query or not query.strip():
         record["a1_protocol"] = protocol
         record["error"] = "A1 returned empty query"
         _log_sample(slot, total, record)
         return record
+
+    # ── Stage 1b: Optional MeSH validator intervention ────────────────────
+    if intervention:
+        # Local import so unit tests can patch ``agents.mesh_validator.validate_query``.
+        from agents import mesh_validator  # noqa: WPS433
+
+        try:
+            modified_query, mod_count, near_misses = mesh_validator.validate_query(query)
+        except Exception as exc:  # noqa: BLE001
+            record["a1_protocol"] = protocol
+            record["a1_query"] = query
+            record["a1_query_pre_validation"] = query
+            record["error"] = (
+                f"mesh_validator failure: {type(exc).__name__}: {exc}"
+            )
+            _log_sample(slot, total, record)
+            return record
+
+        record["a1_query_pre_validation"] = query
+        record["validator_modifications"] = int(mod_count)
+        record["validator_near_misses"] = list(near_misses or [])
+        query = modified_query
 
     record["a1_protocol"] = protocol
     record["a1_query"] = query
@@ -444,6 +580,8 @@ def run_eval(
     sample_file: Path,
     output_path: Path,
     cache_dir: Path,
+    intervention: bool = False,
+    a1_output_cache_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run the full smoke evaluation and write the JSON output. Returns the dict."""
     # Refuse to overwrite an existing output silently — fail loudly.
@@ -467,6 +605,15 @@ def run_eval(
     email_set, api_key_set = _configure_entrez()
     git_short, git_full = _git_commit()
 
+    # T17.A1 Fase D.2 — A1-output cache state (loaded once for metadata).
+    initial_cache = _load_a1_output_cache(a1_output_cache_path)
+    a1_output_cache_state: dict[str, int] = {
+        "loaded": len(initial_cache),
+        "fresh_writes": 0,
+        "cache_hits": 0,
+        "final_size": len(initial_cache),
+    }
+
     # Import here so import-time failures of Bio/yaml don't block A1 unit tests.
     from agents.agent1_protocol import Agent1Protocol  # noqa: WPS433
 
@@ -483,6 +630,9 @@ def run_eval(
                 has_api_key=api_key_set,
                 slot=i,
                 total=len(samples),
+                intervention=intervention,
+                a1_output_cache_path=a1_output_cache_path,
+                a1_output_cache_state=a1_output_cache_state,
             )
             per_sample.append(record)
     finally:
@@ -495,6 +645,12 @@ def run_eval(
                 traceback.print_exc()
 
     elapsed = round(time.time() - start_ts, 2)
+
+    # Refresh ``final_size`` from disk so the metadata reflects any writes
+    # appended during the run (and tolerates concurrent appenders).
+    a1_output_cache_state["final_size"] = len(
+        _load_a1_output_cache(a1_output_cache_path)
+    )
 
     metadata = {
         "tag": PRE_REGISTRATION_TAG,
@@ -511,6 +667,14 @@ def run_eval(
         "ncbi_api_key_set": api_key_set,
         "python_version": platform.python_version(),
         "elapsed_seconds": elapsed,
+        # T17.A1 Fase D.2 — paired-eval metadata.
+        "intervention": bool(intervention),
+        "a1_output_cache_path": (
+            str(a1_output_cache_path.resolve())
+            if a1_output_cache_path is not None
+            else None
+        ),
+        "a1_output_cache_state": a1_output_cache_state,
     }
 
     result = {
@@ -570,6 +734,27 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "outputs/eval/T17.A1/cache/)."
         ),
     )
+    parser.add_argument(
+        "--intervention",
+        action="store_true",
+        default=False,
+        help=(
+            "Activa la validación post-A1 vía agents.mesh_validator. La query "
+            "modificada se usa para Entrez; la original se conserva en el "
+            "campo a1_query_pre_validation (T17.A1 Fase D.2)."
+        ),
+    )
+    parser.add_argument(
+        "--a1-output-cache",
+        type=Path,
+        default=None,
+        help=(
+            "Ruta JSON de caché append-only para outputs de A1 "
+            "(protocolo + query) por sample_id. Permite pares pre/post "
+            "deterministas reutilizando exactamente la misma salida A1 "
+            "(T17.A1 Fase D.2)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -578,12 +763,17 @@ def main(argv: list[str] | None = None) -> int:
     sample_file = args.sample_file.resolve()
     cache_dir = args.cache_dir.resolve()
     output_path = (args.output or _default_output_path()).resolve()
+    a1_output_cache_path = (
+        args.a1_output_cache.resolve() if args.a1_output_cache is not None else None
+    )
 
     try:
         run_eval(
             sample_file=sample_file,
             output_path=output_path,
             cache_dir=cache_dir,
+            intervention=bool(args.intervention),
+            a1_output_cache_path=a1_output_cache_path,
         )
     except FileExistsError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
