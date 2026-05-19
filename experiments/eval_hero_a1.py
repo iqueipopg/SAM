@@ -286,6 +286,7 @@ def evaluate_sample(
     intervention: bool = False,
     a1_output_cache_path: Path | None = None,
     a1_output_cache_state: dict[str, int] | None = None,
+    prompt_template: str | None = None,
 ) -> dict[str, Any]:
     """Run the full A1 → (validator?) → Entrez pipeline on a single sample.
 
@@ -352,7 +353,12 @@ def evaluate_sample(
     else:
         try:
             protocol = a1.generate_protocol(title)
-            query = a1.generate_pubmed_query(title, protocol)
+            if prompt_template is not None:
+                query = a1.generate_pubmed_query(
+                    title, protocol, prompt_template=prompt_template
+                )
+            else:
+                query = a1.generate_pubmed_query(title, protocol)
         except Exception as exc:  # noqa: BLE001
             record["error"] = f"A1 failure: {type(exc).__name__}: {exc}"
             _log_sample(slot, total, record)
@@ -578,12 +584,55 @@ def _print_summary(result: dict[str, Any], out_path: Path) -> None:
 
 def run_eval(
     sample_file: Path,
-    output_path: Path,
-    cache_dir: Path,
+    output: Path | None = None,
+    cache_dir: Path | None = None,
+    a1_output_cache: Path | None = None,
     intervention: bool = False,
+    a1_instance: Any = None,
+    prompt_template: str | None = None,
+    # Backward-compat aliases (existing tests call with these names).
+    output_path: Path | None = None,
     a1_output_cache_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Run the full smoke evaluation and write the JSON output. Returns the dict."""
+    """Run the full evaluation and write the JSON output. Returns the metrics dict.
+
+    Parameters
+    ----------
+    sample_file:
+        Path to the LEADSInstruct sample artefact JSON (e.g. leads_full20.json).
+    output:
+        Path of the result JSON to write. Backward-compat alias ``output_path``
+        is accepted (older tests use it).
+    cache_dir:
+        Directory for Entrez esearch response cache (per-query SHA-256 keyed).
+    a1_output_cache:
+        Optional path to an append-only JSON cache of A1 outputs (protocol + query)
+        keyed by ``sample_id``. Enables deterministic paired pre/post runs.
+        Backward-compat alias ``a1_output_cache_path``.
+    intervention:
+        If True, post-process every A1 query through ``agents.mesh_validator.validate_query``
+        before sending to Entrez.
+    a1_instance:
+        Optional pre-built ``Agent1Protocol`` instance. If provided, it is reused
+        across all samples (saves VRAM cycles when looping over prompt variants).
+        If None, a fresh instance is constructed.
+    prompt_template:
+        Optional prompt template string passed through to ``a1.generate_pubmed_query``
+        for every sample (used by the T17.A2 prompt-iteration orchestrator).
+    """
+    # Resolve canonical + alias parameters. New names win when both supplied.
+    if output is None and output_path is not None:
+        output = output_path
+    if a1_output_cache is None and a1_output_cache_path is not None:
+        a1_output_cache = a1_output_cache_path
+    if output is None:
+        raise TypeError("run_eval() requires an output path (kwarg 'output')")
+    if cache_dir is None:
+        raise TypeError("run_eval() requires a cache_dir path")
+
+    output_path = output
+    a1_output_cache_path = a1_output_cache
+
     # Refuse to overwrite an existing output silently — fail loudly.
     if output_path.exists():
         raise FileExistsError(
@@ -614,10 +663,17 @@ def run_eval(
         "final_size": len(initial_cache),
     }
 
-    # Import here so import-time failures of Bio/yaml don't block A1 unit tests.
-    from agents.agent1_protocol import Agent1Protocol  # noqa: WPS433
+    # Build or reuse the A1 instance. T17.A2 orchestrator injects a shared one
+    # so the model is loaded once per overnight run, not per variant.
+    if a1_instance is None:
+        # Import here so import-time failures of Bio/yaml don't block A1 unit tests.
+        from agents.agent1_protocol import Agent1Protocol  # noqa: WPS433
 
-    a1 = Agent1Protocol()
+        a1 = Agent1Protocol()
+        owns_a1 = True
+    else:
+        a1 = a1_instance
+        owns_a1 = False
 
     start_ts = time.time()
     per_sample: list[dict[str, Any]] = []
@@ -633,16 +689,20 @@ def run_eval(
                 intervention=intervention,
                 a1_output_cache_path=a1_output_cache_path,
                 a1_output_cache_state=a1_output_cache_state,
+                prompt_template=prompt_template,
             )
             per_sample.append(record)
     finally:
         # project rule #1: free VRAM after the last A1 call (single GPU).
-        free_vram = getattr(a1, "free_vram", None)
-        if callable(free_vram):
-            try:
-                free_vram()
-            except Exception:
-                traceback.print_exc()
+        # Only free if we own the instance — the caller (T17.A2 orchestrator)
+        # may want to reuse it across many variants.
+        if owns_a1:
+            free_vram = getattr(a1, "free_vram", None)
+            if callable(free_vram):
+                try:
+                    free_vram()
+                except Exception:
+                    traceback.print_exc()
 
     elapsed = round(time.time() - start_ts, 2)
 
@@ -676,6 +736,10 @@ def run_eval(
         ),
         "a1_output_cache_state": a1_output_cache_state,
     }
+    # T17.A2 — only add the prompt-iteration marker when a template was passed,
+    # so existing CLI invocations produce bit-identical output JSONs.
+    if prompt_template is not None:
+        metadata["prompt_template_used"] = True
 
     result = {
         "metadata": metadata,
@@ -770,10 +834,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run_eval(
             sample_file=sample_file,
-            output_path=output_path,
+            output=output_path,
             cache_dir=cache_dir,
+            a1_output_cache=a1_output_cache_path,
             intervention=bool(args.intervention),
-            a1_output_cache_path=a1_output_cache_path,
         )
     except FileExistsError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
