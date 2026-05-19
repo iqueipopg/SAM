@@ -102,8 +102,16 @@ class Agent1Protocol(BaseAgent):
 
         return protocol
 
-    def generate_pubmed_query(self, user_query: str, protocol: dict) -> str:
-        """Genera query PubMed estructurada con MeSH terms y sinónimos."""
+    def generate_pubmed_query(
+        self,
+        user_query: str,
+        protocol: dict,
+        prompt_template: str | None = None,
+    ) -> str:
+        """Genera query PubMed estructurada con MeSH terms y sinónimos.
+
+        Used by T17.A2 prompt-iteration orchestrator; None ⇒ original prompt.
+        """
         framework = protocol.get("framework", "PICO")
         design_filter = {
             "PICO": "randomized controlled trial",
@@ -117,29 +125,38 @@ class Agent1Protocol(BaseAgent):
         comp = protocol.get("comparator", "")
         outcome = protocol.get("outcome", "")
 
-        prompt = (
-            "You are a PubMed search expert. Build a structured Boolean search query.\n\n"
-            f'Research question: "{user_query}"\n'
-            f"{'Exposure' if framework == 'PECO' else 'Intervention'}: {intv}\n"
-            f"Comparator: {comp}\n"
-            f"Outcome/Condition: {outcome}\n"
-            f"Design: {design_filter}\n\n"
-            "Rules:\n"
-            "- Use MAXIMUM 3 AND clauses (intervention AND condition AND comparator)\n"
-            "- Do NOT add population (adults/children) as a separate AND clause — it over-restricts\n"
-            "- Use Boolean: AND between concepts, OR between synonyms\n"
-            "- Include VALID MeSH terms with [MeSH] tag (e.g. \"Cognitive Behavioral Therapy\"[MeSH], \"Depression\"[MeSH])\n"
-            "- Include 3-5 free-text synonyms per concept with [Title/Abstract] tag for recall\n"
-            "- Group synonyms with parentheses and OR\n"
-            "- Output ONLY the search string, one line, no explanation\n"
-            "- All terms in English\n\n"
-            "Examples:\n"
-            'Question: "Does smoking increase MI risk in diabetics?"\n'
-            'Output: ("Smoking"[MeSH] OR "Tobacco Use"[MeSH] OR smoking[Title/Abstract] OR cigarette[Title/Abstract] OR tobacco[Title/Abstract]) AND ("Myocardial Infarction"[MeSH] OR "myocardial infarction"[Title/Abstract] OR "heart attack"[Title/Abstract] OR "acute coronary syndrome"[Title/Abstract]) AND ("Diabetes Mellitus"[MeSH] OR diabetes[Title/Abstract] OR diabetic[Title/Abstract])\n\n'
-            'Question: "Is CBT more effective than medication for depression in adults?"\n'
-            'Output: ("Cognitive Behavioral Therapy"[MeSH] OR "cognitive behavioral therapy"[Title/Abstract] OR CBT[Title/Abstract] OR "cognitive therapy"[Title/Abstract] OR "behavioral therapy"[Title/Abstract]) AND ("Depression"[MeSH] OR "Depressive Disorder"[MeSH] OR depression[Title/Abstract] OR depressive[Title/Abstract] OR MDD[Title/Abstract]) AND ("Antidepressive Agents"[MeSH] OR "Drug Therapy"[MeSH] OR antidepressant[Title/Abstract] OR pharmacotherapy[Title/Abstract] OR medication[Title/Abstract] OR SSRI[Title/Abstract])\n\n'
-            "Output:"
-        )
+        if prompt_template is None:
+            prompt = (
+                "You are a PubMed search expert. Build a structured Boolean search query.\n\n"
+                f'Research question: "{user_query}"\n'
+                f"{'Exposure' if framework == 'PECO' else 'Intervention'}: {intv}\n"
+                f"Comparator: {comp}\n"
+                f"Outcome/Condition: {outcome}\n"
+                f"Design: {design_filter}\n\n"
+                "Rules:\n"
+                "- Use MAXIMUM 3 AND clauses (intervention AND condition AND comparator)\n"
+                "- Do NOT add population (adults/children) as a separate AND clause — it over-restricts\n"
+                "- Use Boolean: AND between concepts, OR between synonyms\n"
+                "- Include VALID MeSH terms with [MeSH] tag (e.g. \"Cognitive Behavioral Therapy\"[MeSH], \"Depression\"[MeSH])\n"
+                "- Include 3-5 free-text synonyms per concept with [Title/Abstract] tag for recall\n"
+                "- Group synonyms with parentheses and OR\n"
+                "- Output ONLY the search string, one line, no explanation\n"
+                "- All terms in English\n\n"
+                "Examples:\n"
+                'Question: "Does smoking increase MI risk in diabetics?"\n'
+                'Output: ("Smoking"[MeSH] OR "Tobacco Use"[MeSH] OR smoking[Title/Abstract] OR cigarette[Title/Abstract] OR tobacco[Title/Abstract]) AND ("Myocardial Infarction"[MeSH] OR "myocardial infarction"[Title/Abstract] OR "heart attack"[Title/Abstract] OR "acute coronary syndrome"[Title/Abstract]) AND ("Diabetes Mellitus"[MeSH] OR diabetes[Title/Abstract] OR diabetic[Title/Abstract])\n\n'
+                'Question: "Is CBT more effective than medication for depression in adults?"\n'
+                'Output: ("Cognitive Behavioral Therapy"[MeSH] OR "cognitive behavioral therapy"[Title/Abstract] OR CBT[Title/Abstract] OR "cognitive therapy"[Title/Abstract] OR "behavioral therapy"[Title/Abstract]) AND ("Depression"[MeSH] OR "Depressive Disorder"[MeSH] OR depression[Title/Abstract] OR depressive[Title/Abstract] OR MDD[Title/Abstract]) AND ("Antidepressive Agents"[MeSH] OR "Drug Therapy"[MeSH] OR antidepressant[Title/Abstract] OR pharmacotherapy[Title/Abstract] OR medication[Title/Abstract] OR SSRI[Title/Abstract])\n\n'
+                "Output:"
+            )
+        else:
+            prompt = prompt_template.format(
+                user_query=user_query,
+                intv=intv,
+                comp=comp,
+                outcome=outcome,
+                design_filter=design_filter,
+            )
 
         response = self._simple_generate(prompt, max_tokens=250)
         query = response.strip().split("\n")[0].strip()
