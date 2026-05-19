@@ -1,0 +1,858 @@
+{
+  "metadata": {
+    "dataset": "zifeng-ai/LEADSInstruct",
+    "config": "study_search_publication",
+    "split": "test",
+    "split_size": 4217,
+    "seed": 42,
+    "n": 20,
+    "sampling_method": "disjoint-from data/groundtruth/leads_full20.json with numpy.random.default_rng(42).choice(complement, size=20, replace=False)",
+    "numpy_version": "2.4.2",
+    "datasets_version": "4.8.5",
+    "timestamp": "2026-05-19T18:20:56Z",
+    "git_commit": "8046955",
+    "pairing_strategy": "disjoint: N=20 drawn from complement of parent DEV (N=20) with seed=42",
+    "parent_dev_file": "data/groundtruth/leads_full20.json",
+    "dev_excluded_ids": [
+      "MLSEP017395",
+      "MLSEP019779",
+      "MLSEP020281",
+      "MLSEP017380",
+      "MLSEP017393",
+      "MLSEP017416",
+      "MLSEP017867",
+      "MLSEP018839",
+      "MLSEP018863",
+      "MLSEP019182",
+      "MLSEP019235",
+      "MLSEP019769",
+      "MLSEP019953",
+      "MLSEP020043",
+      "MLSEP020118",
+      "MLSEP020226",
+      "MLSEP020270",
+      "MLSEP020333",
+      "MLSEP020630",
+      "MLSEP021128"
+    ],
+    "dev_excluded_indices": [
+      376,
+      2760,
+      3262,
+      361,
+      374,
+      397,
+      848,
+      1820,
+      1844,
+      2163,
+      2216,
+      2750,
+      2934,
+      3024,
+      3099,
+      3207,
+      3251,
+      3314,
+      3611,
+      4109
+    ],
+    "complement_size": 4197
+  },
+  "samples": [
+    {
+      "selected_index": 359,
+      "id": "MLSEP017378",
+      "origin": {
+        "pmid": "11869598",
+        "title": "Anticholinergic drugs for wheeze in children under the age of two years."
+      },
+      "pico": {
+        "P": "Children under the age of two years with wheeze",
+        "I": "Anticholinergic drugs",
+        "C": "No anticholinergic drugs or alternative therapy",
+        "O": "Efficacy of anticholinergic drugs in treating wheeze in children under two years"
+      },
+      "publication_pmids": [
+        "1533504",
+        "2959900",
+        "1386071",
+        "2959901",
+        "6230059",
+        "1437435"
+      ],
+      "publication_pmids_count": 6
+    },
+    {
+      "selected_index": 373,
+      "id": "MLSEP017392",
+      "origin": {
+        "pmid": "10796590",
+        "title": "Polysaccharide vaccines for preventing serogroup A meningococcal meningitis."
+      },
+      "pico": {
+        "P": "Young children at risk of meningococcal meningitis",
+        "I": "Polysaccharide vaccine for serogroup A meningococcal meningitis",
+        "C": "No vaccine or placebo",
+        "O": "Level and duration of protection against meningococcal meningitis"
+      },
+      "publication_pmids": [
+        "6349560",
+        "2862316",
+        "417754",
+        "53370",
+        "4206451",
+        "4211056",
+        "413639"
+      ],
+      "publication_pmids_count": 7
+    },
+    {
+      "selected_index": 398,
+      "id": "MLSEP017417",
+      "origin": {
+        "pmid": "23799867",
+        "title": "Antibiotic and other lock treatments for tunnelled central venous catheter-related infections in children with cancer."
+      },
+      "pico": {
+        "P": "Children with cancer who have tunnelled central venous catheter-related infections",
+        "I": "Antibiotic and other lock treatments",
+        "C": "Systemic antibiotics",
+        "O": "Achieving higher local concentrations, biofilm eradication, improved treatment outcomes"
+      },
+      "publication_pmids": [
+        "12902914",
+        "8078010",
+        "9607475"
+      ],
+      "publication_pmids_count": 3
+    },
+    {
+      "selected_index": 541,
+      "id": "MLSEP017560",
+      "origin": {
+        "pmid": "18646171",
+        "title": "Personal assistance for adults (19-64) with physical impairments."
+      },
+      "pico": {
+        "P": "Adults (19-64) with physical impairments",
+        "I": "Personal assistance in the form of individualised support for at least 20 hours per week by a paid assistant other than a healthcare professional",
+        "C": "No personal assistance or standard care",
+        "O": "Improved quality of life, increased independence, reduced healthcare utilization, enhanced social participation"
+      },
+      "publication_pmids": [
+        "17244293"
+      ],
+      "publication_pmids_count": 1
+    },
+    {
+      "selected_index": 847,
+      "id": "MLSEP017866",
+      "origin": {
+        "pmid": "23818046",
+        "title": "Acetaminophen (paracetamol) for the common cold in adults."
+      },
+      "pico": {
+        "P": "Adult patients with the common cold",
+        "I": "Acetaminophen (paracetamol)",
+        "C": "Placebo or alternative treatment",
+        "O": "Effectiveness in treating the common cold"
+      },
+      "publication_pmids": [
+        "2172402",
+        "16154478",
+        "11115196"
+      ],
+      "publication_pmids_count": 3
+    },
+    {
+      "selected_index": 1815,
+      "id": "MLSEP018834",
+      "origin": {
+        "pmid": "22895928",
+        "title": "Ivermectin for onchocercal eye disease (river blindness)."
+      },
+      "pico": {
+        "P": "Patients with onchocercal eye disease (river blindness)",
+        "I": "Ivermectin treatment",
+        "C": "Placebo or no treatment",
+        "O": "Prevention of blindness and visual loss"
+      },
+      "publication_pmids": [
+        "3046657",
+        "8093742",
+        "2694314"
+      ],
+      "publication_pmids_count": 3
+    },
+    {
+      "selected_index": 1840,
+      "id": "MLSEP018859",
+      "origin": {
+        "pmid": "30640411",
+        "title": "Medical interventions for traumatic hyphema."
+      },
+      "pico": {
+        "P": "Patients with traumatic hyphema",
+        "I": "Medical interventions for traumatic hyphema",
+        "C": "No specific comparison mentioned in the abstract",
+        "O": "Prevention of permanent loss of vision, reduction of complications such as corneal staining, traumatic cataract, angle recession glaucoma, optic atrophy, and elevated intraocular pressure, and management of rebleeding to prevent severe complications"
+      },
+      "publication_pmids": [
+        "14597516",
+        "6870623",
+        "769560",
+        "2023746",
+        "9098257",
+        "12635675",
+        "4289281",
+        "3951807",
+        "6353843",
+        "4429308",
+        "4728562",
+        "9951493",
+        "7211267",
+        "5307565",
+        "5054238",
+        "3237131",
+        "9298049",
+        "7352858",
+        "3813951",
+        "3288070",
+        "3317180"
+      ],
+      "publication_pmids_count": 21
+    },
+    {
+      "selected_index": 1897,
+      "id": "MLSEP018916",
+      "origin": {
+        "pmid": "17943788",
+        "title": "Cooling for newborns with hypoxic ischaemic encephalopathy."
+      },
+      "pico": {
+        "P": "Newborns with hypoxic ischaemic encephalopathy",
+        "I": "Cooling therapy (mild hypothermia)",
+        "C": "Standard care or no cooling therapy",
+        "O": "Reduction in neurological sequelae without adverse effects"
+      },
+      "publication_pmids": [
+        "21464374",
+        "11230586",
+        "15607598",
+        "12878450",
+        "20488453",
+        "20855387",
+        "12165594",
+        "19797281",
+        "16407967",
+        "16221780",
+        "15721471"
+      ],
+      "publication_pmids_count": 11
+    },
+    {
+      "selected_index": 2159,
+      "id": "MLSEP019178",
+      "origin": {
+        "pmid": "29192424",
+        "title": "Interventions for Old World cutaneous leishmaniasis."
+      },
+      "pico": {
+        "P": "Patients with Old World cutaneous leishmaniasis",
+        "I": "Systemic and topical treatments for Old World cutaneous leishmaniasis",
+        "C": "Spontaneous healing or other alternative treatments",
+        "O": "Efficacy and safety of systemic and topical treatments for Old World cutaneous leishmaniasis"
+      },
+      "publication_pmids": [
+        "1887473",
+        "2177041",
+        "12558620",
+        "9024895",
+        "17586452",
+        "7677218",
+        "15696988",
+        "12243707",
+        "16780497",
+        "10487452",
+        "7591417",
+        "12856053",
+        "1909469",
+        "15237267",
+        "15701249",
+        "7872446",
+        "15649196",
+        "16961529",
+        "17376205",
+        "16863518",
+        "17178983",
+        "8561269",
+        "15757817",
+        "10487453",
+        "17466071",
+        "8678570",
+        "15090013",
+        "15485530",
+        "1567264",
+        "1663089",
+        "15791515",
+        "17175700",
+        "12207774",
+        "9499605",
+        "11907288",
+        "9071622",
+        "12745852",
+        "12121563",
+        "9579209"
+      ],
+      "publication_pmids_count": 39
+    },
+    {
+      "selected_index": 2212,
+      "id": "MLSEP019231",
+      "origin": {
+        "pmid": "10796823",
+        "title": "Preoperative radiotherapy for esophageal carcinoma. Oeosphageal Cancer Collaborative Group."
+      },
+      "pico": {
+        "P": "Patients with potentially resectable esophageal carcinoma",
+        "I": "Preoperative radiotherapy",
+        "C": "No preoperative radiotherapy or alternative treatment",
+        "O": "Benefit of preoperative radiotherapy in treating esophageal carcinoma"
+      },
+      "publication_pmids": [
+        "2646253",
+        "1455880",
+        "1496141",
+        "3043582",
+        "6794167"
+      ],
+      "publication_pmids_count": 5
+    },
+    {
+      "selected_index": 2745,
+      "id": "MLSEP019764",
+      "origin": {
+        "pmid": "20091613",
+        "title": "Disulfiram for the treatment of cocaine dependence."
+      },
+      "pico": {
+        "P": "Patients with cocaine dependence",
+        "I": "Disulfiram treatment",
+        "C": "Placebo or standard care",
+        "O": "Efficacy in treating cocaine dependence"
+      },
+      "publication_pmids": [
+        "9692270",
+        "18079068",
+        "10862808",
+        "10723850",
+        "17174102"
+      ],
+      "publication_pmids_count": 5
+    },
+    {
+      "selected_index": 2929,
+      "id": "MLSEP019948",
+      "origin": {
+        "pmid": "17943785",
+        "title": "Methenamine hippurate for preventing urinary tract infections."
+      },
+      "pico": {
+        "P": "Patients at risk of urinary tract infections",
+        "I": "Methenamine hippurate as a preventive measure for UTIs",
+        "C": "Antibiotics or other standard care for UTI prevention",
+        "O": "Reduction in UTI incidence, adverse effects of methenamine hippurate"
+      },
+      "publication_pmids": [
+        "6761854",
+        "12174159",
+        "3887639",
+        "3897577",
+        "6515752",
+        "6377577",
+        "4878126",
+        "766295",
+        "17043681",
+        "2659132",
+        "1099490",
+        "3544661",
+        "3535165"
+      ],
+      "publication_pmids_count": 13
+    },
+    {
+      "selected_index": 3019,
+      "id": "MLSEP020038",
+      "origin": {
+        "pmid": "10908540",
+        "title": "Pramipexole for levodopa-induced complications in Parkinson's disease."
+      },
+      "pico": {
+        "P": "Patients with Parkinson's disease already established on levodopa",
+        "I": "Adjuvant pramipexole therapy",
+        "C": "Inactive placebo",
+        "O": "Efficacy and safety of pramipexole in managing levodopa-induced complications"
+      },
+      "publication_pmids": [
+        "10201413",
+        "9222185",
+        "9339690"
+      ],
+      "publication_pmids_count": 3
+    },
+    {
+      "selected_index": 3095,
+      "id": "MLSEP020114",
+      "origin": {
+        "pmid": "10796315",
+        "title": "Anticoagulants versus antiplatelet therapy for preventing stroke in patients with nonrheumatic atrial fibrillation and a history of stroke or transient ischemic attacks."
+      },
+      "pico": {
+        "P": "Patients with nonrheumatic atrial fibrillation and a history of stroke or transient ischemic attacks",
+        "I": "Anticoagulants",
+        "C": "Antiplatelet therapy",
+        "O": "Preventing stroke"
+      },
+      "publication_pmids": [
+        "9158644"
+      ],
+      "publication_pmids_count": 1
+    },
+    {
+      "selected_index": 3203,
+      "id": "MLSEP020222",
+      "origin": {
+        "pmid": "22972150",
+        "title": "Integration of HIV/AIDS services with maternal, neonatal and child health, nutrition, and family planning services."
+      },
+      "pico": {
+        "P": "HIV/AIDS patients, pregnant women, neonates, children, and families accessing MNCHN and FP services",
+        "I": "Integration of HIV/AIDS services with MNCHN, nutrition, and FP services",
+        "C": "Non-integrated HIV/AIDS services or standard care without integration",
+        "O": "Reduction in maternal and child mortality, improved HIV/AIDS control, effectiveness of service integration"
+      },
+      "publication_pmids": [
+        "18209677",
+        "17031321",
+        "18564353",
+        "19304422",
+        "20081394",
+        "16640622",
+        "20081383",
+        "17984757",
+        "20081382",
+        "18671876",
+        "7481982",
+        "19418715",
+        "18770876",
+        "20072773",
+        "8562000",
+        "17901066",
+        "19809271",
+        "17609036",
+        "20081393",
+        "12869835"
+      ],
+      "publication_pmids_count": 20
+    },
+    {
+      "selected_index": 3249,
+      "id": "MLSEP020268",
+      "origin": {
+        "pmid": "17943839",
+        "title": "Self-management education programmes by lay leaders for people with chronic conditions."
+      },
+      "pico": {
+        "P": "People with chronic conditions",
+        "I": "Lay-led self-management education programmes",
+        "C": "Standard care or other forms of self-management education",
+        "O": "Promotion of self-care and improved management of chronic conditions"
+      },
+      "publication_pmids": [
+        "7135159",
+        "16051927",
+        "15774990",
+        "15341548",
+        "11140073",
+        "1298950",
+        "11838857",
+        "10413387",
+        "12424783",
+        "16256442",
+        "3772925",
+        "11081007",
+        "12764513",
+        "7962893",
+        "11315833",
+        "12408202",
+        "11238152",
+        "11142075",
+        "11815494",
+        "12649049",
+        "15076811",
+        "7593870",
+        "10532497",
+        "17325405",
+        "8846745",
+        "10197829",
+        "12687508",
+        "15385907",
+        "1740599",
+        "16859871",
+        "15950833",
+        "3505528",
+        "9637578",
+        "11308064",
+        "15186875",
+        "17040926",
+        "9854760",
+        "12707480",
+        "14639082",
+        "15191260",
+        "12188054",
+        "16099784",
+        "8788354",
+        "10493473",
+        "16281998",
+        "15883575",
+        "10955337",
+        "15345735",
+        "14638564",
+        "15186865",
+        "15479685",
+        "1830257",
+        "3964314"
+      ],
+      "publication_pmids_count": 53
+    },
+    {
+      "selected_index": 3312,
+      "id": "MLSEP020331",
+      "origin": {
+        "pmid": "23152258",
+        "title": "Double-bundle versus single-bundle reconstruction for anterior cruciate ligament rupture in adults."
+      },
+      "pico": {
+        "P": "Adults with anterior cruciate ligament rupture",
+        "I": "Double-bundle reconstruction",
+        "C": "Single-bundle reconstruction",
+        "O": "Improved outcomes in terms of functional recovery, stability, and patient satisfaction"
+      },
+      "publication_pmids": [
+        "19557391",
+        "19263035",
+        "20734043",
+        "20668835",
+        "18283207",
+        "15174545",
+        "17202919",
+        "18208432",
+        "17091015",
+        "17216271",
+        "21550760",
+        "19793927",
+        "20434660",
+        "18193194",
+        "20934698",
+        "18490472",
+        "19038705",
+        "22458064",
+        "17940145",
+        "18237696",
+        "16517306",
+        "17589826",
+        "19794165",
+        "21350065",
+        "20956265",
+        "21667181",
+        "18344663",
+        "17560476",
+        "18760213",
+        "19323939",
+        "21798637",
+        "21311868",
+        "18989731",
+        "19509412",
+        "21610263",
+        "21316972"
+      ],
+      "publication_pmids_count": 36
+    },
+    {
+      "selected_index": 3541,
+      "id": "MLSEP020560",
+      "origin": {
+        "pmid": "18843684",
+        "title": "Increased police patrols for preventing alcohol-impaired driving."
+      },
+      "pico": {
+        "P": "Drivers at risk of alcohol-impaired driving",
+        "I": "Increased police patrols",
+        "C": "Standard police patrols",
+        "O": "Reduction in alcohol-related driving, crashes, and injuries"
+      },
+      "publication_pmids": [
+        "8659651",
+        "15681569",
+        "15161896",
+        "11066184",
+        "10493283",
+        "8888779",
+        "3711962",
+        "12199836",
+        "11125775",
+        "10853402",
+        "15733246",
+        "3580094",
+        "9231446"
+      ],
+      "publication_pmids_count": 13
+    },
+    {
+      "selected_index": 3609,
+      "id": "MLSEP020628",
+      "origin": {
+        "pmid": "19821319",
+        "title": "Alpha-2 adrenergic agonists for the prevention of cardiac complications among patients undergoing surgery."
+      },
+      "pico": {
+        "P": "Patients undergoing surgery",
+        "I": "Alpha-2 adrenergic agonists",
+        "C": "Placebo or standard care",
+        "O": "Prevention of cardiac complications"
+      },
+      "publication_pmids": [
+        "17241505",
+        "12631048",
+        "1524175",
+        "7549366",
+        "9809953",
+        "2900737",
+        "17202010",
+        "17023769",
+        "10195508",
+        "1347229",
+        "17572323",
+        "18479744",
+        "11575340",
+        "15616082",
+        "8873539",
+        "9135361",
+        "11867385",
+        "20018300",
+        "18294411",
+        "24692763",
+        "14693611",
+        "9249114",
+        "8442970",
+        "1878231",
+        "10417466",
+        "2006600",
+        "17167618",
+        "16202898",
+        "1944967",
+        "11981150",
+        "19471725",
+        "9676863",
+        "18929284",
+        "16731324",
+        "19471805",
+        "7637157",
+        "18499604",
+        "10342005",
+        "16171667",
+        "11309017",
+        "11546715",
+        "16914460",
+        "8874906",
+        "9793811",
+        "8160943",
+        "19367170",
+        "10477528",
+        "11000660",
+        "8681596",
+        "10594409",
+        "1997045",
+        "10519497",
+        "8831304",
+        "8400756",
+        "14599629",
+        "19020132",
+        "19471716",
+        "15891317",
+        "15653705",
+        "29047",
+        "19936416",
+        "7943770",
+        "12670809",
+        "8868976",
+        "10434216",
+        "1931396",
+        "11305831",
+        "1990896",
+        "18044282",
+        "8431573",
+        "12139535",
+        "12145072",
+        "14598620",
+        "15728070",
+        "14566527",
+        "11575336",
+        "21063303",
+        "9052312",
+        "1359808",
+        "1854025",
+        "10816895",
+        "12596619",
+        "19567759",
+        "11473862",
+        "18499632",
+        "3605732",
+        "9067044",
+        "19786862",
+        "1859765",
+        "18929283",
+        "2407044",
+        "17241503",
+        "3942335",
+        "7978437",
+        "9771298",
+        "20666328",
+        "16863391",
+        "9389260",
+        "8403135",
+        "9661567",
+        "10773503",
+        "10512253",
+        "7978438",
+        "16517328",
+        "7887119",
+        "11025232",
+        "7879930",
+        "11878517",
+        "16426470",
+        "20175241",
+        "17321924",
+        "10472699",
+        "1932647",
+        "16243997",
+        "1443738",
+        "11880014",
+        "11916791",
+        "12402720",
+        "9523798",
+        "19854793",
+        "1683183",
+        "2248839",
+        "2943699",
+        "19333153",
+        "19010741",
+        "9051539",
+        "8400091",
+        "9706918",
+        "1675042",
+        "1928767",
+        "17000786",
+        "9291757",
+        "8342838",
+        "8363079",
+        "8686824",
+        "15144295",
+        "10078667",
+        "15728081",
+        "2247116",
+        "14579210",
+        "19550337",
+        "2502935",
+        "15918389",
+        "11888226",
+        "18249336",
+        "8318243",
+        "7741286",
+        "1628636",
+        "7912877",
+        "9054252",
+        "15277909",
+        "8318241",
+        "10900497",
+        "9068327",
+        "8638790",
+        "9233740",
+        "1643675",
+        "18205960",
+        "11004033",
+        "3017039",
+        "10773509",
+        "9842842",
+        "12006795",
+        "8355864",
+        "1990899",
+        "8041979",
+        "18806050",
+        "10735677",
+        "8198904",
+        "3434164",
+        "12673431",
+        "18580347",
+        "20535016",
+        "20039221",
+        "15189665",
+        "7980723",
+        "10735784",
+        "9054253",
+        "10212709"
+      ],
+      "publication_pmids_count": 179
+    },
+    {
+      "selected_index": 4105,
+      "id": "MLSEP021124",
+      "origin": {
+        "pmid": "21735412",
+        "title": "Lifestyle changes in women with polycystic ovary syndrome."
+      },
+      "pico": {
+        "P": "Reproductive-aged women with polycystic ovary syndrome",
+        "I": "Lifestyle changes incorporating diet, exercise, and behavioural interventions",
+        "C": "Standard care or no intervention",
+        "O": "Weight management (weight loss, maintenance, or prevention of excess weight gain)"
+      },
+      "publication_pmids": [
+        "10902790",
+        "22158730",
+        "22855917",
+        "20943753",
+        "18728175",
+        "9745406",
+        "10946879",
+        "16900227",
+        "22309675",
+        "10896648",
+        "20858697",
+        "19494176",
+        "22154367",
+        "22246378",
+        "3410189",
+        "16886591",
+        "20926534",
+        "10902794",
+        "18505468",
+        "8150098",
+        "17168480",
+        "15866584",
+        "15302293",
+        "11832527",
+        "9688382",
+        "19477300",
+        "19204602",
+        "17264174",
+        "9920077",
+        "21419674",
+        "18158291",
+        "20004371"
+      ],
+      "publication_pmids_count": 32
+    }
+  ]
+}
