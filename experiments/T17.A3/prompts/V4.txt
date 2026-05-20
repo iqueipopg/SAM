@@ -1,0 +1,35 @@
+Cochrane expert. Identify framework. ALL output must be in ENGLISH.
+
+KEYWORDS GUIDE:
+- PICO: "effective", "reduce", "improve", "versus", "compared to", "treatment"
+- SPIDER: "experience", "barriers", "perceptions", "feelings", "challenges", "how do", "what do"
+- PECO: "risk", "cause", "exposure", "factor", "associated with"
+- PCC: "prevalence", "frequency", "how many", "proportion"
+
+Query: "{query}"
+
+Step 1 - Detect keywords:
+Keywords found: [list keywords from query]
+
+Step 2 - Choose framework:
+If comparing intervention/treatment -> PICO
+If exploring experiences/barriers/perceptions -> SPIDER
+If studying risk/exposure causes -> PECO
+If describing prevalence -> PCC
+
+Framework: [your choice]
+
+Step 3 - Extract components (ALL values in English):
+JSON (no arrays):
+{{
+  "framework": "PICO/SPIDER/PECO/PCC",
+  "research_question": "English research question",
+  "population": "English description",
+  "intervention": "English full name (no abbreviations)",
+  "comparator": "English description",
+  "outcome": "English description"
+}}
+REASONING STEPS (think internally before producing JSON):
+CoT-Step 1: Identify the framework using the KEYWORDS GUIDE above.
+CoT-Step 2: Extract atomic components — one concept per field, no lists.
+CoT-Step 3: Validate completeness — every required field present and non-empty; framework matches the components shape.

@@ -1,0 +1,84 @@
+Cochrane expert. Identify framework. ALL output must be in ENGLISH.
+
+KEYWORDS GUIDE:
+- PICO: "effective", "reduce", "improve", "versus", "compared to", "treatment"
+- SPIDER: "experience", "barriers", "perceptions", "feelings", "challenges", "how do", "what do"
+- PECO: "risk", "cause", "exposure", "factor", "associated with"
+- PCC: "prevalence", "frequency", "how many", "proportion"
+
+Query: "{query}"
+
+Step 1 - Detect keywords:
+Keywords found: [list keywords from query]
+
+Step 2 - Choose framework:
+If comparing intervention/treatment -> PICO
+If exploring experiences/barriers/perceptions -> SPIDER
+If studying risk/exposure causes -> PECO
+If describing prevalence -> PCC
+
+Framework: [your choice]
+
+Step 3 - Extract components (ALL values in English):
+JSON (no arrays):
+{{
+  "framework": "PICO/SPIDER/PECO/PCC",
+  "research_question": "English research question",
+  "population": "English description",
+  "intervention": "English full name (no abbreviations)",
+  "comparator": "English description",
+  "outcome": "English description"
+}}
+EXAMPLES (reference patterns across domains):
+
+EXAMPLE 1 (psychotherapy / PICO):
+Query: "Is cognitive behavioral therapy more effective than sertraline for major depression in adults?"
+{{
+  "framework": "PICO",
+  "research_question": "Is CBT more effective than sertraline for major depression in adults?",
+  "population": "Adults with major depressive disorder",
+  "intervention": "Cognitive Behavioral Therapy",
+  "comparator": "Sertraline",
+  "outcome": "Depression remission"
+}}
+
+EXAMPLE 2 (surgery / PICO):
+Query: "Does laparoscopic cholecystectomy reduce postoperative pain compared with open cholecystectomy?"
+{{
+  "framework": "PICO",
+  "research_question": "Does laparoscopic cholecystectomy reduce postoperative pain vs open cholecystectomy?",
+  "population": "Adults undergoing cholecystectomy",
+  "intervention": "Laparoscopic cholecystectomy",
+  "comparator": "Open cholecystectomy",
+  "outcome": "Postoperative pain"
+}}
+
+EXAMPLE 3 (screening / PICO):
+Query: "Does mammography screening reduce breast cancer mortality in women aged 50-69?"
+{{
+  "framework": "PICO",
+  "research_question": "Does mammography screening reduce breast cancer mortality in women 50-69?",
+  "population": "Women aged 50-69",
+  "intervention": "Mammography screening",
+  "comparator": "No screening",
+  "outcome": "Breast cancer mortality"
+}}
+
+EXAMPLE 4 (prevention / PICO):
+Query: "Does HPV vaccination prevent cervical cancer in adolescent girls?"
+{{
+  "framework": "PICO",
+  "research_question": "Does HPV vaccination prevent cervical cancer in adolescent girls?",
+  "population": "Adolescent girls",
+  "intervention": "HPV vaccination",
+  "comparator": "No vaccination",
+  "outcome": "Cervical cancer incidence"
+}}
+
+ATOMICITY REQUIREMENT:
+Each component (population, intervention, comparator, outcome) must be a SINGLE specific concept — not a list, not a description with multiple items combined by 'and' / 'or' / commas. Examples:
+  GOOD intervention: "Cognitive Behavioral Therapy"
+  BAD intervention:  "CBT, mindfulness and pharmacotherapy"
+  GOOD outcome: "Depression remission"
+  BAD outcome:  "Depression, anxiety, and quality of life"
+If the question implies multiple interventions or outcomes, pick the most specific / primary one and put the rest aside.

@@ -81,7 +81,7 @@ class Agent1Protocol(BaseAgent):
 
     # ------------------------------------------------------------------ #
 
-    def generate_protocol(self, user_query):
+    def generate_protocol(self, user_query, metadata_prompt_template: str | None = None):
         print(f"\n\U0001f50d Query: '{user_query}'")
         if self.model is None:
             self.load_model()
@@ -90,7 +90,7 @@ class Agent1Protocol(BaseAgent):
         en_query = self._translate_to_english(user_query)
         print(f"  English query: '{en_query}'")
 
-        metadata = self._generate_metadata(en_query)
+        metadata = self._generate_metadata(en_query, prompt_template=metadata_prompt_template)
         print(f"\u2705 Step 1/2: Framework={metadata['framework']}")
         criteria = self._generate_criteria(en_query, metadata)
         print("\u2705 Step 2/2: Criteria generated")
@@ -347,34 +347,44 @@ class Agent1Protocol(BaseAgent):
 
         return translated
 
-    def _generate_metadata(self, query):
-        prompt = (
-            "Cochrane expert. Identify framework. ALL output must be in ENGLISH.\n\n"
-            "KEYWORDS GUIDE:\n"
-            '- PICO: "effective", "reduce", "improve", "versus", "compared to", "treatment"\n'
-            '- SPIDER: "experience", "barriers", "perceptions", "feelings", "challenges", "how do", "what do"\n'
-            '- PECO: "risk", "cause", "exposure", "factor", "associated with"\n'
-            '- PCC: "prevalence", "frequency", "how many", "proportion"\n\n'
-            f'Query: "{query}"\n\n'
-            "Step 1 - Detect keywords:\n"
-            "Keywords found: [list keywords from query]\n\n"
-            "Step 2 - Choose framework:\n"
-            "If comparing intervention/treatment -> PICO\n"
-            "If exploring experiences/barriers/perceptions -> SPIDER\n"
-            "If studying risk/exposure causes -> PECO\n"
-            "If describing prevalence -> PCC\n\n"
-            "Framework: [your choice]\n\n"
-            "Step 3 - Extract components (ALL values in English):\n"
-            "JSON (no arrays):\n"
-            "{\n"
-            '  "framework": "PICO/SPIDER/PECO/PCC",\n'
-            '  "research_question": "English research question",\n'
-            '  "population": "English description",\n'
-            '  "intervention": "English full name (no abbreviations)",\n'
-            '  "comparator": "English description",\n'
-            '  "outcome": "English description"\n'
-            "}"
-        )
+    def _generate_metadata(self, query, prompt_template: str | None = None):
+        """Extract PICO/SPIDER/PECO/PCC framework + components from a research question.
+
+        Used by T17.A3 prompt-iteration orchestrator; ``None`` ⇒ original hardcoded prompt
+        (bit-identical baseline). When ``prompt_template`` is provided, it is rendered with
+        ``.format(query=query)`` and used in place of the baseline. All post-processing
+        (JSON parsing, framework correction PICO→SPIDER/PECO) remains unchanged.
+        """
+        if prompt_template is None:
+            prompt = (
+                "Cochrane expert. Identify framework. ALL output must be in ENGLISH.\n\n"
+                "KEYWORDS GUIDE:\n"
+                '- PICO: "effective", "reduce", "improve", "versus", "compared to", "treatment"\n'
+                '- SPIDER: "experience", "barriers", "perceptions", "feelings", "challenges", "how do", "what do"\n'
+                '- PECO: "risk", "cause", "exposure", "factor", "associated with"\n'
+                '- PCC: "prevalence", "frequency", "how many", "proportion"\n\n'
+                f'Query: "{query}"\n\n'
+                "Step 1 - Detect keywords:\n"
+                "Keywords found: [list keywords from query]\n\n"
+                "Step 2 - Choose framework:\n"
+                "If comparing intervention/treatment -> PICO\n"
+                "If exploring experiences/barriers/perceptions -> SPIDER\n"
+                "If studying risk/exposure causes -> PECO\n"
+                "If describing prevalence -> PCC\n\n"
+                "Framework: [your choice]\n\n"
+                "Step 3 - Extract components (ALL values in English):\n"
+                "JSON (no arrays):\n"
+                "{\n"
+                '  "framework": "PICO/SPIDER/PECO/PCC",\n'
+                '  "research_question": "English research question",\n'
+                '  "population": "English description",\n'
+                '  "intervention": "English full name (no abbreviations)",\n'
+                '  "comparator": "English description",\n'
+                '  "outcome": "English description"\n'
+                "}"
+            )
+        else:
+            prompt = prompt_template.format(query=query)
 
         response = self._simple_generate(prompt, max_tokens=400)
         try:
