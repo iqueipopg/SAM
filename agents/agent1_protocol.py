@@ -350,12 +350,21 @@ class Agent1Protocol(BaseAgent):
     def _generate_metadata(self, query, prompt_template: str | None = None):
         """Extract PICO/SPIDER/PECO/PCC framework + components from a research question.
 
-        Used by T17.A3 prompt-iteration orchestrator; ``None`` ⇒ original hardcoded prompt
-        (bit-identical baseline). When ``prompt_template`` is provided, it is rendered with
-        ``.format(query=query)`` and used in place of the baseline. All post-processing
-        (JSON parsing, framework correction PICO→SPIDER/PECO) remains unchanged.
+        Used by T17.A3 prompt-iteration orchestrator; ``None`` ⇒ hardcoded baseline,
+        which is the T17.A3 winning variant **V2** (V0 + 4 multi-domain few-shot
+        examples — psychotherapy/surgery/screening/prevention). When
+        ``prompt_template`` is provided, it is rendered with ``.format(query=query)``
+        and used in place of the baseline (so callers passing the raw V2.txt content
+        get a byte-identical prompt). All post-processing (JSON parsing, framework
+        correction PICO→SPIDER/PECO) remains unchanged.
         """
         if prompt_template is None:
+            # T17.A3 winner: V2 = V0 baseline + 4 multi-domain few-shot examples
+            # (psychotherapy / surgery / screening / prevention). macro=0.7036,
+            # pct_3of4=0.80 vs V0 0.65. Source: experiments/T17.A3/prompts/V2.txt.
+            # Build via string concatenation (project rule #3 forbids multiline
+            # f-strings inside class methods); query is interpolated explicitly so
+            # literal '{' / '}' in the JSON schema and example blocks need no escaping.
             prompt = (
                 "Cochrane expert. Identify framework. ALL output must be in ENGLISH.\n\n"
                 "KEYWORDS GUIDE:\n"
@@ -363,7 +372,7 @@ class Agent1Protocol(BaseAgent):
                 '- SPIDER: "experience", "barriers", "perceptions", "feelings", "challenges", "how do", "what do"\n'
                 '- PECO: "risk", "cause", "exposure", "factor", "associated with"\n'
                 '- PCC: "prevalence", "frequency", "how many", "proportion"\n\n'
-                f'Query: "{query}"\n\n'
+                'Query: "' + query + '"\n\n'
                 "Step 1 - Detect keywords:\n"
                 "Keywords found: [list keywords from query]\n\n"
                 "Step 2 - Choose framework:\n"
@@ -381,7 +390,48 @@ class Agent1Protocol(BaseAgent):
                 '  "intervention": "English full name (no abbreviations)",\n'
                 '  "comparator": "English description",\n'
                 '  "outcome": "English description"\n'
-                "}"
+                "}\n"
+                "EXAMPLES (reference patterns across domains):\n\n"
+                "EXAMPLE 1 (psychotherapy / PICO):\n"
+                'Query: "Is cognitive behavioral therapy more effective than sertraline for major depression in adults?"\n'
+                "{\n"
+                '  "framework": "PICO",\n'
+                '  "research_question": "Is CBT more effective than sertraline for major depression in adults?",\n'
+                '  "population": "Adults with major depressive disorder",\n'
+                '  "intervention": "Cognitive Behavioral Therapy",\n'
+                '  "comparator": "Sertraline",\n'
+                '  "outcome": "Depression remission"\n'
+                "}\n\n"
+                "EXAMPLE 2 (surgery / PICO):\n"
+                'Query: "Does laparoscopic cholecystectomy reduce postoperative pain compared with open cholecystectomy?"\n'
+                "{\n"
+                '  "framework": "PICO",\n'
+                '  "research_question": "Does laparoscopic cholecystectomy reduce postoperative pain vs open cholecystectomy?",\n'
+                '  "population": "Adults undergoing cholecystectomy",\n'
+                '  "intervention": "Laparoscopic cholecystectomy",\n'
+                '  "comparator": "Open cholecystectomy",\n'
+                '  "outcome": "Postoperative pain"\n'
+                "}\n\n"
+                "EXAMPLE 3 (screening / PICO):\n"
+                'Query: "Does mammography screening reduce breast cancer mortality in women aged 50-69?"\n'
+                "{\n"
+                '  "framework": "PICO",\n'
+                '  "research_question": "Does mammography screening reduce breast cancer mortality in women 50-69?",\n'
+                '  "population": "Women aged 50-69",\n'
+                '  "intervention": "Mammography screening",\n'
+                '  "comparator": "No screening",\n'
+                '  "outcome": "Breast cancer mortality"\n'
+                "}\n\n"
+                "EXAMPLE 4 (prevention / PICO):\n"
+                'Query: "Does HPV vaccination prevent cervical cancer in adolescent girls?"\n'
+                "{\n"
+                '  "framework": "PICO",\n'
+                '  "research_question": "Does HPV vaccination prevent cervical cancer in adolescent girls?",\n'
+                '  "population": "Adolescent girls",\n'
+                '  "intervention": "HPV vaccination",\n'
+                '  "comparator": "No vaccination",\n'
+                '  "outcome": "Cervical cancer incidence"\n'
+                "}\n"
             )
         else:
             prompt = prompt_template.format(query=query)
