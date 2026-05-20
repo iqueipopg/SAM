@@ -33,6 +33,17 @@
       "max_workers": 4,
       "model_name": null
     },
+    "agent4_validation_split": {
+      "model_name": null,
+      "reporter_temperature": 0.2,
+      "decider_temperature": 0.2,
+      "reporter_max_tokens": 500,
+      "decider_max_tokens": 200,
+      "reporter_repetition_penalty": 1.3,
+      "decider_repetition_penalty": 1.3,
+      "max_input_chars": 6000,
+      "max_workers": 4
+    },
     "agent5_extraction": {
       "temperature": 0.1,
       "repetition_penalty": 1.3,

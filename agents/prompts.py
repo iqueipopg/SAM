@@ -988,3 +988,323 @@ def get_a8_section_prompt_localized(
             population_summary=population_summary,
             language=language,
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AGENT 4 FULLTEXT SPLIT (T17.B.1) — reporter + decider templates
+# ══════════════════════════════════════════════════════════════════════════════
+# Used by Agent4FullTextSplit (agents/agent4_fulltext_split.py).
+# Reporter: description-only (no decision). Temperature 0.2, max_tokens 500.
+# Decider: decision-only (no paper). Temperature 0.2, max_tokens 200.
+# Repetition penalty 1.3 (project rule #5).
+# Spanish prompt text, English JSON keys, Spanish JSON values (project rule #12).
+# Templates are pre-registered in docs/iterations/T17.B.1_hypothesis.md sections
+# 6.1, 6.2 and 7. V1 is literal from the pre-registro. V2/V3/V4 carry the
+# scoped modifications described in section 7.
+
+AGENT4_REPORTER_TEMPLATE_V1 = """Eres un extractor de información para una revisión sistemática. Tu única
+tarea es describir lo que dice el paper. NO decides incluir ni excluir.
+NO usas las palabras "elegible", "incluido", "excluido", "cumple".
+
+Entrada:
+- Texto del paper.
+- Criterios PICO de la revisión (referencia, no para juzgar).
+
+Salida: JSON exacto con esta estructura, nada más.
+
+{
+  "population": "<sujetos: condición, edad/rango, tamaño muestral, demografía relevante. 'no especificado' si falta>",
+  "intervention": "<qué se prueba o expone>",
+  "comparator": "<grupo control o comparación. 'ninguno' si no aplica>",
+  "outcomes": "<desenlaces medidos>",
+  "study_design": "<ej: RCT, cohorte prospectiva, transversal, revisión narrativa, protocolo, case report>",
+  "publication_type": "<artículo original | review | protocolo | comentario | conferencia | otro>",
+  "language": "<idioma del paper>",
+  "notes": "<máx 2 frases. Solo si el paper afirma explícitamente algo crítico para PICO. Si nada, 'ninguna'.>"
+}
+
+Reglas:
+- Describe lo que el paper dice. No infieras lo que no está.
+- Si un campo falta, "no especificado". No rellenes con suposiciones.
+- Máximo 500 tokens totales.
+- Solo JSON válido. Sin markdown, sin texto previo ni posterior.
+
+PICO de referencia:
+{pico_block}
+
+PAPER:
+Título: {title}
+Revista: {journal} ({year})
+
+TEXTO (puede estar truncado):
+{paper_text}
+"""
+
+
+AGENT4_REPORTER_TEMPLATE_V2 = """Eres un extractor de información para una revisión sistemática. Tu única
+tarea es describir lo que dice el paper. NO decides incluir ni excluir.
+NO usas las palabras "elegible", "incluido", "excluido", "cumple".
+
+Entrada:
+- Texto del paper.
+- Criterios PICO de la revisión (referencia, no para juzgar).
+
+Salida: JSON exacto con esta estructura, nada más.
+
+{
+  "population": "<sujetos: condición, edad/rango, tamaño muestral, demografía relevante. 'no especificado' si falta>",
+  "intervention": "<qué se prueba o expone>",
+  "comparator": "<grupo control o comparación. 'ninguno' si no aplica>",
+  "outcomes": "<desenlaces medidos>",
+  "study_design": "<ej: RCT, cohorte prospectiva, transversal, revisión narrativa, protocolo, case report>",
+  "publication_type": "<artículo original | review | protocolo | comentario | conferencia | otro>",
+  "language": "<idioma del paper>",
+  "notes": "<máx 2 frases. Solo si el paper afirma explícitamente algo crítico para PICO. Si nada, 'ninguna'.>",
+  "exclusion_signals": "<señales descriptivas sin emitir juicio: ej. 'el paper se identifica como protocolo no ejecutado', 'no menciona el desenlace primario'. 'ninguna' si no aplica>"
+}
+
+Reglas:
+- Describe lo que el paper dice. No infieras lo que no está.
+- Si un campo falta, "no especificado". No rellenes con suposiciones.
+- `exclusion_signals` es DESCRIPTIVO. Reporta señales objetivas que un revisor podría usar; NO indiques si excluir o no.
+- Máximo 500 tokens totales.
+- Solo JSON válido. Sin markdown, sin texto previo ni posterior.
+
+PICO de referencia:
+{pico_block}
+
+PAPER:
+Título: {title}
+Revista: {journal} ({year})
+
+TEXTO (puede estar truncado):
+{paper_text}
+"""
+
+
+AGENT4_DECIDER_TEMPLATE_V1 = """Eres un revisor que decide si un paper se incluye en una revisión
+sistemática. Trabajas SOLO con un reporte estructurado producido por
+otro revisor — no ves el paper original.
+
+Entrada:
+- Reporte JSON del paper.
+- Criterios PICO y de inclusión/exclusión.
+
+Salida: JSON exacto.
+
+{
+  "decision": "INCLUDE" | "EXCLUDE",
+  "reason": "<1-2 frases. Cita los campos del reporte.>",
+  "confidence": "high" | "medium" | "low"
+}
+
+Reglas:
+- EXCLUDE si algún campo del reporte contradice explícitamente los criterios.
+- INCLUDE si todos los campos verificables son consistentes.
+- Si un campo crítico viene como "no especificado", inclínate a INCLUDE
+  con confidence "low". La decisión final se valida en fulltext aguas
+  abajo — no excluyas por información ausente.
+- Solo JSON válido. Sin markdown, sin preámbulo ni cierre.
+
+Criterios de la revisión:
+{criteria_block}
+
+Reporte del paper:
+{reporter_json}
+"""
+
+
+AGENT4_DECIDER_TEMPLATE_V3 = """Eres un revisor que decide si un paper se incluye en una revisión
+sistemática. Trabajas SOLO con un reporte estructurado producido por
+otro revisor — no ves el paper original.
+
+Entrada:
+- Reporte JSON del paper.
+- Criterios PICO y de inclusión/exclusión.
+
+Razona en 1-2 frases sobre los campos del reporte antes de emitir el JSON
+final. El razonamiento puede preceder al JSON pero el JSON debe ser el
+último bloque de la respuesta.
+
+Salida: JSON exacto.
+
+{
+  "decision": "INCLUDE" | "EXCLUDE",
+  "reason": "<1-2 frases. Cita los campos del reporte.>",
+  "confidence": "high" | "medium" | "low"
+}
+
+Reglas:
+- EXCLUDE si algún campo del reporte contradice explícitamente los criterios.
+- INCLUDE si todos los campos verificables son consistentes.
+- Si un campo crítico viene como "no especificado", inclínate a INCLUDE
+  con confidence "low". La decisión final se valida en fulltext aguas
+  abajo — no excluyas por información ausente.
+- Solo JSON válido. Sin markdown, sin preámbulo ni cierre.
+
+Criterios de la revisión:
+{criteria_block}
+
+Reporte del paper:
+{reporter_json}
+"""
+
+
+AGENT4_DECIDER_TEMPLATE_V4 = """Eres un revisor que decide si un paper se incluye en una revisión
+sistemática. Trabajas SOLO con un reporte estructurado producido por
+otro revisor — no ves el paper original.
+
+Entrada:
+- Reporte JSON del paper.
+- Criterios PICO y de inclusión/exclusión.
+
+Salida: JSON exacto.
+
+{
+  "decision": "INCLUDE" | "EXCLUDE",
+  "reason": "<1-2 frases. Cita los campos del reporte.>",
+  "confidence": "high" | "medium" | "low"
+}
+
+Reglas:
+- EXCLUDE si algún campo del reporte contradice explícitamente los criterios.
+- INCLUDE si todos los campos verificables son consistentes.
+- Decide en función de la consistencia entre los campos del reporte y los criterios. Si un campo crítico viene como 'no especificado', evalúa el resto del reporte de forma neutra — sin inclinación predeterminada hacia INCLUDE ni hacia EXCLUDE.
+- Solo JSON válido. Sin markdown, sin preámbulo ni cierre.
+
+Criterios de la revisión:
+{criteria_block}
+
+Reporte del paper:
+{reporter_json}
+"""
+
+
+def _format_a4_pico_block(protocol):
+    """Render a compact PICO/SPIDER/PECO/PCC reference block for the reporter.
+
+    Returns a plain-text block (one line per slot). Used as descriptive
+    reference only — the reporter is instructed NOT to use it for judgement.
+    """
+    framework = protocol.get("framework", "PICO") or "PICO"
+    lines = ["Framework: " + str(framework)]
+    slots = [
+        ("population", "Población"),
+        ("intervention", "Intervención"),
+        ("exposure", "Exposición"),
+        ("phenomenon_of_interest", "Fenómeno de interés"),
+        ("interest", "Interés"),
+        ("concept", "Concepto"),
+        ("comparator", "Comparador"),
+        ("context", "Contexto"),
+        ("outcome", "Desenlace"),
+        ("evaluation", "Evaluación"),
+        ("design", "Diseño"),
+    ]
+    for key, label in slots:
+        value = protocol.get(key, "")
+        if value:
+            lines.append(f"- {label}: {value}")
+    return "\n".join(lines)
+
+
+def _format_a4_criteria_block(protocol):
+    """Render inclusion/exclusion criteria + PICO summary for the decider.
+
+    The decider receives this block plus the reporter JSON; it never sees
+    the original paper text.
+    """
+    framework = protocol.get("framework", "PICO") or "PICO"
+    incl = protocol.get("inclusion_criteria", []) or []
+    excl = protocol.get("exclusion_criteria", []) or []
+
+    parts = ["Framework: " + str(framework)]
+
+    pico_summary_lines = []
+    slots = [
+        ("population", "Población"),
+        ("intervention", "Intervención"),
+        ("exposure", "Exposición"),
+        ("phenomenon_of_interest", "Fenómeno de interés"),
+        ("interest", "Interés"),
+        ("concept", "Concepto"),
+        ("comparator", "Comparador"),
+        ("context", "Contexto"),
+        ("outcome", "Desenlace"),
+        ("evaluation", "Evaluación"),
+        ("design", "Diseño"),
+    ]
+    for key, label in slots:
+        value = protocol.get(key, "")
+        if value:
+            pico_summary_lines.append(f"- {label}: {value}")
+    if pico_summary_lines:
+        parts.append("PICO:")
+        parts.extend(pico_summary_lines)
+
+    if incl:
+        parts.append("Criterios de inclusión:")
+        for c in incl:
+            parts.append(f"- {c}")
+    if excl:
+        parts.append("Criterios de exclusión:")
+        for c in excl:
+            parts.append(f"- {c}")
+    return "\n".join(parts)
+
+
+def format_agent4_reporter_prompt(paper, protocol, paper_text,
+                                  template=AGENT4_REPORTER_TEMPLATE_V1):
+    """Render the reporter prompt (T17.B.1).
+
+    Args:
+        paper: dict with at least 'title', optionally 'journal', 'year'.
+        protocol: dict with framework + PICO slots + criteria.
+        paper_text: already-truncated paper text (caller controls max_input_chars).
+        template: AGENT4_REPORTER_TEMPLATE_V1 or V2.
+
+    Returns:
+        Rendered prompt string.
+    """
+    pico_block = _format_a4_pico_block(protocol)
+    # Use .replace instead of .format to avoid colliding with JSON braces in
+    # the template body. The template contains literal `{}` in the schema
+    # block which is NOT a placeholder.
+    rendered = template
+    rendered = rendered.replace("{pico_block}", pico_block)
+    rendered = rendered.replace("{title}", str(paper.get("title", "") or ""))
+    rendered = rendered.replace("{journal}", str(paper.get("journal", "") or ""))
+    rendered = rendered.replace("{year}", str(paper.get("year", "") or ""))
+    rendered = rendered.replace("{paper_text}", paper_text or "")
+    return rendered
+
+
+def format_agent4_decider_prompt(reporter_json, protocol,
+                                 template=AGENT4_DECIDER_TEMPLATE_V1):
+    """Render the decider prompt (T17.B.1).
+
+    The decider does NOT see the paper. It only sees the structured report
+    produced by the reporter plus the inclusion/exclusion criteria.
+
+    Args:
+        reporter_json: dict (validated reporter output) OR a JSON string.
+        protocol: dict with framework + PICO + criteria.
+        template: AGENT4_DECIDER_TEMPLATE_V1, V3, or V4.
+
+    Returns:
+        Rendered prompt string.
+    """
+    criteria_block = _format_a4_criteria_block(protocol)
+    if isinstance(reporter_json, str):
+        reporter_str = reporter_json
+    else:
+        try:
+            import json as _json
+            reporter_str = _json.dumps(reporter_json, ensure_ascii=False, indent=2)
+        except (TypeError, ValueError):
+            reporter_str = str(reporter_json)
+    rendered = template
+    rendered = rendered.replace("{criteria_block}", criteria_block)
+    rendered = rendered.replace("{reporter_json}", reporter_str)
+    return rendered
+
