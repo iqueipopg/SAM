@@ -59,8 +59,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -92,6 +94,13 @@ DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "eval" / "micro.yaml"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs" / "eval" / "micro"
 HERO_ID = "hero2"
 AGENT_TAG = "A4"
+
+# T17.B.2 — keys for the monolithic baseline JSON envelope (compatible with
+# experiments/T17.B.1/baseline_dev.json). When --partition + --split are passed,
+# we additionally emit a parallel sidecar JSON with these fields so downstream
+# tooling (build_baseline_dev.py et al.) can ingest it unchanged.
+POSITIVE_LABEL = "INCLUDE"
+NEGATIVE_LABEL = "EXCLUDE"
 
 # Canonical gold exclusion categories (column exclusion_reason_ft in
 # sample_50.csv). Order matters for the 8x8 stratified matrix output.
@@ -199,6 +208,88 @@ A4_REASON_NORMALISATION = [
 def _load_agent4_params() -> dict:
     """Load agent4_validation params from config/agents.json (defaults merged)."""
     return load_agent_params("agent4_validation")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# T17.B.2 — partition / cache / sample-key helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _resolve_sample_path(eval_cfg: dict, hero_id: str = HERO_ID) -> str:
+    """Resolve the sample CSV path from an eval config dict.
+
+    Accepts both the per-hero ``sample`` flat field (used by micro.yaml and by
+    temp configs materialised by run_heroes_medio.py) and the multi-hero
+    ``samples.{hero_id}`` form used by medio.yaml. Returns the path string as
+    declared in the YAML (caller resolves against PROJECT_ROOT).
+    """
+    if "sample" in eval_cfg and eval_cfg["sample"]:
+        return str(eval_cfg["sample"])
+    samples_map = eval_cfg.get("samples") or {}
+    if hero_id in samples_map and samples_map[hero_id]:
+        return str(samples_map[hero_id])
+    raise KeyError(
+        f"Eval config missing 'sample' field and 'samples.{hero_id}' fallback."
+    )
+
+
+def _load_partition(partition_path: Path) -> dict:
+    """Load a stratified partition JSON (mirror of eval_a4_split._load_partition)."""
+    if not partition_path.is_file():
+        raise FileNotFoundError(f"Partition file not found: {partition_path}")
+    with open(partition_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    for key in ("dev", "heldout"):
+        if key not in data or not isinstance(data[key], list):
+            raise ValueError(f"Partition missing '{key}' list: {partition_path}")
+    return data
+
+
+def _sanitize_id_for_filename(cid: str) -> str:
+    """Strip `#` and any path-separator chars from a covidence_id for filenames.
+
+    Kept consistent with experiments/eval_a4_split.py._sanitize_id_for_filename
+    so the cache files can be inspected with the same tooling.
+    """
+    safe = str(cid).replace("#", "").replace("/", "_").replace("\\", "_")
+    safe = safe.replace(":", "_").replace(" ", "_")
+    return safe or "unknown"
+
+
+def _read_paper_cache(cache_dir: Path, cid: str) -> dict | None:
+    """Read a per-paper cache entry. Returns None on missing/corrupt files."""
+    path = cache_dir / f"{_sanitize_id_for_filename(cid)}.json"
+    if not path.is_file():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _write_paper_cache(cache_dir: Path, cid: str, payload: dict) -> None:
+    """Atomically persist a per-paper cache entry (`.tmp` + os.replace)."""
+    path = cache_dir / f"{_sanitize_id_for_filename(cid)}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+    os.replace(tmp_path, path)
+
+
+def _git_head_sha() -> str:
+    """Return the current git HEAD sha or 'unknown' when git is unavailable."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        return out.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
 
 
 def _extract_pdf_text_from_path(pdf_path: Path) -> tuple[str | None, str | None]:
@@ -510,6 +601,9 @@ def run_hero2_evaluation(
     config_path: Path,
     output_dir: Path,
     agent_instance=None,
+    partition_path: Path | None = None,
+    split: str | None = None,
+    cache_dir: Path | None = None,
 ) -> dict:
     """Run the Hero 2 evaluation and return the result dict (also written to disk).
 
@@ -520,17 +614,52 @@ def run_hero2_evaluation(
             is already loaded (used by ``run_heroes_micro.py`` to share VRAM
             across heroes). When ``None``, a new instance is created and its
             VRAM is freed before returning (standalone mode).
+        partition_path: Optional path to a stratified ``partition.json``
+            (T17.B.1-style). When provided together with ``split``, the sample
+            is filtered to that subset.
+        split: ``"dev"`` or ``"heldout"`` — partition subset to evaluate.
+            Required when ``partition_path`` is set.
+        cache_dir: Optional directory for per-paper on-disk cache of A4
+            screening predictions. When set, papers whose ``covidence_id`` has a
+            valid cache entry skip the LLM call entirely.
     """
     _seed_torch(42)
 
     eval_cfg = load_eval_config(config_path)
-    sample_path = (PROJECT_ROOT / eval_cfg["sample"]).resolve()
+    sample_rel = _resolve_sample_path(eval_cfg, HERO_ID)
+    sample_path = (PROJECT_ROOT / sample_rel).resolve()
     gold_path = (PROJECT_ROOT / eval_cfg["gold_screening"]).resolve()
     pdfs_dir = (PROJECT_ROOT / eval_cfg["pdfs_dir"]).resolve()
 
     # ── 1. Load CSVs ───────────────────────────────────────────────────────
     sample_df = pd.read_csv(sample_path, dtype={"covidence_id": str})
     gold_df = pd.read_csv(gold_path, dtype={"covidence_id": str})
+
+    # T17.B.2 — optional partition/split filtering
+    partition_meta: dict | None = None
+    partition_target_ids: list[str] | None = None
+    if partition_path is not None:
+        if split is None:
+            raise ValueError("--split is required when --partition is provided.")
+        partition = _load_partition(partition_path)
+        if split not in ("dev", "heldout"):
+            raise ValueError(f"--split must be 'dev' or 'heldout', got {split!r}")
+        partition_target_ids = list(partition[split])
+        partition_meta = {
+            "seed": partition.get("seed"),
+            "git_commit": partition.get("git_commit"),
+            "n_dev": partition.get("n_dev"),
+            "n_heldout": partition.get("n_heldout"),
+            "split": split,
+        }
+        target_set = set(partition_target_ids)
+        n_before = len(sample_df)
+        sample_df = sample_df[sample_df["covidence_id"].astype(str).isin(target_set)].copy()
+        n_after = len(sample_df)
+        print(
+            f"[T17.B.2.baseline_V2] split={split} subset={n_after}/{n_before} "
+            f"(partition n_{split}={len(partition_target_ids)})"
+        )
 
     errors: list = []
     papers, skipped = _build_papers(sample_df, gold_df, pdfs_dir, errors)
@@ -584,17 +713,91 @@ def run_hero2_evaluation(
 
     # ── 3. Run Phase B (full-text screening) ───────────────────────────────
     start_ts = time.time()
-    try:
-        screen_out = agent.screen_fulltext(papers, PAULA_SPORT_PROTOCOL)
-    except Exception as e:
-        errors.append(
-            {
-                "input_id": "<batch>",
-                "error_type": "ModelError",
-                "message": f"screen_fulltext raised: {type(e).__name__}: {e}",
-            }
-        )
+    cache_hits = 0
+    cache_misses = 0
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        # Per-paper cache path: skip LLM on hit, call + persist on miss.
+        # We bypass agent.screen_fulltext and call _screen_single_fulltext
+        # so we can interleave cache lookups with LLM calls.
+        if agent.model is None:
+            try:
+                agent.load_model()
+            except Exception as e:
+                errors.append({
+                    "input_id": "<batch>",
+                    "error_type": "ModelLoadError",
+                    "message": f"agent.load_model() raised: {type(e).__name__}: {e}",
+                })
+        for idx, paper in enumerate(papers):
+            cid = paper["pmid"]
+            cached = _read_paper_cache(cache_dir, cid)
+            if cached is not None and "fulltext_decision" in cached:
+                paper["fulltext_decision"] = cached.get("fulltext_decision", "EXCLUDE")
+                paper["fulltext_reasoning"] = cached.get("fulltext_reasoning", "")
+                paper["exclusion_reason"] = cached.get("exclusion_reason", "")
+                paper["fulltext_votes"] = cached.get("fulltext_votes", [])
+                paper["fulltext_confidence"] = cached.get("fulltext_confidence", 0.0)
+                paper["screening_confidence"] = cached.get("screening_confidence", 0.0)
+                paper["borderline"] = cached.get("borderline", False)
+                cache_hits += 1
+                print(
+                    f"[T17.B.2.baseline_V2] {idx + 1}/{eval_n} id={cid} "
+                    f"cache=HIT decision={paper['fulltext_decision']}"
+                )
+                continue
+            # cache miss: call A4 for this single paper
+            try:
+                result = agent._screen_single_fulltext(paper, PAULA_SPORT_PROTOCOL)
+                paper["fulltext_decision"] = result["decision"]
+                paper["fulltext_reasoning"] = result["reasoning"]
+                paper["exclusion_reason"] = result.get("exclusion_reason")
+                paper["fulltext_votes"] = result["votes"]
+                paper["fulltext_confidence"] = result["confidence"]
+                paper["screening_confidence"] = result["screening_confidence"]
+                paper["borderline"] = result["borderline"]
+            except Exception as e:
+                errors.append({
+                    "input_id": cid,
+                    "error_type": "ModelError",
+                    "message": f"_screen_single_fulltext raised: {type(e).__name__}: {e}",
+                })
+                paper["fulltext_decision"] = "EXCLUDE"
+                paper["fulltext_reasoning"] = f"runtime error: {e}"
+                paper["exclusion_reason"] = "runtime_error"
+                paper["fulltext_votes"] = []
+                paper["fulltext_confidence"] = 0.0
+                paper["screening_confidence"] = 0.0
+                paper["borderline"] = True
+            _write_paper_cache(cache_dir, cid, {
+                "covidence_id": cid,
+                "fulltext_decision": paper["fulltext_decision"],
+                "fulltext_reasoning": paper["fulltext_reasoning"],
+                "exclusion_reason": paper["exclusion_reason"],
+                "fulltext_votes": paper["fulltext_votes"],
+                "fulltext_confidence": paper["fulltext_confidence"],
+                "screening_confidence": paper["screening_confidence"],
+                "borderline": paper["borderline"],
+                "cached_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            })
+            cache_misses += 1
+            print(
+                f"[T17.B.2.baseline_V2] {idx + 1}/{eval_n} id={cid} "
+                f"cache=MISS decision={paper['fulltext_decision']}"
+            )
         screen_out = {"papers": papers, "include": [], "exclude": [], "stats": {}}
+    else:
+        try:
+            screen_out = agent.screen_fulltext(papers, PAULA_SPORT_PROTOCOL)
+        except Exception as e:
+            errors.append(
+                {
+                    "input_id": "<batch>",
+                    "error_type": "ModelError",
+                    "message": f"screen_fulltext raised: {type(e).__name__}: {e}",
+                }
+            )
+            screen_out = {"papers": papers, "include": [], "exclude": [], "stats": {}}
     elapsed = round(time.time() - start_ts, 2)
 
     # screen_fulltext mutates papers in-place, so we can iterate over the same
@@ -735,7 +938,7 @@ def run_hero2_evaluation(
     result = {
         "hero_id": HERO_ID,
         "agent": AGENT_TAG,
-        "sample_path": str(Path(eval_cfg["sample"])),
+        "sample_path": str(Path(sample_rel)),
         "sample_size": sample_size,
         "eval_size": eval_n,
         "model_used": model_display,
@@ -754,10 +957,33 @@ def run_hero2_evaluation(
         "notes": notes,
     }
 
+    # T17.B.2 — additional fields for the baseline_dev-compatible envelope.
+    if partition_path is not None:
+        try:
+            partition_rel = str(partition_path.relative_to(PROJECT_ROOT))
+        except ValueError:
+            partition_rel = str(partition_path)
+        result["partition_file"] = partition_rel
+        result["partition_meta"] = partition_meta or {}
+        # Mirror baseline_dev.json contract for downstream tooling.
+        result[f"n_{split}"] = eval_n
+        result["split"] = split
+    if cache_dir is not None:
+        result["cache_dir"] = str(cache_dir)
+        result["cache_telemetry"] = {
+            "hits": cache_hits,
+            "misses": cache_misses,
+            "files_on_disk": len(list(cache_dir.glob("*.json"))) if cache_dir.is_dir() else 0,
+        }
+    result["git_commit"] = _git_head_sha()
+
     # ── 7. Persist JSON ────────────────────────────────────────────────────
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = output_dir / f"hero2_results_{stamp}.json"
+    if partition_path is not None and split is not None:
+        out_path = output_dir / f"baseline_V2_{split}_{stamp}.json"
+    else:
+        out_path = output_dir / f"hero2_results_{stamp}.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False, default=str)
 
@@ -883,6 +1109,33 @@ def _parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT_DIR,
         help="Output directory for hero2_results_*.json (default: outputs/eval/micro/).",
     )
+    p.add_argument(
+        "--partition",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path to a stratified partition.json (T17.B.1/T17.B.2). "
+            "Requires --split. When provided, the sample is filtered to the "
+            "given subset and the output envelope is named baseline_V2_<split>_<ts>.json."
+        ),
+    )
+    p.add_argument(
+        "--split",
+        choices=("dev", "heldout"),
+        default=None,
+        help="Partition subset to evaluate (required when --partition is set).",
+    )
+    p.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional directory for per-paper on-disk cache. Hit -> skips LLM "
+            "call; miss -> calls A4 and persists result. Filename = "
+            "{covidence_id_safe}.json. Convention for T17.B.2 baseline V2: "
+            "experiments/T17.B.2/cache/monolithic_v2/."
+        ),
+    )
     return p.parse_args()
 
 
@@ -895,7 +1148,24 @@ def main() -> int:
         print(f"ERROR: config file not found: {config_path}", file=sys.stderr)
         return 2
 
-    run_hero2_evaluation(config_path, output_dir)
+    partition_path = args.partition.resolve() if args.partition is not None else None
+    cache_dir = args.cache_dir.resolve() if args.cache_dir is not None else None
+    split = args.split
+
+    if partition_path is not None and split is None:
+        print("ERROR: --partition requires --split {dev,heldout}", file=sys.stderr)
+        return 2
+    if partition_path is None and split is not None:
+        print("ERROR: --split provided without --partition", file=sys.stderr)
+        return 2
+
+    run_hero2_evaluation(
+        config_path,
+        output_dir,
+        partition_path=partition_path,
+        split=split,
+        cache_dir=cache_dir,
+    )
     return 0
 
 
