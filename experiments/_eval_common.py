@@ -43,7 +43,11 @@ AGENTS_JSON_PATH = PROJECT_ROOT / "config" / "agents.json"
 # Used by every hero evaluator (Agent3 / Agent4 / Agent6) when an external
 # protocol argument is required. Kept here to guarantee a single source of
 # truth — divergence between heroes would invalidate cross-hero comparisons.
-PAULA_SPORT_PROTOCOL = {
+#
+# DEPRECATED 2026-05-20 (T17.B.2). Conservado para trazabilidad histórica.
+# Confound documentado en docs/iterations/T17.B.1_protocol_audit.md. Usar
+# PAULA_SPORT_PROTOCOL_V2 (default).
+PAULA_SPORT_PROTOCOL_V1 = {
     "framework": "PICO",
     "research_question": (
         "Do physical activity interventions that incorporate psychological "
@@ -82,6 +86,66 @@ PAULA_SPORT_PROTOCOL = {
         "Protocol papers without results",
     ],
 }
+
+
+# PAULA_SPORT_PROTOCOL_V2 — corrected against authoritative source.
+# Source: Collazo-Castiñeira et al. 2025, Health Psychology Review,
+# DOI 10.1080/17437199.2025.2492042, p.3 (Study eligibility → Population +
+# Intervention). PROSPERO CRD42021277712.
+# Divergence from V1 limited to `population` and `exclusion_criteria[0]`;
+# `intervention` refreshed with literal quote. Other fields preserved from V1.
+PAULA_SPORT_PROTOCOL_V2 = {
+    "framework": "PICO",
+    "research_question": (
+        "Do physical activity interventions that incorporate psychological "
+        "components improve PA outcomes in community-dwelling adults aged 50-70?"
+    ),
+    "population": (
+        "Community-dwelling older adults around retirement age, defined as "
+        "participants' mean age between 55 and 65 years, OR both mean age and "
+        "standard deviations falling between 50 and 70 years."
+    ),
+    "intervention": (
+        "Eligible interventions targeted the promotion of physical activity "
+        "and included psychological components as active ingredients of the "
+        "intervention. We defined psychological components as specific "
+        "techniques and strategies intentionally designed and implemented "
+        "within the intervention to promote behaviour change."
+    ),
+    "comparator": (
+        "Usual care, waitlist, attention control, or PA intervention without "
+        "psychological components"
+    ),
+    "outcome": (
+        "Physical activity outcomes (objective: accelerometry, pedometer; "
+        "self-report: IPAQ, GLTEQ, step counts)"
+    ),
+    "inclusion_criteria": [
+        "Adults aged 50-70 years (community-dwelling, retirement-age)",
+        "Randomised controlled trial (RCT) design",
+        "Intervention incorporates psychological / behaviour-change component",
+        "Physical activity reported as primary or secondary outcome",
+        "Outcome measured objectively (accelerometer, pedometer) or by validated self-report",
+    ],
+    "exclusion_criteria": [
+        (
+            "Studies specifically targeting participants with serious mental or "
+            "physical illnesses (e.g., COPD, active cancer). Studies targeting "
+            "participants with common and prevalent chronic conditions such as "
+            "diabetes or cardiac conditions ARE included."
+        ),
+        "Adults younger than 50 or older than 70 years",
+        "No psychological / behaviour-change component in the intervention",
+        "Physical activity not reported as an outcome",
+        "Case reports, case series, editorials, reviews, meta-analyses",
+        "Protocol papers without results",
+    ],
+}
+
+
+# Backward-compatible alias: 15+ downstream consumers import the unversioned
+# name. T17.B.2 onwards: alias points to V2 (corrected).
+PAULA_SPORT_PROTOCOL = PAULA_SPORT_PROTOCOL_V2
 
 
 # ──────────────────────────────────────────────────────────────────────────────
