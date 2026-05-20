@@ -374,6 +374,12 @@ class Agent4FullTextSplit(Agent4FullText):
         if not isinstance(parsed, dict):
             return None
 
+        # notes es opcional en el contrato del prompt: el template dice
+        # "Si nada, 'ninguna'". El modelo lo omite bajo prompt V2 largo;
+        # restauramos el default para no descartar outputs por lo demás válidos.
+        if "notes" not in parsed:
+            parsed["notes"] = "ninguna"
+
         # Required keys vary with template (V1 vs V2). We pick the schema
         # based on the active reporter template to keep validation strict.
         required_keys = self._reporter_required_keys()

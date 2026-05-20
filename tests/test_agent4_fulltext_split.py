@@ -162,13 +162,46 @@ class TestReporterSchemaV1:
                     "study_design", "publication_type", "language", "notes"):
             assert key in result, f"Campo '{key}' debe estar presente en el resultado"
 
-    def test_missing_field_returns_none(self):
-        """JSON con campo faltante (omitting 'notes') debe devolver None."""
+    def test_missing_required_field_returns_none(self):
+        """JSON con campo requerido faltante (omitiendo 'population') debe devolver None.
+
+        'notes' ya no es un campo requerido estricto — se rellena con default.
+        Este test cubre la regla de que campos realmente requeridos siguen siendo
+        obligatorios (el loop de validacion estricto permanece intacto).
+        """
         agent = self._get_agent()
-        partial = {k: v for k, v in CANNED_REPORTER_V1.items() if k != "notes"}
+        partial = {k: v for k, v in CANNED_REPORTER_V1.items() if k != "population"}
         raw = json.dumps(partial, ensure_ascii=False)
         result = agent._parse_reporter(raw)
-        assert result is None, "JSON con campo faltante debe devolver None"
+        assert result is None, "JSON sin campo requerido 'population' debe devolver None"
+
+    def test_missing_notes_gets_default_returns_dict(self):
+        """JSON con 7/8 claves (omite 'notes') debe devolver dict con notes='ninguna'.
+
+        Fix schema-tolerante T17.B.2: el modelo omite 'notes' bajo el prompt V2
+        largo; _parse_reporter restaura el default en lugar de descartar el output.
+        """
+        agent = self._get_agent()
+        # Build V1 JSON with all 7 non-notes fields
+        partial = {k: v for k, v in CANNED_REPORTER_V1.items() if k != "notes"}
+        assert len(partial) == 7, "Fixture debe tener exactamente 7 campos (sin notes)"
+        raw = json.dumps(partial, ensure_ascii=False)
+        result = agent._parse_reporter(raw)
+        # Must return a dict, not None
+        assert result is not None, (
+            "JSON con 7/8 campos (sin notes) debe devolver dict, no None"
+        )
+        assert isinstance(result, dict)
+        # notes must be defaulted
+        assert result["notes"] == "ninguna", (
+            f"notes debe ser 'ninguna' cuando se omite, obtenido: {result.get('notes')!r}"
+        )
+        # All other 7 fields must be preserved with their original values.
+        # Note: _clean_json strips non-ASCII, so we compare after ascii-stripping.
+        for key, val in partial.items():
+            assert key in result, f"Campo '{key}' debe estar en el resultado"
+            # Value type must be str
+            assert isinstance(result[key], str), f"Campo '{key}' debe ser str"
 
     def test_missing_multiple_fields_returns_none(self):
         """JSON con varios campos faltantes debe devolver None."""
@@ -297,12 +330,41 @@ class TestReporterSchemaV2:
         assert "exclusion_signals" in result, "El campo 'exclusion_signals' debe estar presente"
 
     def test_v2_missing_exclusion_signals_returns_none(self):
-        """V2 schema sin el campo 'exclusion_signals' debe devolver None."""
+        """V2 schema sin el campo 'exclusion_signals' debe devolver None.
+
+        'exclusion_signals' es requerido estricto en V2 (a diferencia de 'notes').
+        El fix schema-tolerante NO afecta a este campo.
+        """
         agent = self._get_agent_v2()
         # V1 JSON (lacks exclusion_signals) applied against V2 agent
         raw = json.dumps(CANNED_REPORTER_V1, ensure_ascii=False)
         result = agent._parse_reporter(raw)
         assert result is None, "V2 agent: JSON sin exclusion_signals debe devolver None"
+
+    def test_v2_missing_notes_gets_default_returns_dict(self):
+        """V2 JSON con 8/9 campos (omite 'notes', incluye 'exclusion_signals') -> dict con default.
+
+        El fix schema-tolerante aplica igual en V2: notes se rellena con 'ninguna'.
+        'exclusion_signals' sigue siendo obligatorio y su presencia no compensa la
+        ausencia de notes — pero notes sigue siendo optional (default aplicado antes
+        del loop de validacion estricto de V2).
+        """
+        agent = self._get_agent_v2()
+        # V2 JSON with all fields EXCEPT notes
+        partial_v2 = {k: v for k, v in CANNED_REPORTER_V2.items() if k != "notes"}
+        # Should have 8 fields: 7 V1 fields (minus notes) + exclusion_signals
+        assert "exclusion_signals" in partial_v2, "Fixture V2 debe incluir exclusion_signals"
+        assert "notes" not in partial_v2, "Fixture V2 no debe incluir notes"
+        raw = json.dumps(partial_v2, ensure_ascii=False)
+        result = agent._parse_reporter(raw)
+        assert result is not None, (
+            "V2 JSON con 8/9 campos (omite notes, tiene exclusion_signals) debe devolver dict"
+        )
+        assert isinstance(result, dict)
+        assert result["notes"] == "ninguna", (
+            f"notes debe ser 'ninguna' cuando se omite en V2, obtenido: {result.get('notes')!r}"
+        )
+        assert "exclusion_signals" in result, "exclusion_signals debe estar en el resultado V2"
 
     def test_template_switch_changes_schema(self):
         """Cambiar el template en el agente debe cambiar el schema esperado."""
