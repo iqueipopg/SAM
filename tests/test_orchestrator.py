@@ -88,6 +88,7 @@ def fake_a2(papers: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def _paper(pmid: str, doi: str = "") -> Dict[str, Any]:
     return {
+        "paper_id": pmid,
         "pmid": pmid,
         "doi": doi or f"10.1/{pmid}",
         "title": f"Paper {pmid}",
@@ -116,22 +117,16 @@ def fake_a3(pmid: str, decision: str = "INCLUDE") -> Dict[str, Any]:
 
 
 def fake_a4(pmid: str, decision: str = "INCLUDE") -> Dict[str, Any]:
+    """Decision-only A4 payload.
+
+    Metadata (title, abstract, authors, journal, year, doi, pmcid, pmid) and
+    provenance (text_source, full_text_length, sections, oa_url) are intentionally
+    ABSENT: the commit assembler injects them deterministically from papers_raw.json
+    and _fulltext_cache/. `full_text` is NOT part of the schema (extra='forbid').
+    """
     return {
         **_base("sam_a4_fulltext"),
         "paper_id": pmid,
-        "pmid": pmid,
-        "title": f"Paper {pmid}",
-        "abstract": "Abstract.",
-        "authors": ["Author A"],
-        "journal": "Journal",
-        "year": "2024",
-        "doi": f"10.1/{pmid}",
-        "pmcid": "",
-        "full_text": "Full text body.",
-        "text_source": "pmc",
-        "full_text_length": 14,
-        "sections": {},
-        "oa_url": None,
         "fulltext_decision": decision,
         "fulltext_reasoning": "Full text confirms eligibility.",
         "exclusion_reason": None,
@@ -306,6 +301,35 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
+def _write_fulltext_cache(
+    runs_root: Path,
+    run_id: str,
+    pmid: str,
+    text: str = "Fulltext body for testing purposes.",
+    text_source: str = "pmc",
+) -> int:
+    """Write a deterministic fulltext cache entry for a paper.
+
+    Creates _fulltext_cache/<slug>.txt and <slug>.meta.json in the run dir.
+    Returns the length of the written text (= expected full_text_length).
+    """
+    slug = paper_id_to_slug(pmid)
+    cache_dir = runs_root / run_id / "_fulltext_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    txt_path = cache_dir / f"{slug}.txt"
+    txt_path.write_text(text, encoding="utf-8")
+    meta: Dict[str, Any] = {
+        "text_source": text_source,
+        "full_text_length": len(text),
+        "sections": {"abstract": text[:50]},
+        "oa_url": None,
+    }
+    (cache_dir / f"{slug}.meta.json").write_text(
+        json.dumps(meta), encoding="utf-8"
+    )
+    return len(text)
+
+
 # ---------------------------------------------------------------------------
 # Helper: advance the run up to (but not including) a target agent
 # ---------------------------------------------------------------------------
@@ -353,6 +377,9 @@ def _advance_to(runs_root: Path, run_id: str, target_agent: str, papers=None) ->
                 if agent_id == "sam_a3_screening":
                     data = fake_a3(pmid, "INCLUDE")
                 elif agent_id == "sam_a4_fulltext":
+                    # Create the fulltext cache so the assembler injects
+                    # deterministic text_source and full_text_length.
+                    _write_fulltext_cache(runs_root, run_id, pmid)
                     data = fake_a4(pmid, "INCLUDE")
                 else:
                     data = build(pmid)
@@ -500,6 +527,7 @@ class TestNextPerPaper:
             eligible_papers_seen.add(pid)
             slug = paper_id_to_slug(pid)
             out = paths.agent_dir("sam_a4_fulltext") / f"{slug}.json"
+            _write_fulltext_cache(runs_root, run_id, pid)
             _write_json(out, fake_a4(pid, "INCLUDE"))
             _commit(runs_root, run_id, "sam_a4_fulltext", str(out))
         assert len(eligible_papers_seen) == 3
@@ -519,6 +547,7 @@ class TestNextPerPaper:
             decision = "INCLUDE" if i < 2 else "EXCLUDE"
             slug = paper_id_to_slug(pmid)
             out = paths.agent_dir("sam_a4_fulltext") / f"{slug}.json"
+            _write_fulltext_cache(runs_root, run_id, pmid)
             _write_json(out, fake_a4(pmid, decision))
             _commit(runs_root, run_id, "sam_a4_fulltext", str(out))
         # A5 should only see 2 papers
@@ -551,6 +580,7 @@ class TestNextPerPaper:
             decision = "INCLUDE" if i < 4 else "EXCLUDE"
             slug = paper_id_to_slug(pmid)
             out = paths.agent_dir("sam_a4_fulltext") / f"{slug}.json"
+            _write_fulltext_cache(runs_root, run_id, pmid)
             _write_json(out, fake_a4(pmid, decision))
             _commit(runs_root, run_id, "sam_a4_fulltext", str(out))
         # Drain A5
@@ -896,6 +926,8 @@ class TestFullLoopDryRun:
                 if agent_id == "sam_a3_screening":
                     data = fake_a3(pmid, "INCLUDE")
                 elif agent_id == "sam_a4_fulltext":
+                    # Create cache so the assembler injects deterministic provenance.
+                    _write_fulltext_cache(runs_root, run_id, pmid)
                     data = fake_a4(pmid, "INCLUDE")
                 else:
                     data = build(pmid)
@@ -929,3 +961,220 @@ class TestFullLoopDryRun:
             if AGENT_MODES[agent_id] == "single":
                 out = paths.single_output(agent_id)
                 assert out.exists(), f"single-agent output missing: {out}"
+
+
+# ---------------------------------------------------------------------------
+# Section: commit assembler — new behavior (T17.C.1)
+# ---------------------------------------------------------------------------
+
+
+class TestCommitAssembler:
+    """Verify that commit_output acts as a deterministic ASSEMBLER for
+    per-paper agents: it injects metadata + provenance from papers_raw /
+    _fulltext_cache, then validates + rewrites the file.
+    """
+
+    def _setup_a4_ready(self, runs_root: Path):
+        """Init a run, advance to A4 ready (A1 + A2 + A3 all-INCLUDE done)."""
+        run_id = _init(runs_root)
+        _advance_to(runs_root, run_id, "sam_a4_fulltext")
+        return run_id
+
+    def test_a4_decision_only_payload_yields_assembled_file(self, runs_root):
+        """A decision-only A4 payload is assembled by commit: the committed file
+        must carry injected metadata + provenance and must NOT contain full_text.
+        """
+        run_id = self._setup_a4_ready(runs_root)
+        paths = RunPaths(run_id, outputs_root=runs_root)
+        pmid = TOY_PMIDS[0]
+        slug = paper_id_to_slug(pmid)
+
+        # Write deterministic cache so full_text_length is predictable.
+        cache_text = "Texto completo del articulo de prueba para ensamblado."
+        expected_length = _write_fulltext_cache(
+            runs_root, run_id, pmid, text=cache_text, text_source="pmc"
+        )
+
+        # Decision-only payload (no metadata, no full_text).
+        payload = fake_a4(pmid, "INCLUDE")
+        out = paths.agent_dir("sam_a4_fulltext") / f"{slug}.json"
+        _write_json(out, payload)
+        result = _commit(runs_root, run_id, "sam_a4_fulltext", str(out))
+        assert result["ok"] is True
+
+        # Read back the assembled file.
+        assembled = json.loads(out.read_text(encoding="utf-8"))
+
+        # Must NOT contain full_text (schema field removed; B-parity).
+        assert "full_text" not in assembled, (
+            "committed A4 file must not contain 'full_text' key"
+        )
+
+        # Injected metadata comes from papers_raw.json (TOY_PAPERS).
+        assert assembled["title"] == f"Paper {pmid}"
+        assert assembled["journal"] == "Journal of Tests"
+        assert assembled["year"] == "2024"
+
+        # Injected provenance comes from _fulltext_cache.
+        assert assembled["text_source"] == "pmc"
+        assert assembled["full_text_length"] == expected_length
+
+        # Decision fields are preserved from the original payload.
+        assert assembled["fulltext_decision"] == "INCLUDE"
+        assert assembled["fulltext_confidence"] == 0.9
+
+    def test_a4_payload_with_full_text_is_stripped_before_validation(
+        self, runs_root
+    ):
+        """Even if a caller accidentally includes full_text in the payload,
+        the assembler pops it before validation — commit succeeds and the
+        committed file has no full_text key.
+        """
+        run_id = self._setup_a4_ready(runs_root)
+        paths = RunPaths(run_id, outputs_root=runs_root)
+        pmid = TOY_PMIDS[0]
+        slug = paper_id_to_slug(pmid)
+        _write_fulltext_cache(runs_root, run_id, pmid)
+
+        # Manually add the banned field.
+        payload = fake_a4(pmid, "INCLUDE")
+        payload["full_text"] = "Accidentally included full text."
+        out = paths.agent_dir("sam_a4_fulltext") / f"{slug}.json"
+        _write_json(out, payload)
+
+        # Commit must succeed (assembler strips full_text).
+        result = _commit(runs_root, run_id, "sam_a4_fulltext", str(out))
+        assert result["ok"] is True
+
+        assembled = json.loads(out.read_text(encoding="utf-8"))
+        assert "full_text" not in assembled
+
+    def test_a4_full_text_length_equals_cache_txt_length(self, runs_root):
+        """full_text_length in the assembled file must equal len(cache .txt)."""
+        run_id = self._setup_a4_ready(runs_root)
+        paths = RunPaths(run_id, outputs_root=runs_root)
+        pmid = TOY_PMIDS[1]
+        slug = paper_id_to_slug(pmid)
+
+        txt = "A" * 1234
+        expected_len = _write_fulltext_cache(runs_root, run_id, pmid, text=txt)
+        assert expected_len == 1234
+
+        out = paths.agent_dir("sam_a4_fulltext") / f"{slug}.json"
+        _write_json(out, fake_a4(pmid, "INCLUDE"))
+        _commit(runs_root, run_id, "sam_a4_fulltext", str(out))
+
+        assembled = json.loads(out.read_text(encoding="utf-8"))
+        assert assembled["full_text_length"] == 1234
+
+    def test_a4_no_cache_falls_back_gracefully(self, runs_root):
+        """Without a cache file, the assembler uses 'abstract_only' and length 0."""
+        run_id = self._setup_a4_ready(runs_root)
+        paths = RunPaths(run_id, outputs_root=runs_root)
+        pmid = TOY_PMIDS[2]
+        slug = paper_id_to_slug(pmid)
+
+        # No cache written — assembler must degrade gracefully.
+        out = paths.agent_dir("sam_a4_fulltext") / f"{slug}.json"
+        _write_json(out, fake_a4(pmid, "EXCLUDE"))
+        result = _commit(runs_root, run_id, "sam_a4_fulltext", str(out))
+        assert result["ok"] is True
+
+        assembled = json.loads(out.read_text(encoding="utf-8"))
+        assert assembled["text_source"] == "abstract_only"
+        assert assembled["full_text_length"] == 0
+        assert "full_text" not in assembled
+
+    def test_a3_assembler_injects_title_and_pmid(self, runs_root):
+        """A3 commit injects title + pmid from papers_raw, preserving decision."""
+        run_id = _init(runs_root)
+        _advance_to(runs_root, run_id, "sam_a3_screening")
+        paths = RunPaths(run_id, outputs_root=runs_root)
+        pmid = TOY_PMIDS[0]
+        slug = paper_id_to_slug(pmid)
+
+        out = paths.agent_dir("sam_a3_screening") / f"{slug}.json"
+        _write_json(out, fake_a3(pmid, "INCLUDE"))
+        result = _commit(runs_root, run_id, "sam_a3_screening", str(out))
+        assert result["ok"] is True
+
+        committed = json.loads(out.read_text(encoding="utf-8"))
+        assert committed["title"] == f"Paper {pmid}"
+        assert committed["pmid"] == pmid
+        assert committed["decision"] == "INCLUDE"
+
+
+# ---------------------------------------------------------------------------
+# Section: audit --only parameter (T17.C.1)
+# ---------------------------------------------------------------------------
+
+
+class TestAuditOnly:
+    """Verify audit_run(run_id, only=...) behavior."""
+
+    def _setup_a3_complete(self, runs_root) -> str:
+        """Init, advance through A3 (all 5 INCLUDE)."""
+        run_id = _init(runs_root)
+        _advance_to(runs_root, run_id, "sam_a3_screening")
+        paths = RunPaths(run_id, outputs_root=runs_root)
+        for pmid in TOY_PMIDS:
+            slug = paper_id_to_slug(pmid)
+            out = paths.agent_dir("sam_a3_screening") / f"{slug}.json"
+            _write_json(out, fake_a3(pmid, "INCLUDE"))
+            _commit(runs_root, run_id, "sam_a3_screening", str(out))
+        return run_id
+
+    def test_audit_only_valid_agent_scopes_report(self, runs_root):
+        """audit_run(only='sam_a3_screening') returns a report with a single
+        agent key and ok reflecting only that agent.
+        """
+        run_id = self._setup_a3_complete(runs_root)
+        report = audit_run(run_id, outputs_root=runs_root, only="sam_a3_screening")
+        assert "agents" in report
+        # Only the requested agent appears in the report.
+        assert list(report["agents"].keys()) == ["sam_a3_screening"]
+        # A3 was correctly committed (all 5 papers) — ok should be True.
+        assert report["ok"] is True
+
+    def test_audit_only_a4_scope_reflects_a4_state(self, runs_root):
+        """audit_run(only='sam_a4_fulltext') scopes to A4 only; ok is False
+        when A4 has not been run yet (papers eligible but none indexed).
+        """
+        run_id = self._setup_a3_complete(runs_root)
+        # A4 has not been run yet; 5 papers should be eligible (all A3 INCLUDE).
+        report = audit_run(run_id, outputs_root=runs_root, only="sam_a4_fulltext")
+        assert list(report["agents"].keys()) == ["sam_a4_fulltext"]
+        # Missing papers => ok False.
+        assert report["ok"] is False
+        a4_report = report["agents"]["sam_a4_fulltext"]
+        assert len(a4_report["missing"]) == 5
+
+    def test_audit_only_unknown_agent_raises_value_error(self, runs_root):
+        """audit_run(only='bogus') must raise ValueError."""
+        run_id = _init(runs_root)
+        with pytest.raises(ValueError, match="bogus"):
+            audit_run(run_id, outputs_root=runs_root, only="bogus")
+
+    def test_audit_only_another_unknown_raises_value_error(self, runs_root):
+        """audit_run(only='sam_a99_nonexistent') must raise ValueError."""
+        run_id = _init(runs_root)
+        with pytest.raises(ValueError):
+            audit_run(run_id, outputs_root=runs_root, only="sam_a99_nonexistent")
+
+    def test_audit_only_none_audits_all_agents(self, runs_root):
+        """audit_run(only=None) is the default — all 9 agents appear in report."""
+        run_id = _init(runs_root)
+        report = audit_run(run_id, outputs_root=runs_root, only=None)
+        assert set(report["agents"].keys()) == set(AGENT_IDS)
+
+    def test_audit_only_single_agent_a1(self, runs_root):
+        """Scoping to a single-agent (A1) after committing it returns ok True."""
+        run_id = _init(runs_root)
+        paths = RunPaths(run_id, outputs_root=runs_root)
+        out = paths.single_output("sam_a1_protocol")
+        _write_json(out, fake_a1())
+        _commit(runs_root, run_id, "sam_a1_protocol", str(out))
+
+        report = audit_run(run_id, outputs_root=runs_root, only="sam_a1_protocol")
+        assert list(report["agents"].keys()) == ["sam_a1_protocol"]
+        assert report["ok"] is True
