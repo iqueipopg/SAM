@@ -105,15 +105,30 @@ def _audit_single(paths: RunPaths, manifest, agent_id: str) -> Dict[str, List[st
 
 
 def audit_run(
-    run_id: str, outputs_root: Optional[Path] = None
+    run_id: str,
+    outputs_root: Optional[Path] = None,
+    only: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Run the full audit for a run_id. Pure function (no mutation)."""
+    """Run the audit for a run_id. Pure function (no mutation).
+
+    When `only` is set it MUST be a valid agent_id; the audit then covers ONLY
+    that agent and `ok` reflects only it.
+    """
     paths = RunPaths(run_id, outputs_root=outputs_root)
     manifest = load_manifest(run_id, outputs_root=outputs_root)
 
+    if only is not None:
+        if only not in AGENT_IDS:
+            raise ValueError(
+                f"--only must be one of {AGENT_IDS}; got {only!r}"
+            )
+        agent_ids = [only]
+    else:
+        agent_ids = AGENT_IDS
+
     report: Dict[str, Any] = {"agents": {}}
     ok = True
-    for agent_id in AGENT_IDS:
+    for agent_id in agent_ids:
         if AGENT_MODES[agent_id] == "per_paper":
             details = _audit_per_paper(paths, manifest, agent_id)
         else:

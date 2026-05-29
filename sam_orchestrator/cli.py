@@ -15,9 +15,10 @@ Subcommands:
          -> stdout: {"ok": true, ...}
          exit 0 on success, 2 on schema validation failure, 1 on other errors
 
-  audit  <run_id>
+  audit  <run_id> [--only <agent_id>]
          -> stdout: {"ok": bool, "agents": {...}}
          exit 0 if ok, 1 if any discrepancy
+         --only restricts the audit to a single agent_id.
 
 Exit codes (documented):
   0  -> success
@@ -105,7 +106,10 @@ def _cmd_commit(args: argparse.Namespace) -> int:
 
 def _cmd_audit(args: argparse.Namespace) -> int:
     try:
-        report = audit_run(args.run_id)
+        report = audit_run(args.run_id, only=args.only)
+    except ValueError as e:
+        _print_err(f"audit failed: {e}")
+        return 1
     except (RunNotFoundError, ManifestCorruptError, OrchestratorError) as e:
         _print_err(f"audit failed: {e}")
         return 1
@@ -154,6 +158,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit_p = sub.add_parser("audit", help="Audit a run; exit 1 if discrepancies.")
     audit_p.add_argument("run_id")
+    audit_p.add_argument(
+        "--only",
+        default=None,
+        help="Audit only this agent_id (must be a valid agent).",
+    )
     audit_p.set_defaults(func=_cmd_audit)
 
     return p
