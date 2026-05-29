@@ -64,7 +64,12 @@ Thumbs.db
 # ── pytest ────────────────────────────────────────────────
 .pytest_cache/
 
-.claude/
+# Ignore .claude/ contents, but version the SAM pipeline subagents
+# (.claude/agents/sam_a*.md are entregables T17.C.0, análogos a agents/agentN_*.py).
+.claude/*
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/sam_a*.md
 
 # ── Linting cache ─────────────────────────────────────────
 .ruff_cache/
