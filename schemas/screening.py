@@ -6,12 +6,12 @@ flags, screening_confidence, borderline.
 Divergencia vs spec original: spec proponía `reason` y `criteria_evaluated`;
 Qwen usa `reasoning` y `flags: list[str]`. Alineamos a Qwen.
 
-`paper_id` is provided as a separate field (copy of `pmid`) for uniformity
-with state.py / orchestrator. Subagents must populate both; both must match.
+D4 policy (T17.C.1): `paper_id` is the canonical Covidence ID (e.g. "#1989");
+`pmid` is optional metadata.
 """
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,9 +34,9 @@ class ScreeningOutput(AgentResultBase):
     """Per-paper output for sam_a3_screening/<slug>.json."""
 
     paper_id: str = Field(
-        ..., description="Canonical paper_id (mirrors pmid); used by orchestrator."
+        ..., description="Canonical paper_id (Covidence internal ID, e.g. '#1989')."
     )
-    pmid: str
+    pmid: Optional[str] = None
     title: str
     decision: ScreeningDecision
     confidence: float = Field(..., ge=0.0, le=1.0)

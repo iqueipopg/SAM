@@ -48,9 +48,11 @@ class QualityAssessment(BaseModel):
 class QualityOutput(AgentResultBase):
     """Per-paper output for sam_a6_quality/<slug>.json."""
 
-    paper_id: str = Field(..., description="Canonical paper_id (mirrors pmid).")
+    paper_id: str = Field(
+        ..., description="Canonical paper_id (Covidence internal ID, e.g. '#1989')."
+    )
 
-    pmid: str
+    pmid: Optional[str] = None
     title: str
     study_design_detected: StudyDesignDetected
     quality_assessment: QualityAssessment

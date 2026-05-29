@@ -1,7 +1,7 @@
 ---
 name: sam_a1_protocol
 description: SAM A1 — genera protocolo PICO/SPIDER/PECO/PCC + criterios + query PubMed desde la pregunta clínica.
-model: opus
+model: inherit
 tools: Read, Write
 ---
 

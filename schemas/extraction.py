@@ -96,9 +96,11 @@ class Concordance(BaseModel):
 class ExtractionOutput(AgentResultBase):
     """Per-paper output for sam_a5_extraction/<slug>.json."""
 
-    paper_id: str = Field(..., description="Canonical paper_id (mirrors pmid).")
+    paper_id: str = Field(
+        ..., description="Canonical paper_id (Covidence internal ID, e.g. '#1989')."
+    )
 
-    pmid: str
+    pmid: Optional[str] = None
     title: str
     authors: List[str]
     journal: str

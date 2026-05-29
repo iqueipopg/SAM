@@ -131,12 +131,16 @@ def _papers_from_raw(papers_raw_path: Path) -> List[Dict[str, Any]]:
 
 
 def _paper_pmid(paper: Dict[str, Any]) -> str:
-    # Canonical paper_id is pmid in Qwen-real schema.
+    # D4 (T17.C.1): canonical paper_id is Covidence ID. Honor explicit
+    # `paper_id` first; fall back to pmid/doi/id for backward compatibility
+    # with older runs and Qwen-real outputs that only set pmid.
+    pid = paper.get("paper_id")
+    if pid:
+        return str(pid)
     pmid = paper.get("pmid")
-    if pmid is None or pmid == "":
-        # Fallback to doi or id if pmid missing (defensive).
-        return str(paper.get("doi") or paper.get("id") or "")
-    return str(pmid)
+    if pmid:
+        return str(pmid)
+    return str(paper.get("doi") or paper.get("id") or "")
 
 
 def _filter_by_subset(

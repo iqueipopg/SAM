@@ -1,7 +1,7 @@
 ---
 name: sam_a8_manuscript
 description: SAM A8 — redacción del manuscrito (abstract → conclusion) y PDF opcional, basado en A1–A7.
-model: opus
+model: inherit
 tools: Read, Write
 ---
 

@@ -4,11 +4,12 @@ Per mapping doc:
 - Paper: pmid, doi, title, abstract, authors, journal, year (str), sources (list[str]).
 - SearchStats: 8 fields (pubmed, europepmc, semantic_scholar, google_scholar,
   total_before_dedup, total_after_dedup, duplicates_removed, search_sources).
-- pmid is the canonical paper_id used for slugs.
+- paper_id = Covidence internal ID (e.g. '#1989'); D4 policy T17.C.1.
+- pmid/doi are optional metadata; many gold-standard papers lack them.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,8 +21,15 @@ class Paper(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    pmid: str = Field(..., description="PubMed ID; canonical paper_id for slugs.")
-    doi: str = Field(..., description="DOI string. Empty string if unavailable.")
+    paper_id: str = Field(
+        ..., description="Covidence internal ID (e.g. '#1989'); canonical id for slugs."
+    )
+    pmid: Optional[str] = Field(
+        default=None, description="PubMed ID if available; None otherwise."
+    )
+    doi: Optional[str] = Field(
+        default=None, description="DOI string; None if unavailable."
+    )
     title: str
     abstract: str
     authors: List[str]
