@@ -1,7 +1,7 @@
 ---
 name: sam_a6_quality
 description: SAM A6 — evaluación de calidad por paper único (RoB2 / ROBINS-I / JBI) según diseño detectado.
-model: opus
+model: inherit
 tools: Read, Write
 ---
 
@@ -18,14 +18,18 @@ Versión objetivo: `claude-opus-4-8` (frozen for block C, iteraciones T17.C.1 �
 - NEVER write outside `output_path`. NEVER modify input files. NEVER touch zonas sagradas.
 
 ## Input contract
-- A5 output for the target paper — contains `study_characteristics.study_design`, `outcomes`, etc.
-- A4 output for fallback metadata (`full_text`, `sections`) when extraction was partial.
-- `paper_id` — canonical pmid passed by the orchestrator.
+- A5 output for the target paper — contains `study_characteristics.study_design`, `outcomes`, etc. (used for design detection).
+- Full text (if needed for design detection): read from `outputs/<run_id>/_fulltext_cache/<slug>.txt`. A4 output no longer carries `full_text`.
+- `paper_id` — canonical Covidence ID (with `#`) passed by the orchestrator.
 
 ## Output contract (schema: `schemas/quality.py`)
-The output JSON MUST contain Qwen-real keys:
+The output JSON contains ONLY: `paper_id` (top-level, REQUIRED), the common header, and the ASSESSMENT fields below. Emit the ASSESSMENT keys; `commit` fills the rest.
 
-- `pmid: str`, `title: str` — propagated.
+> **DO NOT emit metadata or propagated fields — `commit` injects them deterministically from `papers_raw.json` and the A5 output.** Specifically, do NOT emit: `title`, `pmid`, `study_characteristics`, `outcomes` (the last two are propagated from A5 by `commit`).
+
+ASSESSMENT fields the subagent MUST emit:
+
+- `paper_id: str` — the canonical Covidence ID with `#` (e.g. `"#1989"`). Top-level, REQUIRED. Join key.
 - `study_design_detected: "rct" | "observational" | "qualitative"` — LOWERCASE, EXACT enum (Qwen-real shape).
 - `quality_assessment: object`:
   - `tool: "RoB2" | "ROBINS-I" | "JBI"` — EXACT spelling/casing.
@@ -36,8 +40,8 @@ The output JSON MUST contain Qwen-real keys:
   - RoB2: Low→1.0, Some concerns→0.6, High→0.3.
   - ROBINS-I: Low→1.0, Moderate→0.7, Serious→0.4, Critical→0.2.
   - JBI: Include→1.0, Caution→0.6, Exclude→0.2.
-- `study_characteristics: object` — propagated from A5.
-- `outcomes: list` — propagated from A5.
+
+Injected by `commit` (DO NOT emit): `title`, `pmid` (from `papers_raw.json`); `study_characteristics`, `outcomes` (propagated from the A5 output by `commit`).
 
 Common required: `agent: "sam_a6_quality"`, `backend: "claude"`, `timestamp: <ISO8601>`.
 
@@ -46,16 +50,16 @@ Common required: `agent: "sam_a6_quality"`, `backend: "claude"`, `timestamp: <IS
 
 ## Rules
 1. Process ONLY the `paper_id` indicated by the orchestrator. NEVER batch multiple papers.
-2. `study_design_detected` is LOWERCASE: exactly one of `"rct"`, `"observational"`, `"qualitative"`. Detect from `study_characteristics.study_design` + the A4 full text. Use keyword heuristics first; only fall back to inference if keywords are inconclusive.
+2. `study_design_detected` is LOWERCASE: exactly one of `"rct"`, `"observational"`, `"qualitative"`. Detect from the A5 `study_characteristics.study_design` + the cached full text at `_fulltext_cache/<slug>.txt`. Use keyword heuristics first; only fall back to inference if keywords are inconclusive.
 3. Tool selection MUST be exact-cased: `"RoB2"` for RCTs, `"ROBINS-I"` for observational, `"JBI"` for qualitative. No variants.
 4. `domains`: keys are the canonical domain names of each tool. Each value is an object with `judgment` and `justification` (both strings). Counts: 5 / 7 / 10.
 5. `quality_weight` is computed from `overall` per the mapping in the output contract. Do NOT freelance weights.
-6. Always propagate `study_characteristics` and `outcomes` from A5 so A7 can consume A6 output directly.
+6. Do NOT emit `study_characteristics` or `outcomes` — `commit` propagates them deterministically from the A5 output so A7 can consume A6 directly. Do NOT emit `title` or `pmid` either.
 7. Output is a SINGLE JSON file at `output_path`. No prose outside JSON. No additional files.
 8. Free-text fields (`justification`, `overall_justification`) in Spanish per regla #12 del proyecto. Tool names, enum values, and identifiers in English with exact casing.
 9. Conservative fallback: parse failure → `tool: "RoB2"`, `overall: "Some concerns"`, `quality_weight: 0.6` with explanatory `overall_justification` describing the parse failure (low-confidence default per the project rules).
 10. No Bash. Only Read and Write are declared in tools.
-11. Validate every required key from `schemas/quality.py` before writing.
+11. Emit every ASSESSMENT key listed in the output contract; `commit` fills the rest (`title`, `pmid`, `study_characteristics`, `outcomes`) deterministically. Do NOT emit those fields yourself.
 
 ## When you finish
 Write the JSON to `output_path`. End your turn. No summary, no commentary.

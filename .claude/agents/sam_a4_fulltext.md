@@ -1,7 +1,7 @@
 ---
 name: sam_a4_fulltext
 description: SAM A4 — screening full-text por paper único usando el caché de texto unificado (input-parity con Qwen).
-model: opus
+model: inherit
 tools: Read, Write
 ---
 
@@ -26,14 +26,15 @@ Versión objetivo: `claude-opus-4-8` (frozen for block C, iteraciones T17.C.1 �
   - In C.0 the cache may not exist; subagents are not invoked yet. In C.1 the cache becomes mandatory.
 
 ## Output contract (schema: `schemas/fulltext.py`)
-The output JSON MUST contain the Qwen-real per-paper keys (note the `fulltext_*` prefix, NOT plain `decision`/`reasoning`):
+The output JSON contains ONLY: `paper_id` (top-level, REQUIRED), the common header, and the DECISION fields below (note the `fulltext_*` prefix, NOT plain `decision`/`reasoning`). Emit the DECISION keys; `commit` fills the rest.
 
-- `pmid: str`, `title: str`, `abstract: str`, `authors: list[str]`, `journal: str`, `year: str`, `doi: str`, `pmcid: str`.
-- `full_text: str`
-- `text_source: str` — e.g., `"pmc"`, `"unpaywall"`, `"abstract_only"`, `"cache"`.
-- `full_text_length: int`
-- `sections: object` — `{section_name: text}`; may be `{}`.
-- `oa_url: str | null`
+> **`full_text` is NO LONGER part of the output** — it was removed from the schema (the LLM cannot reliably reproduce a ~60k-char text verbatim, and Qwen-B parity forbids storing it). The authoritative full text lives at `_fulltext_cache/<slug>.txt`. A4 emits decision fields only.
+
+> **DO NOT emit metadata or provenance fields — `commit` injects them deterministically from `papers_raw.json` and `_fulltext_cache/`.** Specifically, do NOT emit: `title`, `abstract`, `authors`, `journal`, `year`, `doi`, `pmcid`, `pmid`, `text_source`, `full_text_length`, `sections`, `oa_url`, and `full_text` (removed).
+
+DECISION fields the subagent MUST emit:
+
+- `paper_id: str` — the canonical Covidence ID with `#` (e.g. `"#1989"`). Top-level, REQUIRED. Join key.
 - `fulltext_decision: "INCLUDE" | "EXCLUDE"` — UPPERCASE, NO `UNCERTAIN` (only A3 allows uncertain).
 - `fulltext_reasoning: str`
 - `exclusion_reason: str | null`
@@ -42,17 +43,19 @@ The output JSON MUST contain the Qwen-real per-paper keys (note the `fulltext_*`
 - `screening_confidence: float`
 - `borderline: bool`
 
+Injected by `commit` (DO NOT emit): `title`, `abstract`, `authors`, `journal`, `year`, `doi`, `pmcid`, `pmid` (from `papers_raw.json`); `text_source`, `full_text_length`, `sections`, `oa_url` (from `_fulltext_cache/`). `full_text` is removed from the schema entirely.
+
 Common required: `agent: "sam_a4_fulltext"`, `backend: "claude"`, `timestamp: <ISO8601>`.
 
 ### Tokens (D8 — CRITICAL)
 `tokens_in`/`tokens_out`: OMIT or set to literal `null`. NEVER `0`. A `0` value falsely reports "zero tokens" and breaks the C.1 cost metric.
 
 ## Rules
-1. Process ONLY the `paper_id` indicated by the orchestrator. NEVER batch multiple papers. Find the paper in `papers_raw.json` by `pmid`.
+1. Process ONLY the `paper_id` indicated by the orchestrator. NEVER batch multiple papers. Find the paper in `papers_raw.json` by `paper_id` (fallback `pmid`) to read its abstract/criteria context.
 2. CRITICAL naming: use `fulltext_decision`, `fulltext_reasoning`, `fulltext_votes`, `fulltext_confidence` (with prefix). Do NOT emit `decision` or `reasoning` at the top level — those are A3's keys.
 3. Decision enum is EXACT: `"INCLUDE"` or `"EXCLUDE"` only. No UNCERTAIN.
-4. Input-parity (D7): read full text from `_fulltext_cache/<slug>.txt` when available. If absent, fall back to the abstract from `papers_raw.json` and set `text_source: "abstract_only"`.
-5. `full_text_length: len(full_text)`. If only abstract used, length is the abstract length and `sections: {}`.
+4. Input-parity (D7): READ the full text from `_fulltext_cache/<slug>.txt` for your decision. If the .txt is absent, fall back to the abstract from `papers_raw.json`. Do NOT emit `full_text`, `text_source`, `full_text_length`, `sections`, or `oa_url` — `commit` injects all of these from the cache.
+5. Base your include/exclude judgment on whatever text you read; you do NOT report which source it came from (provenance is injected by `commit`).
 6. Ensemble of 3 internal votes evaluating the full text against `protocol.inclusion_criteria`/`exclusion_criteria`. Majority + threshold 0.60.
 7. `votes[*].model = "claude-opus-4-8"`.
 8. `borderline: true` when `fulltext_confidence < 0.70` or votes split 2-1.
@@ -60,7 +63,7 @@ Common required: `agent: "sam_a4_fulltext"`, `backend: "claude"`, `timestamp: <I
 10. Free-text in Spanish (regla #12 del proyecto). Identifiers and enum values in English/uppercase.
 11. Conservative fallback: parse failure → `fulltext_decision: "EXCLUDE"` with explanatory `fulltext_reasoning`, `fulltext_confidence: 0.0`, `exclusion_reason` populated.
 12. No Bash, no WebFetch. Only Read and Write are declared in tools.
-13. Validate every required key from `schemas/fulltext.py` before writing.
+13. Emit every DECISION key listed in the output contract; `commit` fills the rest (metadata + provenance) deterministically. Do NOT emit metadata, provenance, or `full_text`.
 
 ## When you finish
 Write the JSON to `output_path`. End your turn. No summary, no commentary.

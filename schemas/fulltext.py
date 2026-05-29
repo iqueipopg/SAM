@@ -6,7 +6,22 @@ Schemas MUST match these literal names. Subagent prompts also enforce this.
 
 Decision enum is binary: INCLUDE | EXCLUDE (no UNCERTAIN in A4).
 
-`paper_id` mirrors `pmid` for orchestrator compatibility.
+`paper_id` is the canonical Covidence internal ID (e.g. "#1989"). D4 policy
+(T17.C.1): paper_id = Covidence ID; pmid/doi/pmcid are optional metadata
+(many gold-standard papers lack them).
+
+T17.C.1 deterministic I/O separation: `full_text` is intentionally NOT stored
+in this schema. Rationale:
+  - The LLM cannot reliably reproduce verbatim a ~60k-char full text nor
+    self-count its `full_text_length`; making it emit those fields produced
+    drift and silent corruption.
+  - The Qwen-B per-paper A4 baseline carries NO `full_text` / `text_source` /
+    `full_text_length`, so storing `full_text` would break B-parity.
+  - The authoritative full text already lives at
+    `outputs/<run_id>/_fulltext_cache/<slug>.txt`.
+Provenance fields (`text_source`, `full_text_length`, `sections`, `oa_url`) and
+all paper metadata are NOT emitted by the subagent: `commit` injects them
+deterministically from `papers_raw.json` + `_fulltext_cache/`.
 """
 from __future__ import annotations
 
@@ -34,21 +49,24 @@ class FulltextOutput(AgentResultBase):
     """Per-paper output for sam_a4_fulltext/<slug>.json."""
 
     paper_id: str = Field(
-        ..., description="Canonical paper_id (mirrors pmid)."
+        ..., description="Canonical paper_id (Covidence internal ID, e.g. '#1989')."
     )
 
-    # Paper metadata (propagated from A2)
-    pmid: str
+    # Paper metadata (propagated from A2). Identifiers other than paper_id are
+    # optional per D4: many gold-standard papers lack pmid/doi/pmcid.
+    pmid: Optional[str] = None
     title: str
     abstract: str
     authors: List[str]
     journal: str
     year: str
-    doi: str
-    pmcid: str = Field(..., description="PMC identifier (empty string if not available).")
+    doi: Optional[str] = None
+    pmcid: Optional[str] = Field(
+        default=None, description="PMC identifier (None if not available)."
+    )
 
-    # Fulltext retrieval result
-    full_text: str = Field(..., description="Extracted full text (may be empty).")
+    # Fulltext retrieval provenance (injected by commit, NOT emitted by the LLM).
+    # `full_text` is intentionally absent: see module docstring.
     text_source: str = Field(
         ..., description="Source key: 'abstract_only' | 'pmc' | 'unpaywall' | etc."
     )

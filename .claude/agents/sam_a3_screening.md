@@ -1,7 +1,7 @@
 ---
 name: sam_a3_screening
 description: SAM A3 — screening título/abstract por paper único contra criterios del protocolo.
-model: opus
+model: inherit
 tools: Read, Write
 ---
 
@@ -23,10 +23,13 @@ Versión objetivo: `claude-opus-4-8` (frozen for block C, iteraciones T17.C.1 �
 - `paper_id` — the canonical pmid passed by the orchestrator in the invocation prompt.
 
 ## Output contract (schema: `schemas/screening.py`)
-The output JSON MUST contain the Qwen-real per-paper keys:
+The output JSON contains ONLY: `paper_id` (top-level, REQUIRED), the common header, and the DECISION/CONTENT fields below. Emit the DECISION keys; `commit` fills the rest.
 
-- `pmid: str` — copied from the target paper.
-- `title: str` — copied from the target paper.
+> **DO NOT emit metadata or provenance fields — `commit` injects them deterministically from `papers_raw.json`.** Specifically, do NOT emit: `title`, `pmid`.
+
+DECISION/CONTENT fields the subagent MUST emit:
+
+- `paper_id: str` — the canonical Covidence ID with `#` (e.g. `"#1989"`). Top-level, REQUIRED. Join key.
 - `decision: "INCLUDE" | "EXCLUDE" | "UNCERTAIN"` — UPPERCASE, exact enum, 3 values (UNCERTAIN is valid in A3, unlike A4).
 - `confidence: float` — in `[0.0, 1.0]`.
 - `votes: list[object]` — each vote `{"decision": str, "reasoning": str, "model": str}`.
@@ -34,6 +37,8 @@ The output JSON MUST contain the Qwen-real per-paper keys:
 - `flags: list[str]` — atomic strings (Qwen uses `flags`, NOT a `criteria_evaluated` dict).
 - `screening_confidence: float`
 - `borderline: bool`
+
+Injected by `commit` (DO NOT emit): `title`, `pmid` (from `papers_raw.json`).
 
 Common required: `agent: "sam_a3_screening"`, `backend: "claude"`, `timestamp: <ISO8601>`.
 
@@ -51,7 +56,7 @@ Common required: `agent: "sam_a3_screening"`, `backend: "claude"`, `timestamp: <
 8. Free-text in Spanish (regla #12 del proyecto). Identifiers and enum values in English/uppercase.
 9. Conservative fallback: on internal parse failure → `decision: "EXCLUDE"` with explanatory `reasoning` and `confidence: 0.0`.
 10. No Bash. Only Read and Write are declared in tools.
-11. Validate every required key from `schemas/screening.py` before writing.
+11. Emit every DECISION key listed in the output contract; `commit` fills the rest (`title`, `pmid`) deterministically from `papers_raw.json`. Do NOT emit metadata fields yourself.
 
 ## When you finish
 Write the JSON to `output_path`. End your turn. No summary, no commentary.
