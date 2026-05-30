@@ -399,11 +399,22 @@ class TestAggregateVotesUnit:
         assert abs(conf - (2 / 3)) < 1e-6
 
 
-class TestSecondaryStudyOverride:
-    """Deterministic EXCLUDE for meta-analyses / systematic reviews,
-    regardless of LLM votes."""
+class TestNoSecondaryStudyOverride:
+    """Guard de regresion: el override determinista de estudios secundarios
+    fue eliminado. Las palabras clave 'systematic review' / 'meta-analysis'
+    en el titulo NO deben forzar EXCLUDE — la decision la dictan exclusivamente
+    los votos del LLM.
 
-    def test_systematic_review_forced_exclude(self):
+    El flag informativo 'secondary_study' de _detect_flags puede seguir
+    apareciendo en result['flags'] como metadato, pero no altera la decision.
+    """
+
+    def test_systematic_review_not_forced_exclude(self):
+        """3 votos INCLUDE para un 'Systematic review...' → INCLUDE, NO EXCLUDE.
+
+        Verifica que el override determinista no existe: la decision sigue
+        los votos del LLM con threshold 0.60 (3/3 = 1.0 >= 0.60 → INCLUDE).
+        """
         agent = _make_agent(ensemble_size=3, voting_threshold=0.60)
         paper = {
             "pmid": "77777777",
@@ -411,15 +422,24 @@ class TestSecondaryStudyOverride:
             "abstract": "We performed a systematic review of 50 trials...",
             "year": "2023",
         }
-        # Even if ALL votes say INCLUDE, override forces EXCLUDE
+        # All votes say INCLUDE — without the override the result must be INCLUDE
         votes = [_vote("INCLUDE"), _vote("INCLUDE"), _vote("INCLUDE")]
         with patch.object(agent, "_single_vote", side_effect=votes):
             result = agent._screen_single(paper, PROTOCOL_PICO)
-        assert result["decision"] == "EXCLUDE"
-        assert "secondary_study" in result["flags"]
+        assert result["decision"] == "INCLUDE", (
+            "El override de 'systematic review' fue eliminado: 3 votos INCLUDE "
+            "deben producir INCLUDE, no EXCLUDE."
+        )
         assert result["confidence"] == 1.0
+        # El flag informativo puede seguir presente — no es decisivo
+        _expected_keys(result)
 
-    def test_meta_analysis_forced_exclude(self):
+    def test_meta_analysis_not_forced_exclude(self):
+        """3 votos INCLUDE para un 'Meta-analysis...' → INCLUDE, NO EXCLUDE.
+
+        Verifica que el override determinista no existe: la decision sigue
+        los votos del LLM con threshold 0.60 (3/3 = 1.0 >= 0.60 → INCLUDE).
+        """
         agent = _make_agent(ensemble_size=3, voting_threshold=0.60)
         paper = {
             "pmid": "88888888",
@@ -427,10 +447,16 @@ class TestSecondaryStudyOverride:
             "abstract": "We conducted a meta-analysis pooling 42 studies...",
             "year": "2023",
         }
-        with patch.object(agent, "_single_vote", side_effect=[_vote("INCLUDE")] * 3):
+        votes = [_vote("INCLUDE"), _vote("INCLUDE"), _vote("INCLUDE")]
+        with patch.object(agent, "_single_vote", side_effect=votes):
             result = agent._screen_single(paper, PROTOCOL_PICO)
-        assert result["decision"] == "EXCLUDE"
-        assert "secondary_study" in result["flags"]
+        assert result["decision"] == "INCLUDE", (
+            "El override de 'meta-analysis' fue eliminado: 3 votos INCLUDE "
+            "deben producir INCLUDE, no EXCLUDE."
+        )
+        assert result["confidence"] == 1.0
+        # El flag informativo puede seguir presente — no es decisivo
+        _expected_keys(result)
 
 
 class TestJsonSerializable:
