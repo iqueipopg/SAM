@@ -354,6 +354,7 @@ def run_hero1_evaluation(
     config_path: Path,
     output_dir: Path,
     agent_instance=None,
+    max_input_chars: int = 800,
 ) -> dict:
     """Run the Hero 1 evaluation and return the result dict (also written to disk).
 
@@ -388,6 +389,10 @@ def run_hero1_evaluation(
     else:
         agent = agent_instance
 
+    # Run-level override of abstract truncation (does NOT touch config.yaml,
+    # config/agents.json, or agent code). Default 800 preserves production.
+    agent.agent_params["max_input_chars"] = max_input_chars
+
     llm_config = {
         "temperature": 0.2,
         "top_p": getattr(agent, "top_p", None),
@@ -396,7 +401,7 @@ def run_hero1_evaluation(
         "seed": 42,
         "ensemble_size": agent.ensemble_size,
         "voting_threshold": agent.voting_threshold,
-        "max_input_chars": a3_params.get("max_input_chars", 800),
+        "max_input_chars": max_input_chars,
     }
 
     model_used = agent.model_path or "unknown"
@@ -643,6 +648,14 @@ def _parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT_DIR,
         help="Output directory for hero1_results_*.json (default: outputs/eval/micro/).",
     )
+    p.add_argument(
+        "--max-input-chars",
+        type=int,
+        default=800,
+        help="Override agent3 abstract truncation for this run "
+        "(default 800 = production-faithful). Use a large value "
+        "(e.g. 100000) to feed the full abstract.",
+    )
     return p.parse_args()
 
 
@@ -655,7 +668,7 @@ def main() -> int:
         print(f"ERROR: config file not found: {config_path}", file=sys.stderr)
         return 2
 
-    run_hero1_evaluation(config_path, output_dir)
+    run_hero1_evaluation(config_path, output_dir, max_input_chars=args.max_input_chars)
     return 0
 
 
