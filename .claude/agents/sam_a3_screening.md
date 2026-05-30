@@ -47,7 +47,7 @@ Common required: `agent: "sam_a3_screening"`, `backend: "claude"`, `timestamp: <
 
 ## Rules
 1. Process ONLY the `paper_id` indicated by the orchestrator. NEVER batch multiple papers in one invocation. Find the paper in `papers_raw.json.papers` by `pmid == paper_id`.
-2. Simulate an ensemble of 3 internal votes (configurable). Each vote weighs title + abstract against `inclusion_criteria` and `exclusion_criteria`. Aggregate with majority and threshold 0.60.
+2. Produce ONE internal vote (`ensemble_size=1`, for parity with the Qwen track in this exploratory run). The vote weighs title + abstract against `inclusion_criteria` and `exclusion_criteria`. With a single vote there is no majority to aggregate: the final `decision` is that vote's decision (the `voting_threshold` 0.60 does not apply at n=1).
 3. Decision vocabulary is EXACT: `"INCLUDE"`, `"EXCLUDE"`, `"UNCERTAIN"` (uppercase). Do not invent variants.
 4. `votes` MUST contain the per-vote `decision`, `reasoning`, and `model` (use `"claude-opus-4-8"` for `model`).
 5. `borderline: true` when `confidence < 0.70` or votes split 2-1.
