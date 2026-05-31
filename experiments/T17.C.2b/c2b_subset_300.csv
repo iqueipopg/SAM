@@ -1,0 +1,301 @@
+covidence_id,strata,human_label_ta,human_label_ft,exclusion_reason_ft,has_abstract,has_pdf,source_method,purpose,pdf_filename
+#10002,relevant_exclude_ft,relevant,exclude,Wrong publication type,True,True,pdf_metadata,hero1,McRobbie H et al. - 2016 - Tackling obesity in areas of high social deprivati.pdf
+#10028,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Powell J et al. - 2016 - A novel experience-based internet intervention for.pdf
+#10136,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#10144,relevant_exclude_ft,relevant,exclude,Wrong publication type,True,True,pdf_metadata,hero1,Gilbert H et al. - 2017 - Start2quit a randomised clinical controlled trial.pdf
+#10344,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#10394,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,El Hajj MS et al. - 2017 - Effectiveness of a pharmacist-delivered smoking ce.pdf
+#10572,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,ODwyer T et al. - 2017 - Behaviour change intervention increases physical a.pdf
+#10602,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Kolt GS et al. - 2017 - Using Web 2.0 applications to promote health-relat.pdf
+#10650,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Jane-2017-Effects-of-a-weight-management-prog.pdf
+#1066,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Brug J et al. - 1999 - Computer-tailored nutrition education differences.pdf
+#10755,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#10881,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Horsch-2017-Mobile-phone-delivered-cognitive-be.pdf
+#10905,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,J-2017-Attentional bias modification training.pdf
+#10934,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#10942,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11009,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1110,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11191,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Dutton GR et al. - 2017 - Comparison of an alternative schedule of extended .pdf
+#11324,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11436,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11444,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Caetano IRCES et al. - 2018 - Impact of written information on control and adher.pdf
+#11496,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,doi_crossref,hero1,Garcia MC et al. - 2018 - The effects of mindfulness and relaxation training_75.pdf
+#11507,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,OToole S et al. - 2018 - Randomised Controlled Clinical Trial Investigating.pdf
+#11589,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11651,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11683,relevant_exclude_ft,relevant,exclude,Wrong study design,True,True,pdf_metadata,hero1,Shi Z et al. - 2018 - Psychosocial mediators of dietary change among His.pdf
+#11706,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11743,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Angeli et al. - 2018 - The effects of self-regulation strategies followin.pdf
+#11747,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11758,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,VanEpps EM et al. - 2019 - Effect of Process- and Outcome-Based Financial Inc.pdf
+#11790,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Brown EM et al. - 2019 - Self-Incentives Uniquely Boost Cessation in Commun.pdf
+#11803,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Hirschey R et al. - 2018 - A randomized phase II trial of MOVING ON An inter.pdf
+#11804,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Bouma AJ et al. - 2018 - Barrier-belief lifestyle counseling in primary car.pdf
+#11820,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11824,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Garcia-Silva J et al. - 2018 - Efficacy of Cognitive Behavioral Therapy in Adhere_76.pdf
+#11874,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Krishnan N et al. - 2019 - COach2Quit A Pilot Randomized Controlled Trial of.pdf
+#11904,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11926,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11932,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#11947,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Lorenz N et al. - 2019 - Randomized Controlled Trial to Test the Efficacy o.pdf
+#12002,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12044,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12064,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12130,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Pericot-Valverde I et al. - 2019 - A randomized clinical trial of cue exposure treatm.pdf
+#12170,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12272,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,MA-2019-A pilot randomized trial examining the.pdf
+#12322,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Schyns G et al. - 2020 - Exposure therapy vs lifestyle intervention to redu.pdf
+#12348,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Mensorio MS et al. - 2019 - Analysis of the efficacy of an internet-based self.pdf
+#12380,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12435,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Secades-Villa R et al. - 2019 - A randomized controlled trial of contingency manag.pdf
+#12480,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Zill JM et al. - 2019 - The Effectiveness of an Internet Intervention Aime.pdf
+#12511,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Madrona Marcos F et al. - 2019 - Effect of a motivational physical activity program.pdf
+#12516,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12550,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Baker K et al. - 2020 - Efficacy of Computer-Based Telephone Counseling on_7.pdf
+#12573,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12599,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Shi L et al. - 2019 - A pilot study of mindful walking training on physi.pdf
+#12613,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12686,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Ornelas IJ et al. - 2019 - Vida PURA results from a pilot randomized trial o.pdf
+#12729,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12747,relevant_exclude_ft,relevant,exclude,Sin motivo registrado,True,True,pdf_metadata,hero1,Lee TS et al. - 2019 - Controlled randomized trial of walking exercise wi.pdf
+#12762,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Lee H et al. - 2019 - Effectiveness of a health belief model interventio.pdf
+#12776,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Leach HJ et al. - 2019 - A Group Dynamics-Based Exercise Intervention to Im.pdf
+#12788,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1282,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12837,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Murawski B et al. - 2019 - Efficacy of an m-Health Physical Activity and Slee.pdf
+#12902,relevant_exclude_ft,relevant,exclude,Language,True,True,doi_crossref,hero1,Kim KA y Hwang SY - 2019 - Effects of a Daily Life-Based Physical Activity E.pdf
+#12917,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#12973,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,EB-2019-Effects of a Web-Based Evolutionary M.pdf
+#13030,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Appleton-2019-An-interactive-mobile-phone-app-sma.pdf
+#13053,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Moritz S et al. - 2019 - Imaginal retraining decreases craving for high-cal.pdf
+#13058,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#13068,relevant_exclude_ft,relevant,exclude,Wrong study design,True,True,pdf_metadata,hero1,Peels DA et al. - 2020 - Motivational factors for initiating and maintainin.pdf
+#13083,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Steinberg ML et al. - 2020 - A Pilot Randomized Clinical Trial of Brief Interve.pdf
+#13092,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,2850916_253.pdf
+#13097,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#13140,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Wang Y et al. - 2019 - Effects of continuous care for patients with type .pdf
+#13191,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Woo SH et al. - 2020 - Development and Assessment of a Social Network Ser.pdf
+#13225,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Lennefer T et al. - 2020 - Improving employees work-related well-being and p.pdf
+#1329,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdfplumber_fallback,hero1,Barlow JH et al. - 2000 - A randomized controlled study of the Arthritis Sel.pdf
+#13297,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,PP-2020-The transtheoretical model is an effec.pdf
+#13442,relevant_include_ft,relevant,include,,True,True,doi_crossref,hero1,Bennell-2020-Behavior-change-text-messages-for-h_14.pdf
+#13451,relevant_exclude_ft,relevant,exclude,Wrong intervention,True,True,pdf_metadata,hero1,Towfighi A et al. - 2020 - Results of a Pilot Trial of a Lifestyle Interventi.pdf
+#13497,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#13498,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,H-2020-Cognitive behavioural therapy intervent.pdf
+#13538,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,B-2020-The effects of if-then plans on weight.pdf
+#13542,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#13565,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Olayinka OD et al. - 2020 - Pilot Test of an Appreciative Inquiry Intervention.pdf
+#13606,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,OConnor M et al. - 2020 - Randomized Controlled Trial of a Smartphone Applic.pdf
+#13628,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Haaga DAF et al. - 2020 - Looming Vulnerability and Smoking Cessation Attemp.pdf
+#13746,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Voils CI et al. - 2021 - A randomized feasibility pilot trial of a financia.pdf
+#13748,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Leahey TM et al. - 2020 - Patient-provided e-support in reduced intensity ob.pdf
+#13756,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Jiang Y et al. - 2021 - Lasting Effects of a Community-Based Self-Manageme.pdf
+#13805,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#13950,relevant_include_ft,relevant,include,,True,True,pdf_metadata,hero1,PROTOCOLO INTERVENCION_203.pdf
+#13971,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Zuo et al. - 2020 - Effects of cognitive behavioral therapy on sleep d_277.pdf
+#14000,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#14042,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1410,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#14201,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,SANCHEZCRAIG et al. - 1989 - Superior Outcome of Females Over Males After Brief_1452.pdf
+#14256,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#14388,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#14390,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#14749,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#14915,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1546,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#15925,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#16005,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#16441,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1654,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#16691,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#17,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Lamontagne Y et al. - 1978 - Thought-stopping pocket timers and their combina.pdf
+#17386,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1767,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#17991,relevant_exclude_ft,relevant,exclude,Wrong study design,True,True,pdf_metadata,hero1,Lerman et al. - 2009 - Pilot study of two different reinforcement strateg.pdf
+#18329,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1859,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#18752,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1879,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#1898,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#19167,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#19321,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#19697,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Brosseau-2012-The-implementation-of-a-community-b.pdf
+#20133,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#2028,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Mutrie N et al. - 2002 - Walk in to Work Out a randomised controlled tri.pdf
+#2029,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#20393,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#207,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Hjermann I - 1988 - Strategies for dietary and anti-smoking advice. Pr.pdf
+#20835,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Helland-Kigen et al. - 2014 - Maintenance of changes in food intake and motivati.pdf
+#21351,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#2168,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Pallesen S et al. - 2003 - Behavioral treatment of insomnia in older adults .pdf
+#217,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#22713,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#22857,relevant_exclude_ft,relevant,exclude,Wrong study design,True,True,pdf_metadata,hero1,Schofield-2015-Comparing-the-effectiveness-of-indi.pdf
+#23035,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Fitzpatrick et al. - 2016 - Effect of DECIDE (Decisionmaking Education for Cho.pdf
+#23179,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#23223,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Marcus et al. - 2016 - Pasos Hacia La Salud A randomized controlled tria.pdf
+#23518,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#23632,relevant_exclude_ft,relevant,exclude,Wrong intervention,True,True,pdf_metadata,hero1,Juul et al. - 2016 - Effectiveness of a brief theory-based health promo.pdf
+#23723,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#23875,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#2405,relevant_include_ft,relevant,include,,True,True,pdfplumber_fallback,hero1,Tailored_Versus_Standard_Internet_delivered.5_89.pdf
+#24265,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Moss et al. - 2017 - Behavioral weight-loss treatment plus motivational.pdf
+#24642,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#2465,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#24823,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#25283,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#25398,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#25401,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Combining Two Outcome Frames to Promote Support for Obesity-Related Policies.pdf
+#25836,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#26171,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Ayre et al. - 2019 - Randomized trial of planning tools to reduce unhea.pdf
+#26190,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Farmanbar et al. - 2019 - The effects of intervention based on the trans-the.pdf
+#26517,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#26585,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#26590,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#26890,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Celis-Morales et al. - 2019 - Frequent Nutritional Feedback Personalized Advice.pdf
+#27027,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#27184,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#27217,relevant_include_ft,relevant,include,,True,True,pdf_metadata,hero1,Collins et al. - 2019 - Efficacy of a multi-component intervention to prom_34.pdf
+#2737,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Gleeson-Kreig - 2006 - Self-monitoring of Physical Activity.pdf
+#27586,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Dombrowski et al. - 2020 - Game of Stones Feasibility randomised controlled .pdf
+#27806,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Plow et al. - 2020 - Randomized controlled trial of SystemCHANGE weigh.pdf
+#28096,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Cleveland et al. - 2020 - BWHealthy Weight Pilot Study A randomized control.pdf
+#28164,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Kelly et al. - 2020 - Better Health Choices Feasability and preliminary.pdf
+#28301,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#28396,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Yun et al. - 2020 - Efficacy of health coaching and a web-based progra.pdf
+#2841,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#2846,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#28530,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Bilger et al. - 2020 - Demand for Cancer Screening Services Results From.pdf
+#28533,relevant_exclude_ft,relevant,exclude,Wrong age,True,False,doi_crossref,hero1,
+#28606,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,jsr.13102.pdf
+#28629,relevant_exclude_ft,relevant,exclude,Wrong publication type,True,True,pdf_metadata,hero1,Ai et al. - 2021 - The Daily Activity Study of Health (DASH) A pilot.pdf
+#29022,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#29099,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Rayward et al. - 2020 - Efficacy of an m-Health Physical Activity and Slee.pdf
+#2943,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#29777,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#2986,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#29871,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#30160,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Koltyn et al. - 2019 - Intervening to reduce sedentary behavior in older .pdf
+#30230,relevant_exclude_ft,relevant,exclude,Wrong publication type,True,True,pdf_metadata,hero1,King et al. - 2016 - Effects of Three Motivationally Targeted Mobile De.pdf
+#30244,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#30292,relevant_include_ft,relevant,include,,True,True,doi_crossref,hero1,Irvine et al. - 2013 - Web-based Intervention to Promote Physical Activit_108.pdf
+#30734,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#31091,relevant_include_ft,relevant,include,,True,True,doi_crossref,hero1,Focht et al. - 2014 - Group-mediated Physical Activity Promotion and Mob_68.pdf
+#312,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Slama K et al. - 1990 - The effectiveness of two smoking cessation program.pdf
+#31361,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Brosseau-2012-The implementation of a communit.pdf
+#3169,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,West DS et al. - 2007 - Motivational interviewing improves weight loss in .pdf
+#31783,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#31863,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#31885,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#319,relevant_exclude_ft,relevant,exclude,Wrong population,True,True,doi_crossref,hero1,Campbell LV et al. - 1990 - Impact of intensive educational approach to dietar.pdf
+#31967,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#3245,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Linton SJ y Nordin E - 2006 - A 5-year follow-up evaluation of the health and ec.pdf
+#339,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#3529,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#3631,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#3646,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Young JM et al. - 2008 - Acceptability and effectiveness of opportunistic r.pdf
+#3674,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#3835,relevant_exclude_ft,relevant,exclude,Wrong study design,True,True,doi_crossref,hero1,Laatikainen T et al. - 2007 - Prevention of type 2 diabetes by lifestyle interve.pdf
+#3894,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#3944,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Suzuki E et al. - 2008 - Evaluation of an internet-based self-help program .pdf
+#4058,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4189,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4251,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4323,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4340,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4344,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4566,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4611,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4690,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#4982,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#5033,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#5133,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#5145,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Darker CD et al. - 2010 - An intervention to promote walking amongst the gen.pdf
+#5298,relevant_include_ft,relevant,include,,True,True,doi_crossref,hero1,PROTOCOLO INTERVENCION_256.pdf
+#5582,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Kaholokula JK et al. - 2012 - A family and community focused lifestyle program p.pdf
+#5618,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#5649,relevant_include_ft,relevant,include,,True,True,pdfplumber_fallback,hero1,18_1_2011_23_sawchuk_224.pdf
+#5704,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#5763,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#5815,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Allen E et al. - 2011 - The efficacy of a brief intervention in reducing h.pdf
+#5848,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Soureti A et al. - 2011 - Exploratory study of web-based planning and mobile.pdf
+#5852,relevant_include_ft,relevant,include,,True,True,doi_crossref,hero1,White KM et al. - 2012 - An extended theory of planned behavior interventio_265.pdf
+#5862,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Paxton RJ et al. - 2012 - Goal Setting to Promote a Health Lifestyle..pdf
+#5875,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Duvall J - 2012 - A comparison of engagement strategies for encourag.pdf
+#5899,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#5947,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#6081,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Berg CJ et al. - 2012 - Change in smoking diet and walking for exercise .pdf
+#6089,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#6277,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#6439,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#6595,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,K-2012-Is the process of delivery of an indivi.pdf
+#6635,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,doi_crossref,hero1,Nakamura Y et al. - 2013 - Investigating efficacy of two brief mind-body inte_193.pdf
+#6737,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#6793,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,doi_crossref,hero1,PW-2013-Behavior change in a lifestyle interve.pdf
+#6801,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#6860,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,1745-6215-13-178.pdf
+#6886,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7029,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Miller CK et al. - 2014 - Comparison of a mindful eating intervention to a d.pdf
+#708,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Murgraff V et al. - 1996 - Moderating binge drinking it is possible to chang.pdf
+#7096,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7162,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7208,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Jayakrishnan R et al. - 2013 - Smoking cessation intervention in rural kerala In.pdf
+#721,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,doi_crossref,hero1,Smith DE et al. - 1997 - Motivational interviewing to improve adherence to _235.pdf
+#7295,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#730,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7315,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Savant SC et al. - 2013 - Effectiveness of individual and group counseling f.pdf
+#7445,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,J-2014-Effectiveness of a worksite mindfulness.pdf
+#7474,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Li KK et al. - 2014 - Effects of message framing on self-report and acce.pdf
+#7498,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Friederichs et al. - 2014 - Motivational Interviewing in a Web-Based Physical .pdf
+#7508,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Bantum EO et al. - 2014 - Surviving and thriving with cancer using a Web-bas.pdf
+#7533,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7544,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7565,relevant_include_ft,relevant,include,,True,True,doi_crossref,hero1,Griffin SJ et al. - 2014 - Multiple behaviour change intervention and outcome_87.pdf
+#7653,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7679,relevant_exclude_ft,relevant,exclude,Wrong study design,True,True,doi_crossref,hero1,Kuznetsov L et al. - 2013 - Predictors of change in objectively measured and s.pdf
+#7689,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Gerber BS et al. - 2013 - Video telehealth for weight maintenance of African.pdf
+#7736,relevant_include_ft,relevant,include,,True,True,doi_crossref,hero1,Lilienthal KR et al. - 2014 - Telephone-based motivational interviewing to promo_148.pdf
+#7759,relevant_include_ft,relevant,include,,True,True,doi_crossref,hero1,APPENDIX 1_23.pdf
+#7801,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,doi_crossref,hero1,Jerant A et al. - 2014 - Sociopsychological tailoring to address colorectal_127.pdf
+#7851,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7870,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7929,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#7994,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Anderson-2014-The impact of a bodyweight and p_4.pdf
+#8080,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,F-2015-Processes of behavior change and weight.pdf
+#8095,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8308,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Kullgren JT et al. - 2014 - A mixed-methods randomized controlled trial of fin.pdf
+#8364,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8365,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8413,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8416,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8475,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8703,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8712,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Paek YJ et al. - 2014 - Effect on smoking quit rate of telling smokers the.pdf
+#8736,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8838,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#8897,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,doi_crossref,hero1,Cook RF et al. - 2015 - A Web-based health promotion program for older wor_36.pdf
+#8924,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Ruscio AC et al. - 2016 - Effect of Brief Mindfulness Practice on Self-Repor.pdf
+#8995,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#9008,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Cook S et al. - 2015 - The role of the working alliance in treatment for .pdf
+#9072,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#9078,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,Houston TK et al. - 2015 - Evaluating the QUIT-PRIMO clinical practice ePorta.pdf
+#9143,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#9194,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,Blackford K et al. - 2016 - Home-based lifestyle intervention for rural adults_17.pdf
+#922,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#923,relevant_exclude_ft,relevant,exclude,Wrong intervention,True,True,doi_crossref,hero1,Hart AR et al. - 1997 - The effect on compliance of a health education lea.pdf
+#9292,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#93,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Rabkin SW et al. - 1984 - A randomized trial comparing smoking cessation pro.pdf
+#9355,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#9446,relevant_exclude_ft,relevant,exclude,Wrong outcome,True,True,pdf_metadata,hero1,King AC et al. - 2016 - Effects of Three Motivationally Targeted Mobile De_135.pdf
+#9458,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Mavrot C et al. - 2017 - Efficacy of an Internet-based individually tailor.pdf
+#9467,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,C-2016-Guided and Unguided Internet-Based Trea.pdf
+#9547,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,Watanabe M et al. - 2017 - Effects of a lifestyle modification programme to r.pdf
+#955,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#973,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdfplumber_fallback,hero1,Sitharthan97-with-cover-page-v2.pdf
+#9749,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,doi_crossref,hero1,PDF.pdf
+#9799,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#9850,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#9855,relevant_exclude_ft,relevant,exclude,Wrong age,True,True,pdf_metadata,hero1,DA-2016-Generating and predicting high quality.pdf
+#9935,irrelevant_ta,irrelevant,,,True,False,,hero1,
+#9966,irrelevant_ta,irrelevant,,,True,False,,hero1,
