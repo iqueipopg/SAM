@@ -34,12 +34,12 @@ ASSESSMENT fields the subagent MUST emit:
 - `quality_assessment: object`:
   - `tool: "RoB2" | "ROBINS-I" | "JBI"` — EXACT spelling/casing.
   - `domains: object` — dict mapping domain name to `{"judgment": str, "justification": str}`. RoB2 has 5 domains, ROBINS-I has 7, JBI has 10.
-  - `overall: str` — RoB2/ROBINS-I/JBI overall judgment (e.g., `"Low"`, `"Some concerns"`, `"High"`, `"Moderate"`, `"Serious"`, `"Critical"`, `"Include"`, `"Caution"`, `"Exclude"`).
+  - `overall: str` — RoB2/ROBINS-I/JBI overall judgment (e.g., `"Low"`, `"Some concerns"`, `"High"`, `"Moderate"`, `"Serious"`, `"Critical"`, `"No information"`, `"Include"`, `"Include with caution"`, `"Exclude"`).
   - `overall_justification: str`
 - `quality_weight: float` — in `[0.0, 1.0]`. Mapping:
   - RoB2: Low→1.0, Some concerns→0.6, High→0.3.
-  - ROBINS-I: Low→1.0, Moderate→0.7, Serious→0.4, Critical→0.2.
-  - JBI: Include→1.0, Caution→0.6, Exclude→0.2.
+  - ROBINS-I: Low→1.0, Moderate→0.7, Serious→0.4, Critical→0.2, No information→0.3.
+  - JBI: Include→1.0, Include with caution→0.6, Exclude→0.2.
 
 Injected by `commit` (DO NOT emit): `title`, `pmid` (from `papers_raw.json`); `study_characteristics`, `outcomes` (propagated from the A5 output by `commit`).
 
@@ -47,6 +47,97 @@ Common required: `agent: "sam_a6_quality"`, `backend: "claude"`, `timestamp: <IS
 
 ### Tokens (D8 — CRITICAL)
 `tokens_in`/`tokens_out`: OMIT or set to literal `null`. NEVER `0`. A `0` value falsely reports "zero tokens" and breaks the C.1 cost metric.
+
+## Domain criteria (RoB doctrine — instruction parity with Qwen, T17.C.3)
+For each domain/item assign a judgment and a one-sentence justification, applying the same criteria the Qwen track uses (`agents/prompts.py`).
+
+### RoB2 — 5 domains (RCTs)
+- **randomization** — Bias arising from the randomization process.
+  - Low: Adequate sequence generation AND allocation concealment described.
+  - Some concerns: Sequence generation or concealment not fully described.
+  - High: No randomization or clearly inadequate.
+- **deviations** — Bias due to deviations from intended interventions.
+  - Low: Participants and personnel blinded, OR deviations unlikely to affect outcome.
+  - Some concerns: Unclear blinding with potential for deviations.
+  - High: No blinding and deviations likely affected outcome.
+- **missing_data** — Bias due to missing outcome data.
+  - Low: <5% missing data OR appropriate handling (ITT, imputation).
+  - Some concerns: 5-20% missing with unclear handling.
+  - High: >20% missing OR differential attrition without imputation.
+- **measurement** — Bias in measurement of the outcome.
+  - Low: Outcome assessors blinded OR objective measure.
+  - Some concerns: Self-report measure without assessor blinding.
+  - High: Unblinded subjective assessment likely influenced by intervention.
+- **selection** — Bias in selection of the reported result.
+  - Low: Pre-registered protocol with matching reported outcomes.
+  - Some concerns: No pre-registration but results appear complete.
+  - High: Evidence of selective reporting or outcome switching.
+
+### ROBINS-I — 7 domains (observational)
+- **confounding** — Bias due to confounding.
+  - Low: All critical confounders measured and appropriately adjusted for.
+  - Moderate: Some confounders not fully adjusted but unlikely to change conclusions.
+  - Serious: Important confounders not controlled, likely to affect estimate.
+  - Critical: Confounding inherently inseparable from intervention effect.
+  - No information: Insufficient information to judge.
+- **selection_of_participants** — Bias in selection of participants into the study.
+  - Low: All participants eligible, start of follow-up and intervention well defined.
+  - Moderate: Selection may be related to intervention and outcome, but bias unlikely to be important.
+  - Serious: Selection strongly related to both intervention and outcome.
+  - Critical: Selection virtually certain to produce substantial bias.
+  - No information: Insufficient information to judge.
+- **classification_of_interventions** — Bias in classification of interventions.
+  - Low: Intervention status well defined and based solely on information at time of intervention.
+  - Moderate: Some aspects of classification may be affected by knowledge of outcome.
+  - Serious: Classification of intervention likely differential (affected by outcome knowledge).
+  - Critical: Classification so problematic that any estimate is unreliable.
+  - No information: Insufficient information to judge.
+- **deviations_from_interventions** — Bias due to deviations from intended interventions.
+  - Low: No deviations or deviations balanced and unlikely to affect outcome.
+  - Moderate: Some deviations occurred but unlikely to substantially affect outcome.
+  - Serious: Deviations likely affected the outcome and were not appropriately adjusted for.
+  - Critical: Deviations substantially altered the comparison being made.
+  - No information: Insufficient information to judge.
+- **missing_data** — Bias due to missing data.
+  - Low: Data reasonably complete or adequate analysis methods used.
+  - Moderate: Some missing data but proportions and reasons similar across groups.
+  - Serious: Substantial missing data likely related to both intervention and outcome.
+  - Critical: Critical data missing making any estimate unreliable.
+  - No information: Insufficient information to judge.
+- **measurement_of_outcomes** — Bias in measurement of outcomes.
+  - Low: Outcome measures objective or assessors blinded to intervention.
+  - Moderate: Outcome assessment may have been influenced by knowledge of intervention.
+  - Serious: Assessment of outcome clearly influenced by intervention knowledge.
+  - Critical: Measurement of outcome so problematic results are unreliable.
+  - No information: Insufficient information to judge.
+- **selection_of_results** — Bias in selection of the reported result.
+  - Low: Pre-specified analysis plan and reported results consistent.
+  - Moderate: Unclear pre-specification but results appear complete.
+  - Serious: Outcome measurements or analyses are clearly selected to produce a favorable result.
+  - Critical: Reported results almost certainly selected from multiple analyses.
+  - No information: Insufficient information to judge.
+
+### JBI — 10 items (qualitative)
+Answer each `Yes | No | Unclear | Not applicable`:
+1. **philosophical_perspective** — Is there congruity between the stated philosophical perspective and the research methodology?
+2. **methodology_question** — Is there congruity between the research methodology and the research question or objectives?
+3. **methodology_methods** — Is there congruity between the research methodology and the methods used to collect data?
+4. **methodology_analysis** — Is there congruity between the research methodology and the representation and analysis of data?
+5. **methodology_interpretation** — Is there congruity between the research methodology and the interpretation of results?
+6. **researcher_positioning** — Is there a statement locating the researcher culturally or theoretically?
+7. **researcher_influence** — Is the influence of the researcher on the research, and vice-versa, addressed?
+8. **participant_voices** — Are participants, and their voices, adequately represented?
+9. **ethics** — Is the research ethical according to current criteria (evidence of ethical approval and informed consent)?
+10. **conclusions** — Do the conclusions drawn in the research report flow from the analysis or interpretation of the data?
+
+## Overall judgment rules (RoB doctrine — instruction parity with Qwen, T17.C.3)
+Derive `overall` with the SAME rules the Qwen track applies (`agents/prompts.py`):
+
+- **RoB2 — LEAST favorable domain judgment**: all "Low" → `"Low"`; any "Some concerns" (none "High") → `"Some concerns"`; any "High" → `"High"`.
+- **ROBINS-I — WORST-CASE domain judgment**: all "Low" → `"Low"`; worst is "Moderate" → `"Moderate"`; any "Serious" (none "Critical") → `"Serious"`; any "Critical" → `"Critical"`; all "No information" → `"No information"`.
+- **JBI — count "Yes" answers**: 8-10 → `"Include"`; 5-7 → `"Include with caution"`; 0-4 → `"Exclude"`.
+
+> The emitted `overall` may be recomputed deterministically downstream by the evaluation harness from the per-domain judgments.
 
 ## Rules
 1. Process ONLY the `paper_id` indicated by the orchestrator. NEVER batch multiple papers.

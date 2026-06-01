@@ -449,6 +449,80 @@ def _worst_case_gold(judgments: list[str]) -> Optional[str]:
     return inverse[worst_score]
 
 
+# --- T17.C.3 C.2: additive replicas of agent6_quality.py RoB aggregation doctrine ---
+# Shared so the Claude harness (eval_a6_claude.py) recomputes overall/weight with the
+# SAME logic the Qwen track applies, instead of a parallel copy.
+
+# Canonical casing per tool — whitelist replicated from agent6_quality.py:211-228 / 288-302 / 360-376
+_ROB2_CANON = {"low": "Low", "some concerns": "Some concerns", "high": "High"}
+_ROBINS_CANON = {"low": "Low", "moderate": "Moderate", "serious": "Serious",
+                 "critical": "Critical", "no information": "No information"}
+_JBI_CANON = {"yes": "Yes", "no": "No", "unclear": "Unclear", "not applicable": "Not applicable"}
+
+
+def canonicalize_domain_verdict(raw, tool):
+    """Normalize a raw judgment/answer to canonical casing, mirroring the whitelist
+    normalization Qwen applies before aggregation (agent6_quality.py:211-228/288-302/360-376).
+    Out-of-whitelist -> conservative default identical to Qwen
+    (RoB2 'Some concerns', ROBINS-I 'No information', JBI 'Unclear')."""
+    s = str(raw or "").strip().lower()
+    if tool == "RoB2":
+        return _ROB2_CANON.get(s, "Some concerns")
+    if tool == "ROBINS-I":
+        return _ROBINS_CANON.get(s, "No information")
+    return _JBI_CANON.get(s, "Unclear")  # JBI
+
+
+def aggregate_rob2_overall(domains):
+    """Least-favorable rule. Identical to agent6_quality.py:230-237. Assumes canonical judgments."""
+    judgments = [d.get("judgment") for d in domains.values()]
+    if "High" in judgments:
+        return "High"
+    elif "Some concerns" in judgments:
+        return "Some concerns"
+    return "Low"
+
+
+def aggregate_robins_i_overall(domains):
+    """Worst-case rule. Identical to agent6_quality.py:304-315. Assumes canonical judgments."""
+    judgments = [d.get("judgment") for d in domains.values()]
+    if "Critical" in judgments:
+        return "Critical"
+    elif "Serious" in judgments:
+        return "Serious"
+    elif "Moderate" in judgments:
+        return "Moderate"
+    elif all(j == "No information" for j in judgments):
+        return "No information"
+    return "Low"
+
+
+def aggregate_jbi_overall(items):
+    """Count-based rule. Identical to agent6_quality.py:378-385.
+    DECLARED DEVIATION: Qwen counts field 'answer'; the Claude schema uses 'judgment'.
+    Reads 'answer' then falls back to 'judgment'. Thresholds/literals unchanged."""
+    yes_count = sum(1 for it in items.values()
+                    if (it.get("answer") or it.get("judgment")) == "Yes")
+    if yes_count >= 8:
+        overall = "Include"
+    elif yes_count >= 5:
+        overall = "Include with caution"
+    else:
+        overall = "Exclude"
+    return yes_count, overall
+
+
+def compute_quality_weight(overall):
+    """Identical to the weight_map of agent6_quality.py:422-438."""
+    overall = (overall or "").lower()
+    weight_map = {
+        "low": 1.0, "some concerns": 0.6, "high": 0.3,
+        "moderate": 0.7, "serious": 0.4, "critical": 0.2, "no information": 0.3,
+        "include": 1.0, "include with caution": 0.6, "exclude": 0.2,
+    }
+    return weight_map.get(overall, 0.5)
+
+
 def _empty_confusion_matrix() -> dict[str, dict[str, int]]:
     """Build an empty 3x3 confusion matrix indexed by ROB_SCALE."""
     return {row: {col: 0 for col in ROB_SCALE} for row in ROB_SCALE}
