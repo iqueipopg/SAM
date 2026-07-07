@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Agent 6: Quality Assessment / Risk of Bias (Qwen2.5-7B)
 
 Assesses study quality using:

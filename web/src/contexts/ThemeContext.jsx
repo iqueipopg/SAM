@@ -1,3 +1,5 @@
+// Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+// SPDX-License-Identifier: Apache-2.0
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 
 const ThemeContext = createContext({

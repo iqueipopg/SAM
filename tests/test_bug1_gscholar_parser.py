@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """BUG1 (Fase 2) regression — Google Scholar parser in agent2_search.
 
 Three focused checks that complement tests/test_agent2.py:

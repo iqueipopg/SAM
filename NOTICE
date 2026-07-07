@@ -1,0 +1,24 @@
+SAM: Systematic Agent for Meta-analysis
+A multi-agent LLM system for automating systematic reviews and meta-analyses
+
+Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+
+This product was developed as a Trabajo de Fin de Grado (TFG) at the
+ICAI School of Engineering, Comillas Pontifical University, Madrid, Spain,
+and presented as a poster at CIPIE 2026 (II Congreso Internacional de
+Psicología, Innovación Tecnológica y Emprendimiento), Madrid, July 2026.
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.
+
+If you use this software in academic work, please cite it. Citation
+metadata is provided in the CITATION.cff file at the root of this
+repository.
+
+Authors:
+  Ignacio Queipo de Llano Pérez-Gascón (corresponding author)
+  Á. López-López
+  S. Lumbreras
+  P. Collazo-Castiñeira
+  M. Sánchez-Izquierdo
+  I. Echegoyen
+  E. C. Garrido-Merchán

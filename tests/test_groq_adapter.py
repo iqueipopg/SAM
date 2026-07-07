@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for GroqProvider adapter and BaseAgent Groq integration.
 
 No real API key, no GPU, no network required. All external calls are mocked.

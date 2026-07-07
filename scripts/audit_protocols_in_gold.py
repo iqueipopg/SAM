@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T16.D.8.C — Auditoría de study protocols en los 66 includes del gold deporte.
 
 Reutiliza la heurística de detección descrita en T16.D.7.E (script

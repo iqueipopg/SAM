@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """A3 screening schema (per-paper) — aligned to Qwen real output.
 
 Qwen-real fields: pmid, title, decision, confidence, votes, reasoning,

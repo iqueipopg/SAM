@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """A7 synthesis schema (single) — R/metafor outputs are rich and varied.
 
 Per mapping doc, A7 uses `extra='allow'` so R metafor analyses, plots,

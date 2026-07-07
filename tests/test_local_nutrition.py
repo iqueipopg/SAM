@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Local nutrition meta-analysis test — runs A5→A8 on Paula's pre-selected PDFs.
 
 Skips A1-A4 (papers are already selected and downloaded).

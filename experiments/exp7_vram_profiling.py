@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Exp 7 — VRAM Profiling per Agent (A1-A8)
 Mide: time_seconds y VRAM (peak, after_free) por cada agente en un pipeline completo.

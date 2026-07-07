@@ -1,3 +1,5 @@
+// Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+// SPDX-License-Identifier: Apache-2.0
 import { useMemo, useState } from 'react'
 import { ArrowUp, ArrowDown, Search as SearchIcon } from 'lucide-react'
 

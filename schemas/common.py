@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Common base schema for all SAM agent outputs.
 
 T17.C.0 — anchored to Qwen real output (see docs/iterations/T17.C.0_qwen_field_mapping.md).

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """ARQ4: Parallel Phase A retrieval in Agent4FullText.
 
 These tests mock `_retrieve_single` to add a fixed sleep and verify that

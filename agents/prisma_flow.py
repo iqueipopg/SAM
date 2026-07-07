@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """PRISMA 2020 Flow Diagram Generator.
 
 Generates a professional PRISMA flow diagram as PNG using matplotlib,

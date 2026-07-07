@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Smoke test for Agent6 Quality / Risk-of-Bias (T16.D.5.F).
 

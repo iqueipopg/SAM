@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 T17.B.2 partition copy — replicates the T17.B.1 dev partition byte-for-byte.
 

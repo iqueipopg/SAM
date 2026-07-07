@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Hero 2 evaluator -- Agent4 Full-Text screening vs Paula's gold standard.
 

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Per-paper _index.json operations — idempotent append + atomic rewrite.
 
 Each per-paper agent dir holds an _index.json with a list of IndexEntry

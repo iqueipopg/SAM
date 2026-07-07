@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 build_medio_sample.py — Sample medio para los 4 heroes (T16.E.1).
 

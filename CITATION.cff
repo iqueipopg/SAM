@@ -1,0 +1,95 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the metadata
+  from this file. Once the associated paper is published, please
+  cite the paper instead (see "preferred-citation" below).
+title: >-
+  SAM: Systematic Agent for Meta-analysis — A multi-agent LLM system for
+  automating systematic reviews and meta-analyses
+type: software
+authors:
+  # Corresponding author
+  - given-names: Ignacio
+    family-names: Queipo de Llano Pérez-Gascón
+    email: iqueipopg@alu.comillas.edu
+    # Personal e-mail: iqueipo.pg24@gmail.com
+    affiliation: >-
+      ICAI School of Engineering, Comillas Pontifical University,
+      Madrid, Spain
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+  - given-names: Á.
+    family-names: López-López
+    affiliation: >-
+      Institute for Research in Technology, Comillas Pontifical
+      University, Madrid, Spain
+  - given-names: S.
+    family-names: Lumbreras
+    affiliation: >-
+      Institute for Research in Technology, Comillas Pontifical
+      University, Madrid, Spain
+  - given-names: P.
+    family-names: Collazo-Castiñeira
+    affiliation: >-
+      Psychology Department, Comillas Pontifical University,
+      Madrid, Spain
+  - given-names: M.
+    family-names: Sánchez-Izquierdo
+    affiliation: >-
+      Psychology Department, Comillas Pontifical University,
+      Madrid, Spain
+  - given-names: I.
+    family-names: Echegoyen
+    affiliation: >-
+      Psychology Department; Laboratory of Psychology, Comillas
+      Pontifical University, Madrid, Spain
+  - given-names: E. C.
+    family-names: Garrido-Merchán
+    affiliation: >-
+      Quantitative Methods Department; Institute for Research in
+      Technology, Comillas Pontifical University, Madrid, Spain
+repository-code: "https://github.com/iqueipopg/SAM"
+license: Apache-2.0
+# version: 0.6.0            # uncomment and set on public release
+# date-released: 2026-00-00 # uncomment and set on public release
+# doi: 10.xxxx/xxxxx        # uncomment and set once a DOI is minted (e.g. Zenodo)
+keywords:
+  - systematic review
+  - meta-analysis
+  - large language models
+  - multi-agent system
+  - evidence synthesis
+  - PRISMA
+  - risk of bias
+  - retrieval-augmented generation
+
+# Preferred citation for the associated conference contribution.
+# Fill in DOI / pages once the paper is published; presented as a
+# poster at CIPIE 2026 (Madrid, July 2026).
+preferred-citation:
+  type: conference-paper
+  title: >-
+    SAM: Systematic Agent for Meta-analysis — A multi-agent LLM system for
+    automating systematic reviews and meta-analyses
+  authors:
+    - given-names: Ignacio
+      family-names: Queipo de Llano Pérez-Gascón
+    - given-names: Á.
+      family-names: López-López
+    - given-names: S.
+      family-names: Lumbreras
+    - given-names: P.
+      family-names: Collazo-Castiñeira
+    - given-names: M.
+      family-names: Sánchez-Izquierdo
+    - given-names: I.
+      family-names: Echegoyen
+    - given-names: E. C.
+      family-names: Garrido-Merchán
+  year: 2026
+  conference:
+    name: >-
+      II Congreso Internacional de Psicología, Innovación Tecnológica
+      y Emprendimiento (CIPIE 2026)
+    city: Madrid
+    country: ES
+  # doi: 10.xxxx/xxxxx  # uncomment and set once published

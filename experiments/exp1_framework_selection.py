@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Exp 1 — Framework Classification Accuracy (A1)
 Mide: Accuracy y confusion matrix 4x4 (PICO/SPIDER/PECO/PCC).

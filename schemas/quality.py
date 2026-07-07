@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """A6 quality schema (per-paper) — aligned to Qwen real output.
 
 Qwen-real: pmid, title, study_design_detected (lowercase enum),

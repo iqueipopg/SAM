@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """End-to-end integration test for the A1-A8 pipeline.
 
 Runs the full pipeline data flow with synthetic/mocked data.

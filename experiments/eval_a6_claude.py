@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T17.C.3 (Part D) — deterministic harness (NO LLM) for the Claude track of A6 (RoB).
 
 This script is the DETERMINISTIC glue around the A6 Claude run. It does NOT

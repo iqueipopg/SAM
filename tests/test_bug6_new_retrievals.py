@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """BUG6: tests for the new full-text retrieval sources added to Agent4.
 
 Covers:

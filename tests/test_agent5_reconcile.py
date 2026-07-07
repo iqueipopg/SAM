@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Unit tests for Agent5 dual-extraction reconciliation (BUG3).
 
 Covers:

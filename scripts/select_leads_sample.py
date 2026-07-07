@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Select reproducible random sample from LEADSInstruct for T17.A1 Hero A1 evaluation.
 
 This script is part of the pre-registered T17.A1 characterisation iteration of

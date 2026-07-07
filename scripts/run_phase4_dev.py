@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T17.C.1 Phase 4 — deterministic driver for the A4 dev N=387 runs (mono + split V1).
 
 This script is the DETERMINISTIC glue around the A4 Phase 4 runs. It does NOT

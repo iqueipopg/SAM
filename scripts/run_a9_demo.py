@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Standalone runner for Agent9Explainer using the test fixture.
 Generates papers_raw.xlsx + explainability.md from

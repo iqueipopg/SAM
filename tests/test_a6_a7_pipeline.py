@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Test A6 + A7 secuencial usando pipeline_20260304_171352.json"""
 
 import json, sys, os, gc, time

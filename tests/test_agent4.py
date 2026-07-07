@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Test standalone Agent 4: Full-Text Retrieval + PRISMA Screening
 Uses the 3 real PMIDs included from the last A1→A2→A3 pipeline run.

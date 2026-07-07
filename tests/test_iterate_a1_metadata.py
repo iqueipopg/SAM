@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests para experiments/iterate_a1_metadata.py — orquestador de iteración PICO.
 
 Cubre: los 4 operadores (idempotencia, marcadores), propose_next_variant,

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Comprehensive tests for Agent9Explainer (TEST1).
 
 A9 is a CPU-only post-processing agent that generates:

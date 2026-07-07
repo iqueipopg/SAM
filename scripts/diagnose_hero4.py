@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 T16.D.7.C — Hero 4 (Agent6 RoB) deep-dive diagnostic.
 

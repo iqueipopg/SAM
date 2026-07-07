@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Manifest schema — on-disk run state at outputs/<run_id>/manifest.json.
 
 The manifest is the single source of truth for resume / audit. It tracks

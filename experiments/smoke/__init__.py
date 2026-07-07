@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 # Smoke tests for individual agents (A3/A4/A5/A6).
 #
 # Each smoke test validates that one agent produces a parseable, sane output

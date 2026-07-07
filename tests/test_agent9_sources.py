@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """A9 explainability — regression for BUG4: propagate A2 search sources.
 
 The A9 report section §6 "Procedencia de Datos por Paper Incluido" used to

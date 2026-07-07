@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """MeSH validator — canonical NCBI MeSH descriptor lookup for A1 queries.
 
 T17.A1.1 / Fase E.2 implementation. Locked by pre-registration

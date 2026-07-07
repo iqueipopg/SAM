@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 generate_micro_figures.py
 Genera las figuras del sample micro para cap4_resultados.tex

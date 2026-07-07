@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Reproduction + validation script for BUG5.
 
 Loads outputs/run_20260421_102754/pipeline.json, extracts the already-generated

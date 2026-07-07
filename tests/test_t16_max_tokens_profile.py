@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for T16.1 — section_max_tokens_profile in config/agents.json.
 
 Covers:

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Unit tests for Agent5._needs_second_pass numeric-recovery heuristic (BUG5).
 
 These tests exercise the heuristic in isolation without loading an LLM:

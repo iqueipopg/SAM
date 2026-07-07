@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Domain-specific exceptions for the SAM orchestrator (T17.C.0)."""
 from __future__ import annotations
 

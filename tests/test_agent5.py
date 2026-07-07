@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Test standalone Agent 5: Structured Data Extraction
 Uses the 2 real included papers from the last A1→A2→A3→A4 pipeline run.

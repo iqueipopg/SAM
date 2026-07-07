@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Export functions for SAM pipeline data.
 
 Provides CSV, Excel (openpyxl), RevMan XML, and summary table (Markdown) exports.

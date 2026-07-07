@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for ARQ4 — parallel full-text retrieval in agents/agent4_fulltext.py.
 
 Covers:

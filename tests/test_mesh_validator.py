@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Unit tests for ``agents/mesh_validator.py`` (T17.A1.1 / Fase E.2).
 
 Locked by pre-registration ``docs/iterations/T17.A1.1_hypothesis.md``

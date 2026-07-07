@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T17.C.1 Phase 4 — evaluate a committed A4 dev run vs Paula's gold standard.
 
 Reads the committed A4 decisions (`sam_a4_fulltext/<slug>.json::fulltext_decision`)

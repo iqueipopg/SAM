@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Test Agent 1 con GLM-4-9B y prompts contrastivos V2"""
 import sys
 import os

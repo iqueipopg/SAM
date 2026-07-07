@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T16.D.10.B — Recompute Hero 2 metrics from cached A4 outputs.
 
 Loads the post-D9 Hero 2 results JSON (which carries the raw A4 reasons +

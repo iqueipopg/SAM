@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Exp 6 — Full-text Screening Impact (A4 value-add)
 Mide: Cuántos falsos positivos elimina A4 que A3 dejó pasar.

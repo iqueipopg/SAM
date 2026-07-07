@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Agent 7: Statistical Meta-Analysis (R/metafor via rpy2)
 
 No LLM — pure computation. Uses R's metafor package for:

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests para experiments/eval_hero_a1.py — evaluador Hero A1 sobre LEADSInstruct.
 
 Cubre: recall_at_k, _hash_query, _aggregate, _serialize_esearch, caché,

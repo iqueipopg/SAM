@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 SAM — Systematic Agent for Meta-analysis
 Streamlit chat-based UI for the A1→A7 pipeline.

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """A4 split V1 schemas (reporter + decider) — T17.C.1 block C.
 
 The A4 split architecture (V1) decomposes the full-text screening decision into

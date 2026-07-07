@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """BUG5: extended regression tests for Agent5._needs_second_pass.
 
 The heuristic decides whether a second LLM pass is needed to recover numeric

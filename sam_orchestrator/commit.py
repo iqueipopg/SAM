@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Commit step — validate a written agent output against its Pydantic schema
 and update manifest / _index.json atomically.
 

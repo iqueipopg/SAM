@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Re-evaluate Hero 1 micro using the fixed evaluator (T16.E.1.fix Fase 4).
 

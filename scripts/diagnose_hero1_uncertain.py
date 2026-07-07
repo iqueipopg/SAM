@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 T16.D.8.A — Auditoria de los estudios marcados 'uncertain' por Hero 1 (A3 T/A).
 

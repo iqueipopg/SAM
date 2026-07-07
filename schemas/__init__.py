@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """SAM Pydantic schemas (T17.C.0).
 
 Anchored to Qwen real output (see docs/iterations/T17.C.0_qwen_field_mapping.md).

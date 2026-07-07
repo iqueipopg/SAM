@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T16.D.8.B — Audit of the "Wrong publication type" (WPT) bias in Hero 2 (A4).
 
 The Hero 2 confusion matrix shows that A4 predicts the canonical category

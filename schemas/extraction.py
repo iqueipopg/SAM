@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """A5 extraction schema (per-paper) — aligned to Qwen real output.
 
 Qwen-real fields: pmid, title, authors, journal, year, study_characteristics

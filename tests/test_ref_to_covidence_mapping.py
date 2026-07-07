@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests de validacion para el output de T16.D.4.A.
 
 Valida el CSV generado por scripts/build_ref_to_covidence_mapping.py:

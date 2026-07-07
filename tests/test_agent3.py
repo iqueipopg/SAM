@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for Agent 3 (Title/Abstract Screening) — mocked LLM, no GPU.
 
 Covers:

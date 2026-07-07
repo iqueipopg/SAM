@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Dedup threshold sweep for A2 semantic deduplication.
 
 v2 — Extended sweep with larger pool (min_per_db=50) plus 5 synthetic

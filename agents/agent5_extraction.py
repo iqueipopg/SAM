@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Agent 5: Structured Data Extraction (Qwen2.5-7B)
 
 Extracts quantitative/qualitative data from included papers using 3 focused prompts:

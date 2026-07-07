@@ -2,8 +2,23 @@
   <img src="assets/logo_horizontal_light.svg" alt="SAM — Systematic Agent for Meta-analysis" width="420">
 </p>
 
+<h1 align="center">SAM</h1>
+
 <p align="center">
-  <strong>Automated systematic reviews and meta-analyses from a research question.</strong><br>
+  <strong>Systematic Agent for Meta-analysis</strong>
+</p>
+
+<p align="center">
+  <em>A multi-agent LLM system for automating systematic reviews and meta-analyses</em>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache_2.0-0D9488.svg"></a>
+  <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB.svg?logo=python&logoColor=white">
+  <img alt="Presented at CIPIE 2026" src="https://img.shields.io/badge/Presented_at-CIPIE_2026-1E6091.svg">
+</p>
+
+<p align="center">
   9 AI agents &middot; Multi-database search &middot; R/metafor statistics &middot; Manuscript generation &middot; Explainability report
 </p>
 
@@ -418,18 +433,64 @@ Recommended `.env` entry (operator preference, optional): `BACKUP_DIR=/path/to/y
 
 ---
 
-## Credits
+## Authors
 
-**Trabajo de Fin de Grado (TFG)** — Universidad Pontificia Comillas, ICAI
+**Trabajo de Fin de Grado (TFG)** — Comillas Pontifical University, ICAI.
+Presented as a poster at **CIPIE 2026** (II Congreso Internacional de
+Psicología, Innovación Tecnológica y Emprendimiento), Madrid, July 2026.
 
-### Author
-- **Ignacio Queipo de Llano Perez-Gascon** — [iqueipo.pg24@gmail.com](mailto:iqueipo.pg24@gmail.com)
+- **Ignacio Queipo de Llano Pérez-Gascón**¹ *(corresponding author)* —
+  [iqueipopg@alu.comillas.edu](mailto:iqueipopg@alu.comillas.edu) ·
+  [iqueipo.pg24@gmail.com](mailto:iqueipo.pg24@gmail.com)
+- **Á. López-López**⁵
+- **S. Lumbreras**⁵
+- **P. Collazo-Castiñeira**³
+- **M. Sánchez-Izquierdo**³
+- **I. Echegoyen**³ˑ⁴
+- **E. C. Garrido-Merchán**²ˑ⁵
+
+**Affiliations** (all at Comillas Pontifical University, Madrid, Spain):
+1. ICAI School of Engineering
+2. Quantitative Methods Department
+3. Psychology Department
+4. Laboratory of Psychology
+5. Institute for Research in Technology
 
 ### Acknowledgements
 - Qwen Team (Alibaba) for Qwen2.5-7B
 - Hugging Face for the Transformers ecosystem
 - Wolfgang Viechtbauer for R/metafor
 - Open-source communities: LangChain, FAISS, Streamlit, Biopython
+
+---
+
+## Citation
+
+If you use SAM in your research, please cite it. Machine-readable citation
+metadata is provided in [`CITATION.cff`](CITATION.cff) at the root of this
+repository (GitHub renders a "Cite this repository" button from it).
+
+Until the associated paper is published, cite the software:
+
+> Queipo de Llano Pérez-Gascón, I., López-López, Á., Lumbreras, S.,
+> Collazo-Castiñeira, P., Sánchez-Izquierdo, M., Echegoyen, I., &
+> Garrido-Merchán, E. C. (2026). *SAM: Systematic Agent for Meta-analysis —
+> A multi-agent LLM system for automating systematic reviews and
+> meta-analyses* [Software]. https://github.com/iqueipopg/SAM
+
+A `preferred-citation` entry for the CIPIE 2026 contribution is included in
+`CITATION.cff`; the DOI and version fields will be filled in on publication.
+
+---
+
+## License
+
+Licensed under the **Apache License, Version 2.0**. See [`LICENSE`](LICENSE)
+and [`NOTICE`](NOTICE) for details. You may use, modify, and distribute this
+software, including for commercial purposes, provided you retain the
+copyright and attribution notices.
+
+Copyright © 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors.
 
 ---
 

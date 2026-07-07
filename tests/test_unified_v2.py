@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for the schema-v2 unified gold-standard CSV.
 
 Validates the 13-column schema introduced in D.3.B:

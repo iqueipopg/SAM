@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for T16.9 — --config flag in batch_run.py and SAM_CONFIG env var in api.py.
 
 Covers:

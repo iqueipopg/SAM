@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Pipeline completo: Agent 1 → Agent 2 → Agent 3 → Agent 4
 Ejecutar desde raíz: python test_pipeline_complete.py

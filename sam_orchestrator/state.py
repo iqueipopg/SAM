@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Core `next_work` logic — pure, deterministic, no LLM.
 
 Reads manifest + per-agent _index.json + agent outputs to decide what the

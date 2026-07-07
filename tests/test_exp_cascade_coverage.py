@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for scripts/exp_cascade_coverage.py.
 
 Covers the public functions exposed by the cascade coverage analysis script:

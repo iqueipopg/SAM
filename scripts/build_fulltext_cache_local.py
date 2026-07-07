@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Build _fulltext_cache/ for a sam run from LOCAL PDFs (D7 input-parity, T17.C.1 PASO 2).
 
 LOCAL-PDF analogue of scripts/build_fulltext_cache.py (the ONLINE-cascade

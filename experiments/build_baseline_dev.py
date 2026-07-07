@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 T17.B.1 — Phase 1 / Script 2: Recompute baseline metrics on the dev subset.
 

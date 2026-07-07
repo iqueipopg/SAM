@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Subset specification parsing and loading.
 
 Spec syntax: 'path/to/partition.json:split_name', e.g.

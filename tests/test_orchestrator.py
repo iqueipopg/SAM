@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for sam_orchestrator state library (T17.C.0).
 
 No LLM, no GPU, no network. All tests operate on tmpdir fixtures.

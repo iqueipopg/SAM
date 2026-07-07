@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Shared test fixtures for SAM pipeline tests.
 
 Provides reusable mock data and helpers for testing new features (T1-T8).

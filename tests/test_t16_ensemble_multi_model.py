@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for T16.6 — ensemble multi-modelo in base.py, agent3_screening.py.
 
 Covers:

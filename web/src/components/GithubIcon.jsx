@@ -1,3 +1,5 @@
+// Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+// SPDX-License-Identifier: Apache-2.0
 export default function GithubIcon({ size = 16, className = '' }) {
   return (
     <svg

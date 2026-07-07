@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Agent 8: Manuscript Generation with RAG (Qwen2.5-7B + MiniLM + FAISS)
 
 Generates a publishable systematic review manuscript using:

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Test Agent 8: Manuscript Generation with RAG
 
 Loads the latest pipeline JSON and runs A8 manuscript generation.

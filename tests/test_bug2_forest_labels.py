@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """BUG2 regression tests — forest plot study-label fallback cascade.
 
 These tests exercise :meth:`Agent7Synthesis._build_study_label` and its helper

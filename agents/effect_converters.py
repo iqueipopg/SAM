@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Effect size conversion functions for meta-analysis pooling.
 
 Enables Agent 7 to combine studies that report different but compatible

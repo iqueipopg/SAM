@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Hero 4 evaluator -- Agent6 Quality / Risk-of-Bias vs Paula's gold standard.
 

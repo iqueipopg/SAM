@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Agent 3: Title/Abstract Screening with Ensemble Voting (Qwen2.5-7B)"""
 
 import sys, os

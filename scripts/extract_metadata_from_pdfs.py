@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 extract_metadata_from_pdfs.py — T16.D.3.A (+ T16.D.3.A.bis Method 5)
 

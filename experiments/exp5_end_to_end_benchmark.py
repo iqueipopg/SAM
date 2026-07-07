@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Exp 5 — End-to-End Pipeline Benchmark (A1->A2->A3->A4)
 Mide: PRISMA flow, retrieval rates, timing breakdown para MULTIPLES queries.

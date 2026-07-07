@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Exp 8 — Gold Standard Evaluation: A3 and A3+A4 vs Human Annotations
 

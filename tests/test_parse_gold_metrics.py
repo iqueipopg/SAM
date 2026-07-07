@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests unitarios para scripts/parse_gold_metrics.py (tarea T16 Fase 2 Bloque C.5).
 
 Estos tests validan el CSV de salida ya generado:

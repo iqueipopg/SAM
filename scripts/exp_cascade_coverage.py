@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Cascade coverage analysis for A4 full-text retrieval.
 
 Reads the A4 checkpoint from the reference run, groups papers by their

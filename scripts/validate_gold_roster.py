@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Cross-reference validation: gold standard sport roster (CSV) vs PDFs on disk.
 
 Reads ``data/gold_standard/deporte/registro_maestro.csv`` and verifies, for each

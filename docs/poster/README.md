@@ -7,10 +7,21 @@ Design del grupo y preparado para impresión.
 
 | Fichero | Descripción |
 |---|---|
-| `SAMA_Poster_A0.html` | Fuente del póster. Autocontenido: las fuentes (Outfit + JetBrains Mono) van embebidas en base64, no depende de red. Se ve a pantalla (se autoescala al viewport) y en impresión sale a A0. |
-| `SAMA_Poster_A0.pdf` | PDF final listo para imprimir. **A0 real (841 × 1189 mm)**, una página, texto vectorial con fuentes embebidas. |
+| `SAMA_Poster_A0.html` | Fuente del póster. Autocontenido: las fuentes (Outfit + JetBrains Mono) van embebidas en base64, no depende de red. Se ve a pantalla (se autoescala al viewport) y en impresión sale a A0. Lleva el nombre nuevo ("Systematic Agent for Meta-analysis"). |
+| `SAMA_Poster_A0.pdf` | **Original congelado**, tal como se presentó en CIPIE 2026 con el nombre antiguo ("Semi-Automatic Meta-Analysis"). No se regenera. **A0 real (841 × 1189 mm)**, una página, texto vectorial con fuentes embebidas. |
+| `SAMA_Poster_A0_updated.pdf` | Versión actualizada con el nombre nuevo ("Systematic Agent for Meta-analysis"), regenerada desde el HTML. Visualmente idéntica al original salvo la expansión del acrónimo. Mismo formato: **A0 real (841 × 1189 mm)**, una página, vectorial. |
 | `assets/` | Logos (Comillas horizontal, CIPIE 2026) en alta resolución. |
-| `render_pdf.py` | Script que regenera el PDF desde el HTML. |
+| `render_pdf.py` | Script que regenera el PDF actualizado (`SAMA_Poster_A0_updated.pdf`) desde el HTML. |
+
+## Nota sobre el nombre del proyecto
+
+El póster **impreso y presentado en CIPIE 2026** usó la expansión original del
+acrónimo: **"SAM: Semi-Automatic Meta-Analysis"**. Con posterioridad el proyecto
+se renombró a **"SAM: Systematic Agent for Meta-analysis"** (la sigla `SAM` no
+cambia; solo cambia lo que significa). Se conservan **ambos PDF**:
+
+- `SAMA_Poster_A0.pdf` — el original, congelado exactamente como se presentó.
+- `SAMA_Poster_A0_updated.pdf` — la versión actualizada con el nombre nuevo.
 
 ## Impresión
 

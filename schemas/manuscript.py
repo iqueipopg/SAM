@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """A8 manuscript schema (single) — narrative manuscript output."""
 from __future__ import annotations
 

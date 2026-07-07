@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests para experiments/eval_a1_pico.py — evaluador PICO de A1 vs LEADSInstruct.
 
 Cubre: pico_element_similarity, normalize_a1_framework_to_pico, _aggregate,

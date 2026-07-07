@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for T17.A2 prompt_template kwarg injection into Agent1Protocol.generate_pubmed_query.
 
 Verifies:

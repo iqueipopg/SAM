@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Test A4 new retrieval sources (Europe PMC, Semantic Scholar, Sci-Hub)
 on abstract-only papers from the latest pipeline run.
 

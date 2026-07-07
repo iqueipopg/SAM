@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 SAM — FastAPI backend for the React web UI.
 Runs the A1→A9 pipeline (9 agents) with SSE progress streaming.

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T17.C.2 — deterministic harness (NO LLM) for the Claude track of A3 screening.
 
 This script is the DETERMINISTIC glue around the A3 Claude smoke run. It does

@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Groq cloud LLM adapter for SAM pipeline.
 
 Provides a GroqProvider class that mirrors BaseAgent's generate() interface,

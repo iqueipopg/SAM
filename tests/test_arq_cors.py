@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for ARQ6 — CORS_ORIGINS configurable via env var in api.py.
 
 Covers:

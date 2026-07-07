@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T17.B.1 evaluator — Agent4 full-text screening (reporter/decider split).
 
 Sprint:   T17.B.1 (Phase 3 — smoke; Phase 4 — full dev sweep)

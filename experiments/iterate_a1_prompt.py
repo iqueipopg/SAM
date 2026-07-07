@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T17.A2 prompt-iteration orchestrator for A1.generate_pubmed_query.
 
 Overnight greedy local search over a hand-curated space of prompt variants

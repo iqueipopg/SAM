@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Unit tests for BUG3: generalized N-value numeric reconciliation.
 
 Covers the new `_reconcile_numeric_field(values, field_name)` helper added to

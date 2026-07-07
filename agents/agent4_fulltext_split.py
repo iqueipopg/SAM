@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Agent4FullTextSplit — A4 fulltext con Phase B dividida en reporter + decider.
 
 Decisión arquitectónica T17.B.1: el screening de fulltext se ejecuta en dos

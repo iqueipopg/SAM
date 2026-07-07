@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Exp 3 — Ensemble Size Ablation (A3)
 Mide: %INCLUDE, %UNCERTAIN, s/paper, estabilidad (std entre runs) vs ensemble_size.

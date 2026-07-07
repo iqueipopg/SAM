@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for data/gold_standard/deporte/unified/gold_screening_unified.csv.
 
 These tests read the already-generated CSV and validate its canonical structure,

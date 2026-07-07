@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Tests for T16.D.4.B: sample micro estratificado de 50 papers.
 
 Validates data/gold_standard/deporte/samples/micro/sample_50.csv generated

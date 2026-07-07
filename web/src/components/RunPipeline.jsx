@@ -1,3 +1,5 @@
+// Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+// SPDX-License-Identifier: Apache-2.0
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Play, Square, ChevronDown, ChevronUp, Loader2, Check, X,

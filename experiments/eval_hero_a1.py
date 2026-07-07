@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """
 Hero A1 evaluator — Agent1Protocol vs LEADSInstruct ground truth.
 

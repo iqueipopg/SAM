@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T16.D.7.E — A5 zero-outcomes diagnosis (#13950, #5298) vs #13442 control.
 
 Lee el cache A5 (outputs/eval/micro/_a5_full_outputs.json) y los PDFs asociados.

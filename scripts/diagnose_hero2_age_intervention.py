@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """T16.D.10.A - Diagnostic of the "Wrong age" <-> "Wrong intervention" confusion in Hero 2.
 
 After the T16.D.9.B fix (which removed the spurious WPT routing in the

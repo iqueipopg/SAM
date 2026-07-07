@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Agent 2: Multi-Database Search (PubMed + Europe PMC + Semantic Scholar + Google Scholar)"""
 
 from Bio import Entrez

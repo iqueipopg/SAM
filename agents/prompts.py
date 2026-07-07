@@ -1,3 +1,5 @@
+# Copyright 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors
+# SPDX-License-Identifier: Apache-2.0
 """Prompts Agent 1 - ENGLISH VERSION (Qwen funciona mejor en inglés)"""
 # REGLA DE IDIOMA: Nunca traducir outputs al inglés. Informes, logs, JSON,
 # explainability.md, descriptivos en manuscrito y mensajes al usuario: español.
