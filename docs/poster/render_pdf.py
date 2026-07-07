@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Render SAMA_Poster_A0.html to a print-ready, vector PDF at true A0 (841x1189 mm).
+
+The HTML embeds its fonts (Outfit + JetBrains Mono) as base64, so no network or
+system font install is needed. The @media print block scales the layout with
+CSS `zoom` (not `transform: scale`, which triggers a Chromium print-clipping
+bug) so the whole poster lands on a single A0 page as crisp vector output.
+
+Usage:
+    python render_pdf.py            # renders SAMA_Poster_A0.pdf next to the HTML
+
+Requires: playwright + chromium
+    pip install playwright && python -m playwright install chromium
+"""
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+HERE = Path(__file__).resolve().parent
+HTML = HERE / "SAMA_Poster_A0.html"
+PDF = HERE / "SAMA_Poster_A0.pdf"
+
+
+def main() -> int:
+    with sync_playwright() as p:
+        browser = p.chromium.launch(args=["--no-sandbox", "--force-color-profile=srgb"])
+        page = browser.new_page(viewport={"width": 1682, "height": 2378},
+                                device_scale_factor=1)
+        page.goto(HTML.as_uri(), wait_until="networkidle", timeout=90_000)
+        page.evaluate("async () => { await document.fonts.ready; }")
+        page.emulate_media(media="print")
+        page.wait_for_timeout(600)
+        page.pdf(
+            path=str(PDF),
+            prefer_css_page_size=True,   # honor @page { size: 841mm 1189mm }
+            print_background=True,
+            margin={"top": "0", "right": "0", "bottom": "0", "left": "0"},
+        )
+        browser.close()
+    print(f"WROTE {PDF} ({PDF.stat().st_size} bytes)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
