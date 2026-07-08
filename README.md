@@ -50,7 +50,7 @@ Developed as part of the **Trabajo de Fin de Grado (TFG)** at **Universidad Pont
 - **Model-agnostic**: auto-detects chat templates, works with any HuggingFace model
 - **Per-agent LLM parameters** in `config/agents.json` (temperature, max_tokens, repetition penalty)
 - **Two UIs**: Streamlit (desktop, light/dark mode) and a modern React + Vite + Tailwind web UI backed by a FastAPI/SSE server
-- **154+ automated tests** covering all 9 agents plus end-to-end pipeline
+- **991 automated tests** (879 passing; the rest skipped or xfail for deferred features / GPU-only paths) covering all 9 agents plus end-to-end pipeline
 
 ---
 
@@ -286,7 +286,7 @@ SAM/
 ├── assets/                    # SVG logos (light + dark variants)
 ├── .streamlit/config.toml     # Streamlit theme configuration
 │
-├── tests/                     # 154+ tests (per-agent + end-to-end pipeline)
+├── tests/                     # 991 tests (per-agent + end-to-end pipeline)
 ├── experiments/               # Validation and benchmarking scripts (exp1-exp8)
 ├── docs/                      # Documentation & presentation
 │   ├── presentacion_sam.tex   # Beamer presentation (LaTeX)
@@ -494,4 +494,4 @@ Copyright © 2026 Ignacio Queipo de Llano Pérez-Gascón and the SAM authors.
 
 ---
 
-**Version:** v0.6.0 — 9 agents (A1-A9), React + Vite + Tailwind web UI, FastAPI/SSE backend, `config/agents.json`, 154+ tests.
+**Version:** v0.6.0 — 9 agents (A1-A9), React + Vite + Tailwind web UI, FastAPI/SSE backend, `config/agents.json`, 991 tests (879 passing).
