@@ -10,7 +10,7 @@ type: software
 authors:
   # Corresponding author
   - given-names: Ignacio
-    family-names: Queipo de Llano Pérez-Gascón
+    family-names: Queipo de Llano
     email: iqueipopg@alu.comillas.edu
     # Personal e-mail: iqueipo.pg24@gmail.com
     affiliation: >-
@@ -72,7 +72,7 @@ preferred-citation:
     automating systematic reviews and meta-analyses
   authors:
     - given-names: Ignacio
-      family-names: Queipo de Llano Pérez-Gascón
+      family-names: Queipo de Llano
     - given-names: Á.
       family-names: López-López
     - given-names: S.
