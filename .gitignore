@@ -84,3 +84,9 @@ data/
 # ── Misc ──────────────────────────────────────────────────
 *.bak
 *.tmp
+
+# ── Business card (local deliverable, not tracked) ────────
+docs/tarjeta/
+
+# ── Retired dev diary (kept on disk, superseded by DIARIO_SESIONES.md) ──
+docs/DIARIO_DESARROLLO_COMPLETO.txt
