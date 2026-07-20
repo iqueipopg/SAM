@@ -27,9 +27,12 @@ The output JSON contains ONLY: `paper_id` (top-level, REQUIRED), the common head
 
 > **DO NOT emit metadata or propagated fields — `commit` injects them deterministically from `papers_raw.json` and the A5 output.** Specifically, do NOT emit: `title`, `pmid`, `study_characteristics`, `outcomes` (the last two are propagated from A5 by `commit`).
 
-ASSESSMENT fields the subagent MUST emit:
+The output has TWO shapes discriminated by `applicability` (see "Aplicabilidad — alcance RoB2" below). Emit ONE of them.
+
+ASSESSMENT fields the subagent MUST emit (shape = `applicable`):
 
 - `paper_id: str` — the canonical Covidence ID with `#` (e.g. `"#1989"`). Top-level, REQUIRED. Join key.
+- `applicability: "applicable"` — the study is a randomized trial in the RoB2 domain (this is the normal path).
 - `study_design_detected: "rct" | "observational" | "qualitative"` — LOWERCASE, EXACT enum (Qwen-real shape).
 - `quality_assessment: object`:
   - `tool: "RoB2" | "ROBINS-I" | "JBI"` — EXACT spelling/casing.
@@ -40,6 +43,19 @@ ASSESSMENT fields the subagent MUST emit:
   - RoB2: Low→1.0, Some concerns→0.6, High→0.3.
   - ROBINS-I: Low→1.0, Moderate→0.7, Serious→0.4, Critical→0.2, No information→0.3.
   - JBI: Include→1.0, Include with caution→0.6, Exclude→0.2.
+
+## Aplicabilidad — alcance RoB2 (red de seguridad)
+RoB2 solo aplica a ensayos aleatorizados (RCT / cluster_RCT). Si el paper que te pasa the orchestrator NO es un ensayo aleatorizado, **NO fabriques** un juicio RoB2 (ni ROBINS-I ni JBI): emite el shape `not_applicable`.
+
+Shape = `not_applicable` — emitir SOLO estos campos de assessment:
+
+- `paper_id: str` — Covidence ID con `#`. Top-level, REQUIRED.
+- `applicability: "not_applicable"`.
+- `study_design_category: str` — la categoría de diseño (enum cerrado) tomada de la salida A5 (`study_characteristics.study_design_category` si está; si no, descríbela brevemente). Es el PORQUÉ del no-aplica.
+- `applicability_reason: str` — una frase en español, honesta: p.ej. `"Diseño no aleatorizado (RoB2 no aplica): estudio pre-post de un solo grupo."` Si no puedes determinar la subcategoría exacta, di eso mismo (`"...; subcategoría de diseño pendiente de revisión manual."`), NO inventes un diseño.
+- NO emitas `quality_assessment` ni `quality_weight` (déjalos fuera o `null`). NO emitas `study_design_detected`.
+
+> **Nota de contexto (encargo edadismo):** en este entregable the orchestrator enruta con un router determinista y SOLO te envía los RCT/cluster_RCT, así que en la práctica siempre tomarás el shape `applicable`. El shape `not_applicable` es una red de seguridad/coherencia por si recibes un no-RCT — la decisión de aplicabilidad la toma el router (determinista, sobre la tabla auditada), no tú.
 
 Injected by `commit` (DO NOT emit): `title`, `pmid` (from `papers_raw.json`); `study_characteristics`, `outcomes` (propagated from the A5 output by `commit`).
 
@@ -141,6 +157,7 @@ Derive `overall` with the SAME rules the Qwen track applies (`agents/prompts.py`
 
 ## Rules
 1. Process ONLY the `paper_id` indicated by the orchestrator. NEVER batch multiple papers.
+1b. **Aplicabilidad primero.** Si el estudio NO es un ensayo aleatorizado (RCT/cluster_RCT), emite el shape `not_applicable` (ver "Aplicabilidad — alcance RoB2"): NO selecciones instrumento, NO fabriques dominios, NO calcules `quality_weight`. Solo si es RCT/cluster_RCT sigues las reglas 3-5 (RoB2).
 2. `study_design_detected` is LOWERCASE: exactly one of `"rct"`, `"observational"`, `"qualitative"`. Detect from the A5 `study_characteristics.study_design` + the cached full text at `_fulltext_cache/<slug>.txt`. Use keyword heuristics first; only fall back to inference if keywords are inconclusive.
 3. Tool selection MUST be exact-cased: `"RoB2"` for RCTs, `"ROBINS-I"` for observational, `"JBI"` for qualitative. No variants.
 4. `domains`: keys are the canonical domain names of each tool. Each value is an object with `judgment` and `justification` (both strings). Counts: 5 / 7 / 10.

@@ -14,7 +14,11 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Backend = Literal["claude", "qwen"]
+Backend = Literal["claude", "qwen", "deterministic_router"]
+# "deterministic_router": record written WITHOUT invoking any model (e.g. an A6
+# NOT_APPLICABLE record emitted by a deterministic router over an audited design
+# table). Honest provenance: no LLM evaluated the paper. Additive value — never
+# rejects a prior "claude"/"qwen" record.
 
 
 class AgentResultBase(BaseModel):
