@@ -32,8 +32,19 @@ CONTENT fields the subagent MUST emit:
 - `paper_id: str` — the canonical Covidence ID with `#` (e.g. `"#1989"`). Top-level, REQUIRED. Join key.
 - `study_characteristics: object`:
   - `study_design: str` — e.g., `"RCT"`, `"Cohort"`, `"Case-control"`.
+  - `study_design_category: str` — closed enum, EXACTLY one of:
+    `"RCT"` | `"cluster_RCT"` | `"quasi_experimental_controlled"` |
+    `"single_group_pre_post"` | `"cross_sectional"` | `"qualitative"` |
+    `"mixed_methods"` | `"other"`. Definitions: RCT = individual randomization;
+    cluster_RCT = randomization by cluster; quasi_experimental_controlled =
+    non-randomized WITH a control/comparison group; single_group_pre_post =
+    one group, pre AND post, NO control group; cross_sectional = single
+    timepoint, no pre/post; qualitative = primarily qualitative; mixed_methods =
+    residual mixed with no dominant quantitative design; other = none of the
+    above (e.g. single-group post-only). Keep `study_design` as the free-text
+    description.
   - `sample_size: int | null`
-  - `n_groups: {"intervention": int|null, "control": int|null} | null`
+  - `arms: list[Arm]` — one object per study arm: `{"label": str, "arm_type": "intervention"|"control"|"comparator", "n": int|null, "description": str|null}`. Emit EVERY arm (source of truth for group structure); do NOT emit `n_groups`.
   - `age_mean: float | null`, `age_sd: float | null`
   - `female_pct: float | null`
   - `setting: str | null`, `country: str | null`
@@ -45,10 +56,12 @@ CONTENT fields the subagent MUST emit:
   - `dose_duration: str`
 - `outcomes: list[object]` each with:
   - `name: str`
-  - `effect_size_type: str` — `"MD" | "SMD" | "OR" | "RR" | "HR" | "PROP"`.
+  - `effect_size_type: str` — `"MD" | "SMD" | "OR" | "RR" | "HR" | "PROP" | "none"`. Use `"none"` for single-arm descriptives (see rules).
   - `effect_size_value: float | null`
   - `ci_lower: float | null`, `ci_upper: float | null`
   - `p_value: float | null`
+  - `measurements: list[Measurement]` — arm-linked raw readings: `{"arm_label": str, "timepoint": "baseline"|"post"|"followup", "mean": float|null, "sd": float|null, "n": int|null}`. `arm_label` MUST match an `Arm.label`.
+  - `descriptive_stats: list[DescriptiveStat]` — single-arm descriptives (used with `effect_size_type: "none"`): `{"statistic": str, "value": float, "scale": str|null, "arm_label": str|null}`.
   - Additional fields (e.g., `n_intervention`, `n_control`) when available.
 - `extraction_quality: "complete" | "partial" | "failed"`
 - `extraction_notes: str`
@@ -71,6 +84,9 @@ Common required: `agent: "sam_a5_extraction"`, `backend: "claude"`, `timestamp: 
 1. Process ONLY the `paper_id` indicated by the orchestrator. NEVER batch multiple papers in one invocation.
 2. Do NOT emit `authors`, `year`, `journal`, `title`, `pmid`, or `text_source` — `commit` injects them deterministically from `papers_raw.json`/`_fulltext_cache/` (this supersedes the old BUG4 manual-propagation rule and removes the regression risk). Read the full text from `_fulltext_cache/<slug>.txt`.
 3. `intervention_exposure` MUST be a nested object with the 4 keys. Do NOT emit a flat `intervention` string.
+3a. MULTI-ARM: emit one `Arm` per study arm, including the 3rd arm in three-arm trials. NEVER collapse or sum arms into a single group. Do NOT emit the legacy `n_groups`.
+3b. TEMPORAL: PRE/POST/follow-up values go into `measurements`, each linked to its arm via `arm_label` and tagged with `timepoint` (`baseline`/`post`/`followup`). Do NOT leave pre/post readings as free text only.
+3c. DESCRIPTIVES: an outcome that reports only a mean/proportion for a single arm with NO comparison (no control, no pre/post pair) MUST use `effect_size_type: "none"` and `descriptive_stats`. NEVER label such a bare mean as `"MD"`.
 4. `outcomes` MUST be a list (possibly empty if the paper reports nothing extractable).
 5. Run an internal 2-pass extraction and reconcile in `concordance` (counts of matches/discrepancies). Apply a 4-pass numeric recovery for missing effect sizes/CIs.
 6. `extraction_quality` is `"complete"` only when all expected outcomes have numeric values (effect size + CI or SD). Otherwise `"partial"` or `"failed"`.

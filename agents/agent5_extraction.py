@@ -1009,8 +1009,18 @@ METHODS TEXT:
 
 Extract the following into valid JSON:
 - study_design: e.g. "RCT", "Cross-sectional", "Cohort", "Case-control"
+- study_design_category: closed enum, EXACTLY one of:
+  "RCT" | "cluster_RCT" | "quasi_experimental_controlled" |
+  "single_group_pre_post" | "cross_sectional" | "qualitative" |
+  "mixed_methods" | "other". Definitions: RCT = individual randomization;
+  cluster_RCT = randomization by cluster; quasi_experimental_controlled =
+  non-randomized WITH a control/comparison group; single_group_pre_post =
+  one group, pre AND post, NO control group; cross_sectional = single
+  timepoint, no pre/post; qualitative = primarily qualitative; mixed_methods =
+  residual mixed with no dominant quantitative design; other = none of the
+  above (e.g. single-group post-only). Keep study_design as the free-text description.
 - sample_size: total number of participants (integer or null)
-- n_groups: object with group names and sizes, e.g. {{"intervention": 120, "control": 120}} or null
+- arms: list of every study arm. One object per arm, e.g. {{"label": "intervention", "arm_type": "intervention", "n": 120, "description": "..."}}. arm_type is one of "intervention", "control", "comparator". Extract EACH arm separately, including the 3rd arm in three-arm trials — never sum or collapse arms into one.
 - age_mean: mean age of participants (number or null)
 - age_sd: standard deviation of age (number or null)
 - female_pct: percentage of female participants (number or null)
@@ -1019,7 +1029,7 @@ Extract the following into valid JSON:
 - followup_duration: e.g. "12 months", "Cross-sectional (no follow-up)"
 
 Respond ONLY with valid JSON. Use null for values not reported in the text.
-{{"study_design": "...", "sample_size": ..., "n_groups": ..., "age_mean": ..., "age_sd": ..., "female_pct": ..., "setting": "...", "country": "...", "followup_duration": "..."}}"""
+{{"study_design": "...", "study_design_category": "...", "sample_size": ..., "arms": [{{"label": "...", "arm_type": "intervention", "n": ..., "description": "..."}}], "age_mean": ..., "age_sd": ..., "female_pct": ..., "setting": "...", "country": "...", "followup_duration": "..."}}"""
 
         response = self._simple_generate(prompt, max_tokens=300, temperature=temperature)
         return self._parse_json_response(response)
