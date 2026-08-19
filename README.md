@@ -42,7 +42,7 @@ Developed as part of the **Trabajo de Fin de Grado (TFG)** at **Universidad Pont
 
 - **9 specialized agents** working sequentially (A1→A9)
 - **4 search databases**: PubMed, Europe PMC, Semantic Scholar, Google Scholar
-- **10-source full-text retrieval cascade**: PMC XML → Unpaywall → Europe PMC → Semantic Scholar → OpenAlex → CrossRef → DOAJ → CORE → Google Scholar → Sci-Hub
+- **Multi-source full-text retrieval cascade** with graceful degradation to abstract-only screening
 - **3 quality assessment tools**: RoB 2.0 (RCTs), ROBINS-I (observational), JBI (qualitative)
 - **R/metafor statistical synthesis** — REML, Egger's test, trim-and-fill, Rosenthal's Fail-Safe N, leave-one-out, subgroups, meta-regression, GRADE; no LLM for statistics
 - **RAG-based manuscript generation** with FAISS + MiniLM-L6-v2
@@ -61,7 +61,7 @@ Developed as part of the **Trabajo de Fin de Grado (TFG)** at **Universidad Pont
 | **A1** | Protocol Design | PICO/SPIDER/PECO/PCC framework detection, criteria generation, PubMed query |
 | **A2** | Literature Search | Multi-database search (PubMed, Europe PMC, Semantic Scholar, Google Scholar) + semantic deduplication |
 | **A3** | Title/Abstract Screening | Ensemble voting (N votes/paper, configurable majority threshold) |
-| **A4** | Full-Text Retrieval & Screening | 10-source retrieval cascade + LLM full-text screening |
+| **A4** | Full-Text Retrieval & Screening | Multi-source retrieval cascade + LLM full-text screening |
 | **A5** | Data Extraction | 3 focused prompts per paper (study characteristics, intervention, outcomes) |
 | **A6** | Quality Assessment | RoB 2.0 / ROBINS-I / JBI Critical Appraisal with weighted scores |
 | **A7** | Statistical Synthesis | R/metafor: random-effects REML, heterogeneity, Egger's test, trim-and-fill, Rosenthal's Fail-Safe N, leave-one-out, subgroups, meta-regression, GRADE, R script export |
@@ -262,7 +262,7 @@ SAM/
 │   ├── agent1_protocol.py     # A1: Protocol (PICO/SPIDER/PECO/PCC)
 │   ├── agent2_search.py       # A2: Multi-database search + dedup
 │   ├── agent3_screening.py    # A3: Ensemble title/abstract screening
-│   ├── agent4_fulltext.py     # A4: 10-source retrieval + LLM screening
+│   ├── agent4_fulltext.py     # A4: multi-source retrieval + LLM screening
 │   ├── agent5_extraction.py   # A5: Structured data extraction
 │   ├── agent6_quality.py      # A6: RoB 2.0 / ROBINS-I / JBI
 │   ├── agent7_synthesis.py    # A7: R/metafor statistical synthesis
@@ -354,7 +354,7 @@ python experiments/run_all.py
 | **RAG** | LangChain + FAISS |
 | **Statistics** | R / metafor (via rpy2) |
 | **Search APIs** | Biopython (Entrez), Europe PMC, Semantic Scholar, Google Scholar |
-| **Full-text** | PMC, Unpaywall, OpenAlex, CrossRef, DOAJ, CORE, Sci-Hub |
+| **Full-text** | PMC, Unpaywall, OpenAlex, CrossRef, DOAJ, CORE |
 | **PDF** | PyMuPDF, pdfplumber, pdfminer, pypdfium2 |
 | **UI** | Streamlit |
 | **Output** | LaTeX (pdflatex), CSV, Excel, RevMan XML |
@@ -426,7 +426,7 @@ Recommended `.env` entry (operator preference, optional): `BACKUP_DIR=/path/to/y
 ## Limitations
 
 - **Single-GPU constraint**: Only one LLM fits in VRAM at a time (8 GB). Ensemble votes are sequential with the same model. Multi-model ensemble supported but adds latency.
-- **Full-text access**: Many articles are publisher-restricted. The 10-source cascade helps, but some papers still fall back to abstract-only.
+- **Full-text access**: Many articles are publisher-restricted. The multi-source cascade helps, but some papers still fall back to abstract-only.
 - **Statistical synthesis**: Requires papers to report compatible quantitative outcomes. If extracted data lacks effect sizes/CIs, no meta-analysis is produced.
 - **LLM accuracy**: A 7B model can generate incorrect extractions or quality judgments. Human validation is recommended.
 - **Google Scholar**: Aggressive rate limiting and CAPTCHAs may block access after many requests.

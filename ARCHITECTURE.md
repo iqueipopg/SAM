@@ -39,7 +39,7 @@ User query
 | A1 Protocol | `agent1_protocol.py` | PICO/SPIDER/PECO/PCC framework detection, criteria generation, PubMed query | Yes | Qwen2.5-7B (4-bit) or Groq |
 | A2 Search | `agent2_search.py` | PubMed + Europe PMC + Semantic Scholar + Google Scholar, semantic dedup | No | MiniLM-L6-v2 (CPU) |
 | A3 Screening | `agent3_screening.py` | Title/abstract ensemble voting (N votes/paper, majority rule) | Yes | Qwen2.5-7B (4-bit) or Groq |
-| A4 FullText | `agent4_fulltext.py` | 10-source cascade retrieval + LLM full-text screening | Yes | Qwen2.5-7B (4-bit) or Groq |
+| A4 FullText | `agent4_fulltext.py` | Multi-source cascade retrieval + LLM full-text screening | Yes | Qwen2.5-7B (4-bit) or Groq |
 | A5 Extraction | `agent5_extraction.py` | 3 focused prompts per paper + numeric recovery 4-pass + author propagation | Yes | Qwen2.5-7B (4-bit) or Groq |
 | A6 Quality | `agent6_quality.py` | RoB 2.0 (RCTs) / ROBINS-I (observational) / JBI (qualitative) | Yes | Qwen2.5-7B (4-bit) or Groq |
 | A7 Synthesis | `agent7_synthesis.py` | R/metafor: REML, heterogeneity, Egger, Fail-Safe N, leave-one-out, subgroups, meta-regression, GRADE, R script export | No | R via rpy2 |
