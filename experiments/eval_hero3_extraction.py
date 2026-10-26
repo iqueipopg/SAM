@@ -257,7 +257,8 @@ def _assign_effective_parents(
         else:
             parents.append(None)
     out = gold_df.copy()
-    out["_effective_parent"] = parents
+    # dtype=object keeps None as None; pandas 3 would infer a string dtype and turn it into NaN
+    out["_effective_parent"] = pd.Series(parents, index=out.index, dtype=object)
     return out
 
 
